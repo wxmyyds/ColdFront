@@ -1,4 +1,4 @@
-# 红魔散热器 8 Pro BLE 接口(官方 App smali 逆向 + 实测可用第三方 App 交叉验证)
+# 红魔散热器 8 Pro BLE 接口
 
 > 来源 1:`cn.nubia.externdevice` 官方应用 smali 反编译(`cn/nubia/device/bluetooth/jacket8pro/`)。
 > 来源 2:**实测可用的第三方控制 App**(`com.magcooler.cpucontrol`,特征语义带中文日志)。
