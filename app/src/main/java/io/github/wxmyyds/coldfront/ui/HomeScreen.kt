@@ -46,11 +46,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleFloatingActionButton
 import androidx.compose.material3.ToggleFloatingActionButtonDefaults.animateIcon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -96,20 +99,18 @@ fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
                     checked = state.coolingOn,
                     onCheckedChange = { vm.setCooling(it) },
                 ) {
-                    CheckedContent {
-                        Icon(
-                            Icons.Filled.AcUnit,
-                            contentDescription = strings.homeCoolingSwitch,
-                            modifier = Modifier.animateIcon(),
-                        )
+                    // 形变:图标随 checkedProgress 在中点切换,颜色/尺寸由 animateIcon 弹簧过渡
+                    val icon by remember {
+                        derivedStateOf {
+                            if (checkedProgress > 0.5f) Icons.Filled.AcUnit
+                            else Icons.Filled.PowerSettingsNew
+                        }
                     }
-                    UncheckedContent {
-                        Icon(
-                            Icons.Filled.PowerSettingsNew,
-                            contentDescription = strings.homeCoolingSwitch,
-                            modifier = Modifier.animateIcon(),
-                        )
-                    }
+                    Icon(
+                        painter = rememberVectorPainter(icon),
+                        contentDescription = strings.homeCoolingSwitch,
+                        modifier = Modifier.animateIcon({ checkedProgress }),
+                    )
                 }
             }
         },
