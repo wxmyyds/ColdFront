@@ -613,6 +613,12 @@ class CoolerBleManager(private val context: Context) {
     private fun handleStatusValue(value: ByteArray) {
         if (value.isEmpty()) return
         when (value[0].toInt() and 0xFF) {
+            // 0x04 = 温度!8 Pro 通过 1015 通知包 [0x04, temp] 推送背夹温度
+            // (冰环 handleOfficial847StatusPacket → lastCoolerTemp1015C,实测可用)
+            0x04 -> parseTemperature(value)?.let { temp ->
+                lastTempUpdateMs = System.currentTimeMillis()
+                _state.update { it.copy(temperatureC = temp) }
+            }
             0x08 -> parseBigEndianShort(value.copyOfRange(1, value.size))?.let { rpm ->
                 _state.update { it.copy(fanRpm = rpm) }
             }
@@ -818,6 +824,10 @@ class CoolerBleManager(private val context: Context) {
                         ) {
                             Log.w(TAG, "温度断流超过 6s,尝试重订阅 + 补读")
                             tempChar?.let { ch ->
+                                enableNotification(g, ch)
+                                readIfReadable(g, ch)?.let { handleData(ch.uuid, it) }
+                            }
+                            statusChar?.let { ch ->
                                 enableNotification(g, ch)
                                 readIfReadable(g, ch)?.let { handleData(ch.uuid, it) }
                             }
