@@ -87,7 +87,6 @@ class CoolerBleManager(private val context: Context) {
     private var switchChar: BluetoothGattCharacteristic? = null
     private var rpmChar: BluetoothGattCharacteristic? = null
     private var powerChar: BluetoothGattCharacteristic? = null
-    private var boostChar: BluetoothGattCharacteristic? = null
     private var protectChar: BluetoothGattCharacteristic? = null
 
     private var scanning = false
@@ -388,7 +387,6 @@ class CoolerBleManager(private val context: Context) {
         switchChar = null
         rpmChar = null
         powerChar = null
-        boostChar = null
         protectChar = null
     }
 
