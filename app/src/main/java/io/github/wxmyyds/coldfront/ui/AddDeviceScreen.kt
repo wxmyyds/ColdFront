@@ -24,6 +24,10 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.IconButton
@@ -469,25 +473,52 @@ private fun DeviceList(
                 modifier = Modifier.fillMaxWidth().clickable { onConnect(device) },
                 shape = MaterialTheme.shapes.extraLarge,
             ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        "${device.deviceType.suggestedIcon} ${device.displayName}",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Text(
-                        device.deviceType.deviceName + " · ${device.rssi} dBm",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.padding(top = 4.dp),
-                    ) {
-                        if (device.matchedByName) {
-                            ElevatedAssistChip(onClick = {}, label = { Text(strings.scanMatchedByName) })
+                // MD3E 表达性列表行:色调图标容器 + 强调标题 + 尾随箭头
+                ListItem(
+                    headlineContent = {
+                        Text(
+                            device.displayName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    },
+                    supportingContent = {
+                        Text(
+                            device.deviceType.deviceName + " · ${device.rssi} dBm",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    },
+                    overlineContent = if (device.matchedByName) {
+                        { Text(strings.scanMatchedByName, style = MaterialTheme.typography.labelSmall) }
+                    } else {
+                        null
+                    },
+                    leadingContent = {
+                        Surface(
+                            shape = MaterialTheme.shapes.small,
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                        ) {
+                            Box(
+                                modifier = Modifier.size(48.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                CoolerArt(
+                                    device.deviceType,
+                                    modifier = Modifier.size(36.dp),
+                                    iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                )
+                            }
                         }
-                    }
-                }
+                    },
+                    trailingContent = {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                )
             }
         }
     }

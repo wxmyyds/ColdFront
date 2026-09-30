@@ -103,6 +103,7 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SavedDeviceCard(
     strings: AppStrings,
