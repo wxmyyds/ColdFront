@@ -1,6 +1,7 @@
 package io.github.wxmyyds.coldfront.ble
 
 import android.bluetooth.BluetoothDevice
+import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
 
 /**
  * 一次 BLE 扫描结果的原始诊断数据(不做任何识别过滤)。
@@ -8,6 +9,7 @@ import android.bluetooth.BluetoothDevice
  *
  * @param msd 厂商数据:公司 ID → payload 十六进制
  * @param serviceData 服务数据:UUID → payload 十六进制
+ * @param coolerType 若 MSD 匹配到已知散热器型号则非空(卡片高亮,可直接连接)
  */
 data class BleScanDiagnostic(
     val address: String,
@@ -17,6 +19,7 @@ data class BleScanDiagnostic(
     val serviceUuids: List<String>,
     val serviceData: List<Pair<String, String>>,
     val bluetoothDevice: BluetoothDevice?,
+    val coolerType: CoolerDeviceType? = null,
 )
 
 /** 十六进制工具 */

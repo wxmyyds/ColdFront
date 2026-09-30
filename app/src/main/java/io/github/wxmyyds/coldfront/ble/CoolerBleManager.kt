@@ -179,6 +179,16 @@ class CoolerBleManager(private val context: Context) {
                 add(key to (msdSparse.valueAt(i)?.toHex() ?: ""))
             }
         }
+        // MSD 命中已知散热器型号 → 直接标记,诊断卡片可一键连接
+        val coolerType = run {
+            val payload = msdSparse.get(CoolerBleConstants.MSD_COMPANY_ID) ?: return@run null
+            if (payload.size > 1) {
+                CoolerDeviceType.fromMsdType(
+                    payload[0].toInt() and 0xFF,
+                    payload[1].toInt() and 0xFF,
+                )
+            } else null
+        }
         val serviceData = record.serviceData?.entries
             ?.map { (k, v) -> k.uuid.toString() to (v?.toHex() ?: "") }
             ?: emptyList()
@@ -190,6 +200,7 @@ class CoolerBleManager(private val context: Context) {
             serviceUuids = record.serviceUuids?.map { it.toString() } ?: emptyList(),
             serviceData = serviceData,
             bluetoothDevice = result.device,
+            coolerType = coolerType,
         )
         if (msd.isNotEmpty() || entry.serviceUuids.isNotEmpty() || entry.serviceData.isNotEmpty()) {
             Log.d(

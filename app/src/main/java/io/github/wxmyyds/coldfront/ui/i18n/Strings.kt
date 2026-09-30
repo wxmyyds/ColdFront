@@ -93,6 +93,7 @@ interface AppStrings {
     val diagGrantAgain: String
     val diagOpenAppSettings: String
     val diagOpenLocation: String
+    val diagCoolerBadge: String
 
     // —— RGB ——
     val rgbTitle: String
@@ -234,6 +235,7 @@ object ZhStrings : AppStrings {
     override val diagGrantAgain = "重新授权"
     override val diagOpenAppSettings = "去应用设置"
     override val diagOpenLocation = "去开定位"
+    override val diagCoolerBadge = "已识别:%s"
 
     override val rgbTitle = "RGB 灯效"
     override val rgbEffect = "灯效模式"
@@ -370,6 +372,7 @@ object EnStrings : AppStrings {
     override val diagGrantAgain = "Grant again"
     override val diagOpenAppSettings = "App settings"
     override val diagOpenLocation = "Enable location"
+    override val diagCoolerBadge = "Identified: %s"
 
     override val rgbTitle = "RGB Lighting"
     override val rgbEffect = "Effect"

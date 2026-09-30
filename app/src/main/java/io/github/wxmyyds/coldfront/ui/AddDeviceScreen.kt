@@ -104,7 +104,16 @@ fun AddDeviceScreen(vm: CoolerViewModel) {
                 DiagnosticList(
                     strings = strings,
                     rawDevices = rawDevices,
-                    onSelect = { connectTarget = it },
+                    onSelect = { entry ->
+                        val known = entry.coolerType
+                        if (known != null) {
+                            // MSD 命中已知型号 → 直接连接
+                            vm.connectRaw(entry, known)
+                            vm.stopScan()
+                        } else {
+                            connectTarget = entry
+                        }
+                    },
                 )
             }
             devices.isEmpty() -> ScanningEmptyState(strings, scanning = state.connection == io.github.wxmyyds.coldfront.domain.ConnectionState.SCANNING) {
@@ -244,12 +253,17 @@ private fun DiagnosticCard(
     entry: BleScanDiagnostic,
     onSelect: (BleScanDiagnostic) -> Unit,
 ) {
+    val isCooler = entry.coolerType != null
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onSelect(entry) },
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+            containerColor = if (isCooler) {
+                MaterialTheme.colorScheme.secondaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerLowest
+            },
         ),
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -260,6 +274,17 @@ private fun DiagnosticCard(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                 )
+                if (isCooler) {
+                    ElevatedAssistChip(
+                        onClick = {},
+                        label = {
+                            Text(
+                                "${entry.coolerType!!.suggestedIcon} " +
+                                    strings.diagCoolerBadge.format(entry.coolerType.deviceName)
+                            )
+                        },
+                    )
+                }
                 Text(
                     "${entry.rssi} dBm",
                     style = MaterialTheme.typography.labelSmall,
