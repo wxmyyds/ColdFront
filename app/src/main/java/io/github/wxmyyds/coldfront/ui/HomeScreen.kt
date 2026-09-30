@@ -168,9 +168,9 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
                 stiffness = Spring.StiffnessMediumLow,
             )
         ),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
+        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraSmall) {
             ControlItem(
                 icon = Icons.Filled.AutoMode,
                 title = strings.homeSmart,
@@ -180,7 +180,7 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
                 onChange = { vm.setSmart(it) },
             )
         }
-        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
+        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraSmall) {
             ControlItem(
                 icon = Icons.Filled.Bolt,
                 title = strings.homeBoost,
@@ -190,7 +190,7 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
                 onChange = { vm.setBoost(it) },
             )
         }
-        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
+        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraSmall) {
             ControlItem(
                 icon = Icons.Filled.Shield,
                 title = strings.homeOvercold,

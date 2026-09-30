@@ -84,7 +84,7 @@ fun SettingsScreen(vm: CoolerViewModel) {
             )
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.large,
+                shape = MaterialTheme.shapes.extraSmall,
             ) {
                 Column {
                     SettingItem(
@@ -114,7 +114,7 @@ Switch(
             }
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.large,
+                shape = MaterialTheme.shapes.extraSmall,
             ) {
                 Column {
                     SettingItem(
@@ -150,7 +150,7 @@ Switch(
             // ── 关于 ──
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.large,
+                shape = MaterialTheme.shapes.extraSmall,
             ) {
                 SettingItem(
                     icon = Icons.Filled.Info,

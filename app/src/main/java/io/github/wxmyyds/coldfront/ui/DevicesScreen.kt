@@ -93,7 +93,7 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
                     .fillMaxSize()
                     .padding(inner)
                     .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(
                     top = 8.dp,
                     bottom = 96.dp, // 给 FAB 让位
@@ -131,7 +131,7 @@ private fun SavedDeviceCard(
         modifier = Modifier
             .fillMaxWidth()
             .animateContentSize(spring(stiffness = Spring.StiffnessMediumLow)),
-        shape = MaterialTheme.shapes.large,
+        shape = MaterialTheme.shapes.extraSmall,
     ) {
         ListItem(
             headlineContent = {
