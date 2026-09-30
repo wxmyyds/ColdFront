@@ -34,7 +34,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
-import androidx.compose.material3.MediumFlexibleTopAppBar
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.ElevatedAssistChip
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -93,8 +93,8 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
             .background(MaterialTheme.colorScheme.surfaceContainer),
     ) {
         // MD3E 弹性顶栏 + 返回导航
-        MediumFlexibleTopAppBar(
-            title = { Text(strings.scanTitle) },
+        TopAppBar(
+            title = { Text(strings.scanTitle, style = MaterialTheme.typography.headlineSmall) },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = Color.Transparent,
                 scrolledContainerColor = Color.Transparent,

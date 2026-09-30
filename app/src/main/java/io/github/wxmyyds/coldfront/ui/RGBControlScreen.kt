@@ -38,7 +38,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.MediumFlexibleTopAppBar
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.ButtonGroup
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.ButtonGroupDefaults
@@ -105,9 +106,19 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        // MD3E 弹性顶栏
-        MediumFlexibleTopAppBar(title = { Text(strings.rgbTitle) })
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surfaceContainer),
+    ) {
+        // 紧凑顶栏(透明,页面灰底透出)
+        TopAppBar(
+            title = { Text(strings.rgbTitle, style = MaterialTheme.typography.headlineSmall) },
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = Color.Transparent,
+                scrolledContainerColor = Color.Transparent,
+            ),
+        )
         Column(
             modifier = Modifier
                 .weight(1f)

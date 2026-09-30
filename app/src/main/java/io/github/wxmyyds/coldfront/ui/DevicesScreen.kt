@@ -31,7 +31,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MediumFlexibleTopAppBar
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -67,8 +67,8 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
         topBar = {
-            MediumFlexibleTopAppBar(
-                title = { Text(strings.devicesTitle) },
+            TopAppBar(
+                title = { Text(strings.devicesTitle, style = MaterialTheme.typography.headlineSmall) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
                     scrolledContainerColor = Color.Transparent,

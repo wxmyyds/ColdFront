@@ -25,7 +25,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MediumFlexibleTopAppBar
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.Switch
@@ -57,8 +57,8 @@ fun SettingsScreen(vm: CoolerViewModel) {
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.surfaceContainer),
     ) {
-        MediumFlexibleTopAppBar(
-            title = { Text(strings.settingsTitle) },
+        TopAppBar(
+            title = { Text(strings.settingsTitle, style = MaterialTheme.typography.headlineSmall) },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = Color.Transparent,
                 scrolledContainerColor = Color.Transparent,

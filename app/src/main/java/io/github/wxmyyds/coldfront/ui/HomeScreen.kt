@@ -37,7 +37,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MediumFlexibleTopAppBar
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -85,8 +85,8 @@ fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
         topBar = {
-            MediumFlexibleTopAppBar(
-                title = { Text(strings.homeTitle) },
+            TopAppBar(
+                title = { Text(strings.homeTitle, style = MaterialTheme.typography.headlineSmall) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
                     scrolledContainerColor = Color.Transparent,
