@@ -15,8 +15,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -37,7 +39,12 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MediumFlexibleTopAppBar
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.ButtonGroup
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.ButtonGroupDefaults
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -52,6 +59,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -256,6 +265,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.glow(color: Color, 
 
 // ───────────────────────── 灯效选择 ─────────────────────────
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun EffectChips(effect: LightEffect, onEffect: (LightEffect) -> Unit) {
     val strings = LocalStrings.current
@@ -266,20 +276,56 @@ private fun EffectChips(effect: LightEffect, onEffect: (LightEffect) -> Unit) {
         LightEffect.BREATH_FULLCOLOR to Icons.Filled.Gradient,
         LightEffect.OFF to Icons.Filled.AcUnit,
     )
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        entries.chunked(3).forEach { rowEntries ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                rowEntries.forEach { (e, icon) ->
-                    FilterChip(
-                        selected = effect == e,
+    val interactionSources = remember { List(entries.size) { MutableInteractionSource() } }
+
+    // MD3E ButtonGroup:连体按钮行 + 按下膨胀/邻位压缩动画 + 放不下时溢出菜单
+    ButtonGroup(
+        overflowIndicator = { menuState ->
+            ButtonGroupDefaults.OverflowIndicator(menuState = menuState)
+        },
+        expandedRatio = 1f,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        entries.forEachIndexed { index, (e, icon) ->
+            customItem(
+                buttonGroupContent = {
+                    val contentPadding = ButtonDefaults.ButtonWithIconContentPadding
+                    val layoutDirection = LocalLayoutDirection.current
+                    ToggleButton(
+                        checked = effect == e,
+                        onCheckedChange = { if (it) onEffect(e) },
+                        shapes = when (index) {
+                            0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+                            entries.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+                            else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
+                        },
+                        contentPadding = contentPadding,
+                        interactionSource = interactionSources[index],
+                        modifier = Modifier.animateWidth(
+                            interactionSource = interactionSources[index],
+                            compressionLimit =
+                                contentPadding.calculateEndPadding(layoutDirection),
+                        ),
+                    ) {
+                        Icon(icon, contentDescription = null)
+                        Spacer(Modifier.size(ToggleButtonDefaults.IconSpacing))
+                        Text(
+                            effectLabel(e, strings),
+                            softWrap = false,
+                            maxLines = 1,
+                            overflow = TextOverflow.Visible,
+                        )
+                    }
+                },
+                menuContent = {
+                    DropdownMenuItem(
+                        leadingIcon = { Icon(icon, contentDescription = null) },
+                        text = { Text(effectLabel(e, strings)) },
                         onClick = { onEffect(e) },
-                        label = { Text(effectLabel(e, strings)) },
-                        leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                        modifier = Modifier.weight(1f),
+                        interactionSource = interactionSources[index],
                     )
-                }
-                if (rowEntries.size < 3) Spacer(Modifier.weight((3 - rowEntries.size).toFloat()))
-            }
+                },
+            )
         }
     }
 }
