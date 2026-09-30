@@ -109,6 +109,8 @@ private fun SavedDeviceCard(
                     io.github.wxmyyds.coldfront.R.drawable.img_cooler_6pro
                 io.github.wxmyyds.coldfront.domain.CoolerDeviceType.JACKET_1 ->
                     io.github.wxmyyds.coldfront.R.drawable.img_cooler_dual
+                io.github.wxmyyds.coldfront.domain.CoolerDeviceType.JACKET_2 ->
+                    io.github.wxmyyds.coldfront.R.drawable.img_cooler_turbo
                 else -> 0
             }
             if (deviceImage != 0) {
