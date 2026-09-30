@@ -3,6 +3,7 @@
 package io.github.wxmyyds.coldfront.ui.component
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,7 +18,7 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenuGroup
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -25,7 +26,9 @@ import androidx.compose.material3.ListItemColors
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.ListItemShapes
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.SegmentedListItem
+import androidx.compose.material3.SelectableDropdownMenuItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -362,11 +365,12 @@ fun SegmentedSwitchRow(
 }
 
 /**
- * 下拉选择行：整行点击弹菜单，trailing 显示当前值 + 下拉箭头，菜单里选中项打勾。
+ * 下拉选择行：整行点击弹菜单，trailing 显示当前值 + 下拉箭头。
  *
- * 选项多到把页面拉长时用它替掉单选行组（一行 + 一个菜单）。
- * 菜单用稳定的 [DropdownMenu] / [DropdownMenuItem]，不依赖 alpha 线的
- * SelectableDropdownMenuItem；M3E 下它们自动套用表达性菜单样式。
+ * 菜单用 M3E 表达性菜单（alpha09 加入、alpha19 转正，本项目 alpha28 可用）：
+ * [DropdownMenuGroup] 给出外层分组形状，[SelectableDropdownMenuItem] 给出逐项的
+ * 首/中/尾圆角（[MenuDefaults.itemShape]）与选中态——选中行首位自动预留勾选图标槽，
+ * 未选行也占同样宽度，所以各项文字始终对齐。
  */
 @Composable
 fun <T> SegmentedDropdownRow(
@@ -383,6 +387,8 @@ fun <T> SegmentedDropdownRow(
     leadingContent: (@Composable () -> Unit)? = null,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
+    val menuInteractionSource = remember { MutableInteractionSource() }
     val selectedLabel = options.firstOrNull { it == selected }?.let(optionLabel).orEmpty()
 
     Box(modifier = modifier) {
@@ -409,25 +415,29 @@ fun <T> SegmentedDropdownRow(
             expanded = expanded,
             onDismissRequest = { expanded = false },
         ) {
-            options.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(optionLabel(option)) },
-                    onClick = {
-                        expanded = false
-                        onSelect(option)
-                    },
-                    trailingIcon = if (option == selected) {
-                        {
+            DropdownMenuGroup(
+                shapes = MenuDefaults.groupShape(index = 0, count = 1),
+                interactionSource = menuInteractionSource,
+            ) {
+                options.forEachIndexed { index, option ->
+                    SelectableDropdownMenuItem(
+                        selected = option == selected,
+                        onClick = {
+                            expanded = false
+                            haptic.performHapticFeedback(HapticFeedbackType.VirtualKey)
+                            onSelect(option)
+                        },
+                        text = { Text(optionLabel(option)) },
+                        shapes = MenuDefaults.itemShape(index = index, count = options.size),
+                        selectedLeadingIcon = {
                             Icon(
                                 imageVector = Icons.Filled.Check,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(MenuDefaults.LeadingIconSize),
                             )
-                        }
-                    } else {
-                        null
-                    },
-                )
+                        },
+                    )
+                }
             }
         }
     }
