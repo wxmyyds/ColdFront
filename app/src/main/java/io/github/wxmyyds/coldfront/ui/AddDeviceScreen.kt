@@ -53,7 +53,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.wxmyyds.coldfront.ble.BlePermissionManager
@@ -67,6 +66,7 @@ import io.github.wxmyyds.coldfront.ui.component.SegmentedSwitchRow
 import io.github.wxmyyds.coldfront.ui.component.segmentedRowShapes
 import io.github.wxmyyds.coldfront.ui.i18n.AppStrings
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
+import io.github.wxmyyds.coldfront.ui.theme.EmphasizedTypography
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -119,60 +119,60 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
 
-        when {
-            !btEnabled -> BluetoothOffState(strings)
-            diagMode -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                ScanStatusCard(
-                    strings = strings,
-                    scanState = scanState,
-                    onGrant = { permLauncher.launch(BlePermissionManager.scanPermissionsToRequest()) },
-                    onAppSettings = {
-                        context.startActivity(
-                            Intent(
-                                android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                                android.net.Uri.parse("package:${context.packageName}"),
+            when {
+                !btEnabled -> BluetoothOffState(strings)
+                diagMode -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ScanStatusCard(
+                        strings = strings,
+                        scanState = scanState,
+                        onGrant = { permLauncher.launch(BlePermissionManager.scanPermissionsToRequest()) },
+                        onAppSettings = {
+                            context.startActivity(
+                                Intent(
+                                    android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    android.net.Uri.parse("package:${context.packageName}"),
+                                )
                             )
-                        )
-                    },
-                    onLocation = {
-                        context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
-                    },
-                )
-                DiagnosticList(
-                    strings = strings,
-                    rawDevices = rawDevices,
-                    onSelect = { entry ->
-                        val known = entry.coolerType
-                        if (known != null) {
-                            // MSD 命中已知型号 → 直接连接
-                            vm.connectRaw(entry, known)
-                            vm.stopScan()
-                        } else {
-                            connectTarget = entry
-                        }
-                    },
-                )
-            }
-            devices.isEmpty() -> ScanningEmptyState(strings, scanning = scanState.scanning) {
-                vm.startScan()
-            }
-            else -> DeviceList(strings, devices) { vm.connect(it); vm.stopScan() }
-        }
-
-        if (btEnabled) {
-            // 诊断模式是「显示设置」而不是集合筛选 → 用开关行，不用 FilterChip
-            SegmentedGroup {
-                item(key = "diagMode") {
-                    SegmentedSwitchRow(
-                        title = strings.diagToggle,
-                        summary = if (diagMode) strings.diagHint else null,
-                        checked = diagMode,
-                        onCheckedChange = { diagMode = it },
+                        },
+                        onLocation = {
+                            context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                        },
                     )
+                    DiagnosticList(
+                        strings = strings,
+                        rawDevices = rawDevices,
+                        onSelect = { entry ->
+                            val known = entry.coolerType
+                            if (known != null) {
+                                // MSD 命中已知型号 → 直接连接
+                                vm.connectRaw(entry, known)
+                                vm.stopScan()
+                            } else {
+                                connectTarget = entry
+                            }
+                        },
+                    )
+                }
+                devices.isEmpty() -> ScanningEmptyState(strings, scanning = scanState.scanning) {
+                    vm.startScan()
+                }
+                else -> DeviceList(strings, devices) { vm.connect(it); vm.stopScan() }
+            }
+
+            if (btEnabled) {
+                // 诊断模式是「显示设置」而不是集合筛选 → 用开关行，不用 FilterChip
+                SegmentedGroup {
+                    item(key = "diagMode") {
+                        SegmentedSwitchRow(
+                            title = strings.diagToggle,
+                            summary = if (diagMode) strings.diagHint else null,
+                            checked = diagMode,
+                            onCheckedChange = { diagMode = it },
+                        )
+                    }
                 }
             }
         }
-    }
 
     }
 
@@ -206,8 +206,12 @@ private fun ScanStatusCard(
                 strings.diagStatusPermission + ": " +
                     if (scanState.permissionGranted) strings.diagPermissionGranted
                     else strings.diagPermissionMissing,
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = if (scanState.permissionGranted) FontWeight.Normal else FontWeight.Bold,
+                style = if (scanState.permissionGranted) {
+                    MaterialTheme.typography.bodySmall
+                } else {
+                    // 异常项用 emphasized 加重，而不是在调用点散写字重
+                    EmphasizedTypography.bodySmall
+                },
                 color = if (scanState.permissionGranted) MaterialTheme.colorScheme.onSurface
                 else MaterialTheme.colorScheme.error,
             )
@@ -229,8 +233,11 @@ private fun ScanStatusCard(
                 strings.diagStatusLocation + ": " +
                     if (scanState.locationServiceEnabled) strings.diagServiceOn
                     else strings.diagServiceOff,
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = if (scanState.locationServiceEnabled) FontWeight.Normal else FontWeight.Bold,
+                style = if (scanState.locationServiceEnabled) {
+                    MaterialTheme.typography.bodySmall
+                } else {
+                    EmphasizedTypography.bodySmall
+                },
                 color = if (scanState.locationServiceEnabled) MaterialTheme.colorScheme.onSurface
                 else MaterialTheme.colorScheme.error,
             )
@@ -307,8 +314,7 @@ private fun DiagnosticCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     entry.name ?: strings.diagNoName,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
+                    style = EmphasizedTypography.titleSmall,
                     modifier = Modifier.weight(1f),
                 )
                 if (isCooler) {
@@ -336,7 +342,7 @@ private fun DiagnosticCard(
             Text(
                 entry.address,
                 style = MaterialTheme.typography.bodySmall,
-                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                fontFamily = FontFamily.Monospace,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (entry.msd.isNotEmpty()) {
@@ -373,7 +379,7 @@ private fun DetailLine(label: String, value: String) {
         Text(
             value,
             style = MaterialTheme.typography.labelSmall,
-            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+            fontFamily = FontFamily.Monospace,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
@@ -406,7 +412,7 @@ private fun ConnectAsDialog(
                                     type.mainType, type.subType, type.rawMin, type.rawMax,
                                 ),
                                 style = MaterialTheme.typography.labelSmall,
-                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                fontFamily = FontFamily.Monospace,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
@@ -511,20 +517,5 @@ private fun DeviceList(
                 },
             )
         }
-    }
-}
-
-@Composable
-private fun EightProNotice(strings: AppStrings) {
-    Surface(
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        shape = MaterialTheme.shapes.medium,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Text(
-            strings.eightProUuidNotice,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(12.dp),
-        )
     }
 }

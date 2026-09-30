@@ -79,7 +79,6 @@ interface AppStrings {
     val homeTemp: String
     val homeModeManual: String
     val homeAutoRunning: String
-    val homeSignal: String
     val homeConnected: String
     val homeDisconnected: String
     val homeConnectionFailed: String
@@ -196,9 +195,6 @@ interface AppStrings {
     val permLocationMsg: String
     val permNotificationTitle: String
     val permNotificationMsg: String
-
-    // —— 8 Pro 提示 ——
-    val eightProUuidNotice: String
 }
 
 object ZhStrings : AppStrings {
@@ -264,7 +260,6 @@ object ZhStrings : AppStrings {
     override val homeTemp = "温度"
     override val homeModeManual = "手动"
     override val homeAutoRunning = "自动模式运行中"
-    override val homeSignal = "信号"
     override val homeConnected = "已连接"
     override val homeDisconnected = "已断开"
     override val homeConnectionFailed = "连接失败"
@@ -373,9 +368,6 @@ object ZhStrings : AppStrings {
     override val permLocationMsg = "Android 11 及以下扫描蓝牙设备需要位置权限。"
     override val permNotificationTitle = "需要通知权限"
     override val permNotificationMsg = "前台服务需要通知权限以保持持续运行。"
-
-    override val eightProUuidNotice =
-        "8 Pro 已按官方协议精确识别（厂商数据 0x08CA = [0x05, 0x08]）：风扇 raw 40–80、自动模式写 0x01/0x00、温度显示值 = 原始值 − 6。详见 docs/protocol-8pro.md。"
 }
 
 object EnStrings : AppStrings {
@@ -441,7 +433,6 @@ object EnStrings : AppStrings {
     override val homeTemp = "Temperature"
     override val homeModeManual = "Manual"
     override val homeAutoRunning = "Auto mode running"
-    override val homeSignal = "Signal"
     override val homeConnected = "Connected"
     override val homeDisconnected = "Disconnected"
     override val homeConnectionFailed = "Connection failed"
@@ -550,9 +541,6 @@ object EnStrings : AppStrings {
     override val permLocationMsg = "Android 11 and below require location access to scan for BLE devices."
     override val permNotificationTitle = "Notification permission required"
     override val permNotificationMsg = "Notifications are required to keep the foreground service running."
-
-    override val eightProUuidNotice =
-        "8 Pro is identified exactly per the official protocol (manufacturer data 0x08CA = [0x05, 0x08]): fan raw 40-80, auto mode writes 0x01/0x00, displayed temperature = raw - 6. See docs/protocol-8pro.md."
 }
 
 /** 当前 locale 对应的字符串表 */
