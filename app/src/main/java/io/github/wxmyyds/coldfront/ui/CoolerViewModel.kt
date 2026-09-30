@@ -43,6 +43,9 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
     /** 诊断模式:全部未过滤扫描结果 */
     val rawDevices: StateFlow<List<BleScanDiagnostic>> = ble.rawDevices
 
+    /** 扫描器实时状态(权限/定位/蓝牙/失败码) */
+    val scanState: StateFlow<io.github.wxmyyds.coldfront.ble.ScanState> = ble.scanState
+
     val profiles: StateFlow<List<CoolerProfile>> =
         profileRepo.profiles.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -52,9 +55,10 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
     private val _bluetoothEnabled = MutableStateFlow(ble.isBluetoothEnabled)
     val bluetoothEnabled: StateFlow<Boolean> = _bluetoothEnabled.asStateFlow()
 
-    /** 由 Activity 在 onResume / 收到广播时调用刷新 */
+    /** 由 Activity 在 onResume / 权限回调 / 收到广播时调用刷新 */
     fun refreshBluetoothState() {
         _bluetoothEnabled.value = ble.isBluetoothEnabled
+        ble.refreshScanConditions()
     }
 
     fun startScan() = ble.startScan()

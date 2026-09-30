@@ -35,6 +35,16 @@ import java.util.UUID
 private const val TAG = "CoolerBleManager"
 private val CCC_DESCRIPTOR_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
+/** 扫描器实时状态（诊断可视化用） */
+data class ScanState(
+    val scanning: Boolean = false,
+    val permissionGranted: Boolean = false,
+    val locationServiceEnabled: Boolean = true,
+    val bluetoothOn: Boolean = false,
+    /** onScanFailed 的错误码 */
+    val errorCode: Int? = null,
+)
+
 /**
  * BLE 控制器:封装扫描、连接、GATT 操作与状态广播。
  *
@@ -69,21 +79,45 @@ class CoolerBleManager(private val context: Context) {
     private val _rawDevices = MutableStateFlow<List<BleScanDiagnostic>>(emptyList())
     val rawDevices: StateFlow<List<BleScanDiagnostic>> = _rawDevices.asStateFlow()
 
+    /** 扫描器状态（权限/定位/蓝牙/失败码），供 UI 诊断展示 */
+    private val _scanState = MutableStateFlow(
+        ScanState(
+            permissionGranted = BlePermissionManager.hasScanPermission(context),
+            locationServiceEnabled = BlePermissionManager.isLocationServiceEnabled(context),
+            bluetoothOn = isBluetoothEnabled,
+        )
+    )
+    val scanState: StateFlow<ScanState> = _scanState.asStateFlow()
+
+    /** 外部在权限/蓝牙/定位变化后调用，重新评估扫描条件 */
+    fun refreshScanConditions() {
+        _scanState.update {
+            it.copy(
+                permissionGranted = BlePermissionManager.hasScanPermission(context),
+                locationServiceEnabled = BlePermissionManager.isLocationServiceEnabled(context),
+                bluetoothOn = isBluetoothEnabled,
+            )
+        }
+    }
+
     val isBluetoothEnabled: Boolean get() = bluetoothAdapter?.isEnabled == true
 
     // ──────────────────────────── 扫描 ────────────────────────────
 
     @SuppressLint("MissingPermission")
     fun startScan() {
+        refreshScanConditions()
         val sc = scanner
         if (sc == null || scanning) return
         if (!BlePermissionManager.hasScanPermission(context)) {
             Log.w(TAG, "无扫描权限，跳过 startScan")
+            _scanState.update { it.copy(scanning = false, permissionGranted = false) }
             return
         }
         _discoveredDevices.value = emptyList()
         _rawDevices.value = emptyList()
         scanning = true
+        _scanState.update { it.copy(scanning = true, errorCode = null) }
         _state.update { it.copy(connection = ConnectionState.SCANNING) }
         try {
             sc.startScan(
@@ -96,6 +130,7 @@ class CoolerBleManager(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "startScan 失败: ${e.message}")
             scanning = false
+            _scanState.update { it.copy(scanning = false) }
         }
     }
 
@@ -103,6 +138,7 @@ class CoolerBleManager(private val context: Context) {
     fun stopScan() {
         if (!scanning) return
         scanning = false
+        _scanState.update { it.copy(scanning = false) }
         val sc = scanner ?: return
         try {
             sc.stopScan(scanCallback)
@@ -127,6 +163,7 @@ class CoolerBleManager(private val context: Context) {
         override fun onScanFailed(errorCode: Int) {
             Log.e(TAG, "扫描失败 errorCode=$errorCode")
             scanning = false
+            _scanState.update { it.copy(scanning = false, errorCode = errorCode) }
         }
     }
 

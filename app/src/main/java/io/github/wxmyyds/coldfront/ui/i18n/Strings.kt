@@ -78,6 +78,22 @@ interface AppStrings {
     val diagCancel: String
     val diagRawCount: String
 
+    // —— 诊断状态行 ——
+    val diagStatusPermission: String
+    val diagStatusScanner: String
+    val diagStatusLocation: String
+    val diagStatusBluetooth: String
+    val diagPermissionGranted: String
+    val diagPermissionMissing: String
+    val diagScannerRunning: String
+    val diagScannerStopped: String
+    val diagScannerFailed: String
+    val diagServiceOn: String
+    val diagServiceOff: String
+    val diagGrantAgain: String
+    val diagOpenAppSettings: String
+    val diagOpenLocation: String
+
     // —— RGB ——
     val rgbTitle: String
     val rgbEffect: String
@@ -204,6 +220,21 @@ object ZhStrings : AppStrings {
     override val diagCancel = "取消"
     override val diagRawCount = "共 %d 个设备"
 
+    override val diagStatusPermission = "扫描权限"
+    override val diagStatusScanner = "扫描器"
+    override val diagStatusLocation = "定位服务"
+    override val diagStatusBluetooth = "蓝牙"
+    override val diagPermissionGranted = "已授予"
+    override val diagPermissionMissing = "未授予"
+    override val diagScannerRunning = "运行中"
+    override val diagScannerStopped = "已停止"
+    override val diagScannerFailed = "失败（码 %d）"
+    override val diagServiceOn = "开启"
+    override val diagServiceOff = "关闭"
+    override val diagGrantAgain = "重新授权"
+    override val diagOpenAppSettings = "去应用设置"
+    override val diagOpenLocation = "去开定位"
+
     override val rgbTitle = "RGB 灯效"
     override val rgbEffect = "灯效模式"
     override val rgbColor = "颜色"
@@ -324,6 +355,21 @@ object EnStrings : AppStrings {
     override val diagConnectAs = "Connect as model…"
     override val diagCancel = "Cancel"
     override val diagRawCount = "%d devices total"
+
+    override val diagStatusPermission = "Scan permission"
+    override val diagStatusScanner = "Scanner"
+    override val diagStatusLocation = "Location service"
+    override val diagStatusBluetooth = "Bluetooth"
+    override val diagPermissionGranted = "granted"
+    override val diagPermissionMissing = "missing"
+    override val diagScannerRunning = "running"
+    override val diagScannerStopped = "stopped"
+    override val diagScannerFailed = "failed (code %d)"
+    override val diagServiceOn = "on"
+    override val diagServiceOff = "off"
+    override val diagGrantAgain = "Grant again"
+    override val diagOpenAppSettings = "App settings"
+    override val diagOpenLocation = "Enable location"
 
     override val rgbTitle = "RGB Lighting"
     override val rgbEffect = "Effect"

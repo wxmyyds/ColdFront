@@ -3,6 +3,7 @@ package io.github.wxmyyds.coldfront.ble
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.os.Build
 import androidx.core.content.ContextCompat
 
@@ -38,16 +39,28 @@ object BlePermissionManager {
         } else true
     }
 
-    /** 扫描所需申请的权限数组（按系统版本） */
+    /** 扫描所需申请的权限数组（按系统版本）。12+ 也附带定位权限：部分 OEM ROM 即使有
+     *  neverForLocation 仍强制定位授权才能出扫描结果 */
     fun scanPermissionsToRequest(): Array<String> =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             arrayOf(
                 Manifest.permission.BLUETOOTH_SCAN,
                 Manifest.permission.BLUETOOTH_CONNECT,
+                Manifest.permission.ACCESS_FINE_LOCATION,
             )
         } else {
             arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
         }
+
+    /** 系统定位服务是否开启（旧系统扫描硬依赖；部分 OEM 12+ 仍要求） */
+    fun isLocationServiceEnabled(context: Context): Boolean {
+        val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+            ?: return true
+        return runCatching {
+            lm.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+        }.getOrDefault(true)
+    }
 
     fun notificationPermissionToRequest(): Array<String> =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

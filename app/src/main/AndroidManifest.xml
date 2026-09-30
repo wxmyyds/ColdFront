@@ -5,11 +5,14 @@
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
 
-    <!-- 蓝牙：Android 12+（API >= 31）新权限 -->
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+    <!-- 蓝牙：Android 12+（API >= 31）新权限。neverForLocation：扫描结果不依赖定位服务，
+         否则系统把 BLE 结果当作位置数据，定位关闭时一个广播都不下发 -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
-    <!-- BLE 扫描在 Android 11 及以下需要位置权限 -->
+    <!-- BLE 扫描在 Android 11 及以下需要位置权限；部分 OEM ROM 在 12+ 也强制要求，保留可申请 -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 

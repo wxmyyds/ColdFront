@@ -1,5 +1,6 @@
 package io.github.wxmyyds.coldfront.ui
 
+import android.Manifest
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.foundation.clickable
@@ -45,6 +46,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.wxmyyds.coldfront.ble.BlePermissionManager
 import io.github.wxmyyds.coldfront.ble.BleScanDiagnostic
 import io.github.wxmyyds.coldfront.domain.CoolerDevice
 import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
@@ -57,12 +59,21 @@ fun AddDeviceScreen(vm: CoolerViewModel) {
     val btEnabled by vm.bluetoothEnabled.collectAsStateWithLifecycle()
     val devices by vm.discoveredDevices.collectAsStateWithLifecycle()
     val rawDevices by vm.rawDevices.collectAsStateWithLifecycle()
+    val scanState by vm.scanState.collectAsStateWithLifecycle()
     val state by vm.liveState.collectAsStateWithLifecycle()
     var diagMode by remember { mutableStateOf(false) }
     var connectTarget by remember { mutableStateOf<BleScanDiagnostic?>(null) }
+    val context = LocalContext.current
 
-    // 进入即扫描，离开即停
-    LaunchedEffect(btEnabled) { if (btEnabled) vm.startScan() }
+    // 重新授权启动器（授权后刷新条件，扫描由下方 LaunchedEffect 重启）
+    val permLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+    ) { vm.refreshBluetoothState() }
+
+    // 进入即扫描；权限/蓝牙状态变化时也重启（修复授权后扫描不启动的问题）
+    LaunchedEffect(btEnabled, scanState.permissionGranted) {
+        if (btEnabled && scanState.permissionGranted) vm.startScan()
+    }
     DisposableEffect(Unit) { onDispose { vm.stopScan() } }
 
     Column(
@@ -73,11 +84,29 @@ fun AddDeviceScreen(vm: CoolerViewModel) {
 
         when {
             !btEnabled -> BluetoothOffState(strings)
-            diagMode -> DiagnosticList(
-                strings = strings,
-                rawDevices = rawDevices,
-                onSelect = { connectTarget = it },
-            )
+            diagMode -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                ScanStatusCard(
+                    strings = strings,
+                    scanState = scanState,
+                    onGrant = { permLauncher.launch(BlePermissionManager.scanPermissionsToRequest()) },
+                    onAppSettings = {
+                        context.startActivity(
+                            Intent(
+                                android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                android.net.Uri.parse("package:${context.packageName}"),
+                            )
+                        )
+                    },
+                    onLocation = {
+                        context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                    },
+                )
+                DiagnosticList(
+                    strings = strings,
+                    rawDevices = rawDevices,
+                    onSelect = { connectTarget = it },
+                )
+            }
             devices.isEmpty() -> ScanningEmptyState(strings, scanning = state.connection == io.github.wxmyyds.coldfront.domain.ConnectionState.SCANNING) {
                 vm.startScan()
             }
@@ -115,6 +144,62 @@ fun AddDeviceScreen(vm: CoolerViewModel) {
                 connectTarget = null
             },
         )
+    }
+}
+
+/** 扫描条件状态卡：权限/扫描器/定位/蓝牙，一项异常给对应修复按钮 */
+@Composable
+private fun ScanStatusCard(
+    strings: AppStrings,
+    scanState: io.github.wxmyyds.coldfront.ble.ScanState,
+    onGrant: () -> Unit,
+    onAppSettings: () -> Unit,
+    onLocation: () -> Unit,
+) {
+    val context = LocalContext.current
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                strings.diagStatusPermission + ": " +
+                    if (scanState.permissionGranted) strings.diagPermissionGranted
+                    else strings.diagPermissionMissing,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = if (scanState.permissionGranted) FontWeight.Normal else FontWeight.Bold,
+                color = if (scanState.permissionGranted) MaterialTheme.colorScheme.onSurface
+                else MaterialTheme.colorScheme.error,
+            )
+            if (!scanState.permissionGranted) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = onGrant) { Text(strings.diagGrantAgain) }
+                    OutlinedButton(onClick = onAppSettings) { Text(strings.diagOpenAppSettings) }
+                }
+            }
+            Text(
+                strings.diagStatusScanner + ": " + when {
+                    scanState.errorCode != null -> strings.diagScannerFailed.format(scanState.errorCode)
+                    scanState.scanning -> strings.diagScannerRunning
+                    else -> strings.diagScannerStopped
+                },
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Text(
+                strings.diagStatusLocation + ": " +
+                    if (scanState.locationServiceEnabled) strings.diagServiceOn
+                    else strings.diagServiceOff,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = if (scanState.locationServiceEnabled) FontWeight.Normal else FontWeight.Bold,
+                color = if (scanState.locationServiceEnabled) MaterialTheme.colorScheme.onSurface
+                else MaterialTheme.colorScheme.error,
+            )
+            if (!scanState.locationServiceEnabled) {
+                OutlinedButton(onClick = onLocation) { Text(strings.diagOpenLocation) }
+            }
+            Text(
+                strings.diagStatusBluetooth + ": " +
+                    if (scanState.bluetoothOn) strings.diagServiceOn else strings.diagServiceOff,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
     }
 }
 
