@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.material.icons.filled.Refresh
@@ -24,7 +25,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.MediumFlexibleTopAppBar
 import androidx.compose.material3.ElevatedAssistChip
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -55,7 +59,7 @@ import io.github.wxmyyds.coldfront.ui.i18n.AppStrings
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 
 @Composable
-fun AddDeviceScreen(vm: CoolerViewModel) {
+fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
     val strings = LocalStrings.current
     val btEnabled by vm.bluetoothEnabled.collectAsStateWithLifecycle()
     val devices by vm.discoveredDevices.collectAsStateWithLifecycle()
@@ -77,11 +81,22 @@ fun AddDeviceScreen(vm: CoolerViewModel) {
     }
     DisposableEffect(Unit) { onDispose { vm.stopScan() } }
 
-    Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(strings.scanTitle, style = MaterialTheme.typography.headlineMedium)
+    Column(modifier = Modifier.fillMaxSize()) {
+        // MD3E 弹性顶栏 + 返回导航
+        MediumFlexibleTopAppBar(
+            title = { Text(strings.scanTitle) },
+            navigationIcon = {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                }
+            },
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
 
         when {
             !btEnabled -> BluetoothOffState(strings)
@@ -141,6 +156,8 @@ fun AddDeviceScreen(vm: CoolerViewModel) {
                 )
             }
         }
+    }
+
     }
 
     // 手动选型号连接对话框
@@ -213,6 +230,7 @@ private fun ScanStatusCard(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun DiagnosticList(
     strings: AppStrings,
@@ -225,7 +243,7 @@ private fun DiagnosticList(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            CircularProgressIndicator(Modifier.size(40.dp))
+            LoadingIndicator(Modifier.size(40.dp))
             Text(strings.diagNoSignal, style = MaterialTheme.typography.titleMedium)
             Text(
                 strings.diagNoSignalHint,
@@ -259,6 +277,7 @@ private fun DiagnosticCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onSelect(entry) },
+        shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(
             containerColor = if (isCooler) {
                 MaterialTheme.colorScheme.secondaryContainer
@@ -407,12 +426,13 @@ private fun BluetoothOffState(strings: AppStrings) {
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ScanningEmptyState(strings: AppStrings, scanning: Boolean, onRescan: () -> Unit) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (scanning) {
-                CircularProgressIndicator(Modifier.size(48.dp))
+                LoadingIndicator(Modifier.size(48.dp))
                 Text(strings.scanScanning, style = MaterialTheme.typography.titleMedium)
             } else {
                 Icon(
@@ -445,7 +465,10 @@ private fun DeviceList(
 ) {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items(devices, key = { it.address }) { device ->
-            Card(modifier = Modifier.fillMaxWidth().clickable { onConnect(device) }) {
+            Card(
+                modifier = Modifier.fillMaxWidth().clickable { onConnect(device) },
+                shape = MaterialTheme.shapes.extraLarge,
+            ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
                         "${device.deviceType.suggestedIcon} ${device.displayName}",
