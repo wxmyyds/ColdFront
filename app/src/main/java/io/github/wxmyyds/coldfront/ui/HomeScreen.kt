@@ -103,6 +103,10 @@ fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
         floatingActionButton = {
             if (connected) {
                 // ── hero moment:散热开关形变 FAB ──
+                // 已知偏差(有意保留):规范把 ToggleFloatingActionButton 定位为
+                // FloatingActionButtonMenu 的载体 + 页面唯一最重要操作,纯 on/off 属 Switch 职责。
+                // 这里作为 MD3E 战术 7 的 hero moment 保留:全应用仅此一个 FAB,
+                // 位于底部 trailing(Scaffold 默认 16dp 边距),且不与其他主操作竞争。
                 ToggleFloatingActionButton(
                     checked = state.coolingOn,
                     onCheckedChange = { vm.setCooling(it) },
@@ -233,8 +237,10 @@ private fun TempHero(state: CoolerLiveState) {
                 Column {
                     Text(
                         strings.homeTemp,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = onContainer.copy(alpha = 0.72f),
+                        // 次要文字不再用 onContainer.copy(alpha = 0.72f)——对角色色做透明度
+                        // 会拉低小字号的对比度；层级改由字号表达（labelMedium vs displayLarge）。
+                        style = MaterialTheme.typography.labelMedium,
+                        color = onContainer,
                     )
                     Text(
                         state.temperatureText,
@@ -248,7 +254,7 @@ private fun TempHero(state: CoolerLiveState) {
                     Text(
                         state.deviceName ?: "",
                         style = MaterialTheme.typography.labelMedium,
-                        color = onContainer.copy(alpha = 0.72f),
+                        color = onContainer,
                     )
                     Text(
                         // 此处必为已连接;制冷开/关由卡片容器颜色 + 形变 FAB 表达
@@ -269,6 +275,9 @@ private fun TempHero(state: CoolerLiveState) {
 
 @Composable
 private fun MetricPill(icon: ImageVector, text: String, content: Color) {
+    // 胶囊底是对 content 的装饰性淡色叠加：英雄卡容器会在 primaryContainer 与
+    // surfaceContainerHighest 之间过渡，没有单一角色色能同时适配，故保留 alpha 写法。
+    // 但文字与图标不再做 alpha（那直接影响对比度），一律用全强度 content。
     Surface(shape = CircleShape, color = content.copy(alpha = 0.12f)) {
         Row(
             modifier = Modifier.padding(start = 10.dp, end = 14.dp, top = 6.dp, bottom = 6.dp),
@@ -278,7 +287,7 @@ private fun MetricPill(icon: ImageVector, text: String, content: Color) {
             Icon(
                 icon,
                 contentDescription = null,
-                tint = content.copy(alpha = 0.8f),
+                tint = content,
                 modifier = Modifier.size(16.dp),
             )
             Text(
