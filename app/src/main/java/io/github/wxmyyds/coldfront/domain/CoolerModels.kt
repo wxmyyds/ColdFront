@@ -65,7 +65,7 @@ enum class ConnectionState(val labelZh: String, val labelEn: String) {
  */
 data class CoolerLiveState(
     val connection: ConnectionState = ConnectionState.DISCONNECTED,
-    val temperatureC: Float = 0f,
+    val temperatureC: Float? = null,
     val fanPercent: Int = 0,
     val fanMode: FanMode = FanMode.OFF,
     val rgb: RGBConfig? = null,
@@ -87,7 +87,7 @@ data class CoolerLiveState(
     val overcoldOn: Boolean = false,
 ) {
     val isConnected: Boolean get() = connection == ConnectionState.CONNECTED
-    val temperatureText: String get() = if (temperatureC > 0) "%.1f°C".format(temperatureC) else "--"
+    val temperatureText: String get() = temperatureC?.let { "%.1f°C".format(it) } ?: "--"
 
     /** 智能温控或散热关时不可手动调档 */
     val manualLevelEnabled: Boolean get() = isConnected && coolingOn && !smartOn
