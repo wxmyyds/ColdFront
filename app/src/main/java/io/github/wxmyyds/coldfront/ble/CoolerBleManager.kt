@@ -6,6 +6,7 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothGattConnectionSettings
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
@@ -13,7 +14,9 @@ import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
+import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresApi
 import io.github.wxmyyds.coldfront.domain.CoolerBleConstants
 import io.github.wxmyyds.coldfront.domain.CoolerDevice
 import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
@@ -296,6 +299,30 @@ class CoolerBleManager(private val context: Context) {
 
     // ──────────────────────────── 连接 ────────────────────────────
 
+    /**
+     * 打开 GATT 连接。API 37(CINNAMON_BUN)+ 走新的 [BluetoothGattConnectionSettings] API
+     * （connectGatt 的 transport 重载在 API 37 起弃用）；旧系统仍用
+     * connectGatt(…, TRANSPORT_LE) 以显式指定 LE 传输，避免双模设备走 BR/EDR 导致连接失败。
+     */
+    @SuppressLint("MissingPermission")
+    private fun openGatt(device: BluetoothDevice): BluetoothGatt {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.CINNAMON_BUN) {
+            openGattWithSettings(device)
+        } else {
+            @Suppress("DEPRECATION")
+            device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.CINNAMON_BUN)
+    private fun openGattWithSettings(device: BluetoothDevice): BluetoothGatt {
+        val settings = BluetoothGattConnectionSettings.Builder()
+            .setTransport(BluetoothDevice.TRANSPORT_LE)
+            .setAutoConnectEnabled(false)
+            .build()
+        return device.connectGatt(settings, context.mainExecutor, gattCallback)
+    }
+
     @SuppressLint("MissingPermission")
     fun connect(device: CoolerDevice) {
         if (!BlePermissionManager.hasConnectPermission(context)) {
@@ -317,9 +344,7 @@ class CoolerBleManager(private val context: Context) {
             )
         }
         // TRANSPORT_LE 显式指定:避免双模手机走 BR/EDR 导致连接失败
-        gatt = device.bluetoothDevice.connectGatt(
-            context, false, gattCallback, BluetoothDevice.TRANSPORT_LE,
-        )
+        gatt = openGatt(device.bluetoothDevice)
     }
 
     /** 诊断模式:手动指定型号连接(不做识别检查) */
@@ -354,7 +379,7 @@ class CoolerBleManager(private val context: Context) {
                 deviceAddress = macAddress,
             )
         }
-        gatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+        gatt = openGatt(device)
     }
 
     @SuppressLint("MissingPermission")
@@ -528,6 +553,7 @@ class CoolerBleManager(private val context: Context) {
         }
 
         /** 旧重载：Android 13 以下调用 */
+        @Deprecated("旧系统(Android 13 以下)的回调重载，仅供系统调用")
         @Suppress("DEPRECATION")
         override fun onCharacteristicRead(
             g: BluetoothGatt,
@@ -550,6 +576,7 @@ class CoolerBleManager(private val context: Context) {
         }
 
         /** 旧重载：Android 13 以下调用 */
+        @Deprecated("旧系统(Android 13 以下)的回调重载，仅供系统调用")
         @Suppress("DEPRECATION")
         override fun onCharacteristicChanged(
             g: BluetoothGatt,
