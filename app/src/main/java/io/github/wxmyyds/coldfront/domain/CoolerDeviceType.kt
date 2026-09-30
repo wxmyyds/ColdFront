@@ -44,10 +44,10 @@ enum class CoolerDeviceType(
     ),
 
     JACKET_3(
-        deviceName = "磁吸散热器",
+        deviceName = "红魔散热器",
         mainType = 0x05, subType = 0x03,
         generation = 3,
-        description = "第三代",
+        description = "第三代(官方名称就叫「红魔散热器」)",
     ),
 
     JACKET_4(
