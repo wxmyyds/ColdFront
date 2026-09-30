@@ -10,6 +10,7 @@ import io.github.wxmyyds.coldfront.data.ProfileRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 private const val TAG = "CoolerTile"
@@ -21,6 +22,8 @@ private const val TAG = "CoolerTile"
 @RequiresApi(Build.VERSION_CODES.N)
 class CoolerTileService : TileService() {
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
     override fun onStartListening() {
         super.onStartListening()
         refresh()
@@ -31,7 +34,6 @@ class CoolerTileService : TileService() {
         refresh()
     }
 
-    @Suppress("DEPRECATION")
     override fun onClick() {
         super.onClick()
         val active = qsTile?.state == Tile.STATE_ACTIVE
@@ -41,10 +43,10 @@ class CoolerTileService : TileService() {
                 action = CoolerService.ACTION_STOP
             })
             qsTile?.state = Tile.STATE_INACTIVE
+            qsTile?.updateTile()
         } else {
-            // 启动自动模式（用激活档案）
-            val pending = goAsync()
-            CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
+            // 启动自动模式（用激活档案；TileService 本身是 Service，用自持协程作用域）
+            scope.launch {
                 try {
                     val profile = ProfileRepository(applicationContext).loadActiveProfile()
                     if (profile == null) {
@@ -64,13 +66,17 @@ class CoolerTileService : TileService() {
                         startService(svc)
                     }
                     qsTile?.state = Tile.STATE_ACTIVE
+                    qsTile?.updateTile()
                 } catch (e: Exception) {
                     Log.e(TAG, "磁贴启动失败: ${e.message}")
-                } finally {
-                    pending.finish()
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        scope.cancel()
+        super.onDestroy()
     }
 
     private fun refresh() {

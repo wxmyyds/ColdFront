@@ -22,7 +22,7 @@ class ThermalMonitor(private val context: Context) {
         return null
     }
 
-    /** 读取 /sys/class/thermal/thermal_zone*/temp */
+    /** 读取 /sys/class/thermal 下 thermal_zoneN 节点的 temp 文件 */
     private fun readCpuTemp(): Float? {
         return try {
             val dir = File("/sys/class/thermal")
