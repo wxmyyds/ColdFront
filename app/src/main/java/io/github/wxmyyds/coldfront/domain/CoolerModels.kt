@@ -6,14 +6,28 @@ package io.github.wxmyyds.coldfront.domain
  */
 enum class LightEffect(val code: Byte, val labelZh: String, val labelEn: String) {
     COLORFUL(0x01, "炫彩", "Colorful"),
-    BREATH_FULLCOLOR(0x02, "全彩呼吸", "Breathing"),
+    /** UI 上叫「呼吸」。协议里是不带颜色字节的全彩呼吸。 */
+    BREATH_FULLCOLOR(0x02, "呼吸", "Breathing"),
+    /**
+     * 官方协议的单色呼吸。UI 已将它合并进 [BREATH_FULLCOLOR]（两者都叫「呼吸」），
+     * 保留枚举项只为解析设备回报的 0x03 与旧档案里按名字存的 "BREATH_SINGLE"——
+     * 删掉会让这两种来源静默回退成常亮。呈现时统一走 [uiEffect]。
+     */
     BREATH_SINGLE(0x03, "单色呼吸", "Breathing (Single)"),
     ALWAYS_BRIGHT(0x04, "常亮", "Always On"),
     OFF(0x06, "关闭", "Off"),
     ;
 
+    /** 设备回报/旧档案里的单色呼吸，统一按「呼吸」呈现 */
+    val uiEffect: LightEffect
+        get() = if (this == BREATH_SINGLE) BREATH_FULLCOLOR else this
+
     companion object {
         fun fromCode(code: Byte): LightEffect? = entries.firstOrNull { it.code == code }
+
+        /** UI 可选项：[BREATH_SINGLE] 已并入 [BREATH_FULLCOLOR]，不单独出现 */
+        val selectable: List<LightEffect> =
+            listOf(ALWAYS_BRIGHT, BREATH_FULLCOLOR, COLORFUL, OFF)
     }
 }
 

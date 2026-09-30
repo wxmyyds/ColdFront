@@ -63,7 +63,7 @@ interface AppStrings {
     val settingsTheme: String
     val settingsDynamicColor: String
     val settingsDynamicColorDesc: String
-    val settingsDarkMode: String
+    val settingsThemeMode: String
     val settingsDarkModeSystem: String
     val settingsDarkModeLight: String
     val settingsDarkModeDark: String
@@ -245,7 +245,7 @@ object ZhStrings : AppStrings {
     override val settingsTheme = "主题与配色"
     override val settingsDynamicColor = "动态取色"
     override val settingsDynamicColorDesc = "跟随系统壁纸配色(Material You)"
-    override val settingsDarkMode = "深色模式"
+    override val settingsThemeMode = "主题模式"
     override val settingsDarkModeSystem = "跟随系统"
     override val settingsDarkModeLight = "浅色"
     override val settingsDarkModeDark = "深色"
@@ -418,7 +418,7 @@ object EnStrings : AppStrings {
     override val settingsTheme = "Theme & colors"
     override val settingsDynamicColor = "Dynamic color"
     override val settingsDynamicColorDesc = "Follow system wallpaper (Material You)"
-    override val settingsDarkMode = "Dark mode"
+    override val settingsThemeMode = "Theme mode"
     override val settingsDarkModeSystem = "Follow system"
     override val settingsDarkModeLight = "Light"
     override val settingsDarkModeDark = "Dark"

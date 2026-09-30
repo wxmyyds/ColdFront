@@ -4,15 +4,20 @@ package io.github.wxmyyds.coldfront.ui.component
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -20,7 +25,6 @@ import androidx.compose.material3.ListItemColors
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.ListItemShapes
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -29,7 +33,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -45,7 +54,7 @@ import androidx.compose.ui.unit.dp
  * [ListItemDefaults.segmentedColors]），观感对齐 Material 3 Expressive 列表规格：
  *
  * - 分组外角 16dp、内角 4dp，由 segmentedShapes(index, count) 生成；选中/按下不做圆角形变
- *   （在紧凑分组里会把整组撑散），反馈交给颜色、RadioButton 与涟漪；
+ *   （在紧凑分组里会把整组撑散），反馈交给状态层与涟漪；
  * - 行间留分段缝隙；
  * - 行容器用 surfaceBright，页面用 background —— 靠明度分层，不靠阴影；
  * - 组标题 titleSmall + primary；
@@ -59,7 +68,7 @@ import androidx.compose.ui.unit.dp
  *         SegmentedSwitchRow(title = …, checked = …, onCheckedChange = …)
  *     }
  *     item(key = "dark-system") {
- *         SegmentedRadioRow(title = …, selected = …, onClick = …)
+ *         SegmentedDropdownRow(title = …, options = …, selected = …, onSelect = …)
  *     }
  * }
  * ```
@@ -76,13 +85,33 @@ val SegmentedRowGap = 2.dp
 /** 父级注入本行在分组中的形状，子行因此不需要知道 index/count。 */
 val LocalSegmentedShapes = compositionLocalOf<ListItemShapes?> { null }
 
-/** 行配色：容器 surfaceBright，次要文字 onSurfaceVariant；禁用态保持容器色，只压内容。 */
+/**
+ * 行配色：容器 surfaceBright，正文 onSurface，其余槽位 onSurfaceVariant；
+ * 禁用态保持容器色，只压内容。
+ *
+ * selected* 一律等于常态值：分段组里选中/开启已由行内控件（trailing 的 Switch、
+ * 下拉菜单里的勾）与涟漪表达，再叠一层 selectedContainerColor 会让该行从组里
+ * “跳出来”，破坏分组的整体感。
+ */
 @Composable
-fun segmentedRowColors(): ListItemColors = ListItemDefaults.segmentedColors(
-    containerColor = MaterialTheme.colorScheme.surfaceBright,
-    disabledContainerColor = MaterialTheme.colorScheme.surfaceBright,
-    supportingContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-)
+fun segmentedRowColors(): ListItemColors {
+    val scheme = MaterialTheme.colorScheme
+    return ListItemDefaults.segmentedColors(
+        containerColor = scheme.surfaceBright,
+        contentColor = scheme.onSurface,
+        leadingContentColor = scheme.onSurfaceVariant,
+        trailingContentColor = scheme.onSurfaceVariant,
+        overlineContentColor = scheme.onSurfaceVariant,
+        supportingContentColor = scheme.onSurfaceVariant,
+        disabledContainerColor = scheme.surfaceBright,
+        selectedContainerColor = scheme.surfaceBright,
+        selectedContentColor = scheme.onSurface,
+        selectedLeadingContentColor = scheme.onSurfaceVariant,
+        selectedTrailingContentColor = scheme.onSurfaceVariant,
+        selectedOverlineContentColor = scheme.onSurfaceVariant,
+        selectedSupportingContentColor = scheme.onSurfaceVariant,
+    )
+}
 
 /** 独立单行：四角 16dp（segmentedShapes(0,1) 的基形是 4dp，单独一行会显得方）。 */
 @Composable
@@ -99,8 +128,8 @@ fun standaloneRowShapes(): ListItemShapes = ListItemDefaults.shapes(
  *
  * selected / pressed / focused / hovered 形状全部压回基准形状：默认 token 会让这些状态
  * 四角变成 16dp（ItemSelected/PressedContainerExpressiveShape = CornerLarge），在紧凑分组里
- * 会把整组“撑散”、与相邻行的 4dp 内角对不上。选中态改由颜色与 leading 的 RadioButton
- * 表达，按下反馈交给涟漪/状态层（它们仍会被裁到基准形状）。
+ * 会把整组“撑散”、与相邻行的 4dp 内角对不上。选中态改由行内控件表达，
+ * 按下反馈交给涟漪/状态层（它们仍会被裁到基准形状）。
  */
 @Composable
 fun segmentedRowShapes(index: Int, count: Int): ListItemShapes {
@@ -332,40 +361,74 @@ fun SegmentedSwitchRow(
     }
 }
 
-/** 单选行：leading 为 RadioButton（非交互，点击由整行承担），选中只变色不变形。 */
+/**
+ * 下拉选择行：整行点击弹菜单，trailing 显示当前值 + 下拉箭头，菜单里选中项打勾。
+ *
+ * 选项多到把页面拉长时用它替掉单选行组（一行 + 一个菜单）。
+ * 菜单用稳定的 [DropdownMenu] / [DropdownMenuItem]，不依赖 alpha 线的
+ * SelectableDropdownMenuItem；M3E 下它们自动套用表达性菜单样式。
+ */
 @Composable
-fun SegmentedRadioRow(
+fun <T> SegmentedDropdownRow(
     title: String,
-    selected: Boolean,
-    onClick: () -> Unit,
+    options: List<T>,
+    selected: T,
+    onSelect: (T) -> Unit,
+    optionLabel: (T) -> String,
     modifier: Modifier = Modifier,
     summary: String? = null,
     enabled: Boolean = true,
     shapes: ListItemShapes? = null,
     colors: ListItemColors = segmentedRowColors(),
-    trailingContent: (@Composable () -> Unit)? = null,
-    supportingContent: (@Composable () -> Unit)? = null,
+    leadingContent: (@Composable () -> Unit)? = null,
 ) {
-    val haptic = LocalHapticFeedback.current
-    val supporting: (@Composable () -> Unit)? =
-        supportingContent ?: summary?.let { text -> { Text(text) } }
+    var expanded by remember { mutableStateOf(false) }
+    val selectedLabel = options.firstOrNull { it == selected }?.let(optionLabel).orEmpty()
 
-    SegmentedListItem(
-        selected = selected,
-        onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.VirtualKey)
-            onClick()
-        },
-        shapes = currentRowShapes(shapes),
-        modifier = modifier.fillMaxWidth(),
-        enabled = enabled,
-        colors = colors,
-        leadingContent = {
-            RadioButton(selected = selected, onClick = null, enabled = enabled)
-        },
-        trailingContent = trailingContent,
-        supportingContent = supporting,
-    ) {
-        Text(title)
+    Box(modifier = modifier) {
+        SegmentedRow(
+            title = title,
+            summary = summary,
+            enabled = enabled,
+            onClick = { expanded = true },
+            shapes = shapes,
+            colors = colors,
+            leadingContent = leadingContent,
+            trailingContent = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(selectedLabel, style = MaterialTheme.typography.labelLarge)
+                    Icon(
+                        imageVector = Icons.Filled.ArrowDropDown,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+        )
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(optionLabel(option)) },
+                    onClick = {
+                        expanded = false
+                        onSelect(option)
+                    },
+                    trailingIcon = if (option == selected) {
+                        {
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    } else {
+                        null
+                    },
+                )
+            }
+        }
     }
 }
