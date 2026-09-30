@@ -32,12 +32,13 @@ import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -48,15 +49,20 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.ToggleFloatingActionButton
 import androidx.compose.material3.ToggleFloatingActionButtonDefaults.animateIcon
+import androidx.compose.material3.rememberSliderState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -77,23 +83,24 @@ import kotlin.math.roundToInt
  * - 战术 5(流体动效):颜色过渡走 MaterialTheme.motionScheme 的 effects spec。
  * - 开关行用官方 [ListItem](表达性列表),带色调图标容器。
  */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
     val strings = LocalStrings.current
     val state by vm.liveState.collectAsStateWithLifecycle()
     val connected = state.connection == ConnectionState.CONNECTED
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
+            // MD3E 小顶栏:标题用组件默认的 TitleLarge(旧写法 headlineSmall 24sp 超出小顶栏规格),
+            // 容器色不再强制透明——规范要求滚动后容器变为 surfaceContainer。
             TopAppBar(
-                title = { Text(strings.homeTitle, style = MaterialTheme.typography.headlineSmall) },
+                title = { Text(strings.homeTitle) },
                 windowInsets = WindowInsets(0, 0, 0, 0),
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                    scrolledContainerColor = Color.Transparent,
-                ),
+                scrollBehavior = scrollBehavior,
             )
         },
         floatingActionButton = {
@@ -159,8 +166,9 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
 
     TempHero(state)
 
-    // 三个带说明的开关:官方 ListItem + 色调图标容器
-    // 每个开关独立成卡,卡间留间隔(参考图的分组语言)
+    // 三个带说明的开关:MD3E 分段列表(SegmentedListItem)——
+    // 外角 16dp / 内角 4dp 由 segmentedShapes(index, count) 自动算,行间留分段缝隙
+    val controlCount = 3
     Column(
         modifier = Modifier.animateContentSize(
             spring(
@@ -170,36 +178,36 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
         ),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraSmall) {
-            ControlItem(
-                icon = Icons.Filled.AutoMode,
-                title = strings.homeSmart,
-                desc = strings.homeSmartDesc,
-                checked = state.smartOn,
-                enabled = state.coolingOn,
-                onChange = { vm.setSmart(it) },
-            )
-        }
-        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraSmall) {
-            ControlItem(
-                icon = Icons.Filled.Bolt,
-                title = strings.homeBoost,
-                desc = strings.homeBoostDesc,
-                checked = state.boostOn,
-                enabled = state.coolingOn,
-                onChange = { vm.setBoost(it) },
-            )
-        }
-        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraSmall) {
-            ControlItem(
-                icon = Icons.Filled.Shield,
-                title = strings.homeOvercold,
-                desc = strings.homeOvercoldDesc,
-                checked = state.overcoldOn,
-                enabled = true,
-                onChange = { vm.setOvercoldProtection(it) },
-            )
-        }
+        ControlItem(
+            index = 0,
+            count = controlCount,
+            icon = Icons.Filled.AutoMode,
+            title = strings.homeSmart,
+            desc = strings.homeSmartDesc,
+            checked = state.smartOn,
+            enabled = state.coolingOn,
+            onChange = { vm.setSmart(it) },
+        )
+        ControlItem(
+            index = 1,
+            count = controlCount,
+            icon = Icons.Filled.Bolt,
+            title = strings.homeBoost,
+            desc = strings.homeBoostDesc,
+            checked = state.boostOn,
+            enabled = state.coolingOn,
+            onChange = { vm.setBoost(it) },
+        )
+        ControlItem(
+            index = 2,
+            count = controlCount,
+            icon = Icons.Filled.Shield,
+            title = strings.homeOvercold,
+            desc = strings.homeOvercoldDesc,
+            checked = state.overcoldOn,
+            enabled = true,
+            onChange = { vm.setOvercoldProtection(it) },
+        )
     }
 
     LevelSection(vm, state, strings)
@@ -295,9 +303,19 @@ private fun MetricPill(icon: ImageVector, text: String, content: Color) {
     }
 }
 
-/** 开关行:官方 ListItem(表达性列表)+ 色调图标容器 */
+/**
+ * 开关行:MD3E [SegmentedListItem] 的 checked 重载——
+ * - 整行可点(自带状态层 + toggle 语义 + 按下形变),不再把 Card 套在 ListItem 外面;
+ * - 分组圆角(外 16dp / 内 4dp)由 [ListItemDefaults.segmentedShapes] 按 index/count 生成;
+ * - 尾随 Switch 只做视觉指示(onCheckedChange = null),避免行与开关双重交互;
+ *   thumbContent 的图标色由组件自动注入(SwitchTokens.SelectedIconColor = onPrimaryContainer),
+ *   旧写法手写 tint = primary/onPrimary 盖掉了规范色,未选态对比不足 3:1。
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ControlItem(
+    index: Int,
+    count: Int,
     icon: ImageVector,
     title: String,
     desc: String,
@@ -305,10 +323,12 @@ private fun ControlItem(
     enabled: Boolean,
     onChange: (Boolean) -> Unit,
 ) {
-    ListItem(
-        headlineContent = {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-        },
+    SegmentedListItem(
+        checked = checked,
+        onCheckedChange = onChange,
+        shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
+        modifier = Modifier.fillMaxWidth(),
+        enabled = enabled,
         supportingContent = {
             Text(desc, style = MaterialTheme.typography.bodyMedium)
         },
@@ -321,29 +341,28 @@ private fun ControlItem(
             )
         },
         trailingContent = {
-Switch(
+            Switch(
                 checked = checked,
+                // 非交互指示器:点击交给整行(SegmentedListItem 的 checked 重载),
+                // 但 enabled 要跟行一致,否则行置灰时开关仍是可用态配色。
                 enabled = enabled,
-                onCheckedChange = onChange,
+                onCheckedChange = null,
                 thumbContent = {
                     Icon(
                         imageVector = if (checked) Icons.Filled.Check else Icons.Filled.Close,
                         contentDescription = null,
                         modifier = Modifier.size(SwitchDefaults.IconSize),
-                        tint = if (checked) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onPrimary
-                        },
                     )
                 },
             )
         },
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-    )
+    ) {
+        Text(title, style = MaterialTheme.typography.titleMedium)
+    }
 }
 
 /** 制冷档位:强调数字 + 滑条(8 Pro 为 1–8 离散档) */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: AppStrings) {
     val type = state.deviceType
@@ -404,19 +423,33 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
+            // MD3E:Slider 走 SliderState(alpha28 起 Slider(value=…) 无状态重载已弃用)。
+            // 拖动期间以滑条为准,松手后再由设备回读值同步,避免两边互相打架。
+            var dragging by remember { mutableStateOf(false) }
+            val gear = levelToGear(state.fanPercent).toFloat()
+            val percent = state.fanPercent.toFloat()
+            val gearSlider = rememberSliderState(value = gear, steps = 6, trackRange = 1f..8f)
+            val percentSlider = rememberSliderState(value = percent, trackRange = 0f..100f)
+            LaunchedEffect(gear) { if (!dragging) gearSlider.value = gear }
+            LaunchedEffect(percent) { if (!dragging) percentSlider.value = percent }
             if (isGear) {
                 Slider(
-                    value = levelToGear(state.fanPercent).toFloat(),
-                    onValueChange = { vm.setFanSpeed(gearToLevel(it.roundToInt())) },
-                    valueRange = 1f..8f,
-                    steps = 6,
+                    state = gearSlider,
+                    onValueChange = {
+                        dragging = true
+                        vm.setFanSpeed(gearToLevel(it.roundToInt()))
+                    },
+                    onValueChangeFinished = { dragging = false },
                     enabled = !state.smartOn,
                 )
             } else {
                 Slider(
-                    value = state.fanPercent.toFloat(),
-                    onValueChange = { vm.setFanSpeed(it.toInt()) },
-                    valueRange = 0f..100f,
+                    state = percentSlider,
+                    onValueChange = {
+                        dragging = true
+                        vm.setFanSpeed(it.toInt())
+                    },
+                    onValueChangeFinished = { dragging = false },
                     enabled = !state.smartOn,
                 )
             }

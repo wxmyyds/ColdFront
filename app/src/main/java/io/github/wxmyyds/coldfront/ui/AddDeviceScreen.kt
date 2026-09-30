@@ -6,7 +6,6 @@ import android.provider.Settings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,14 +26,15 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.ElevatedAssistChip
 import androidx.compose.material3.FilterChip
@@ -53,6 +53,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -65,6 +66,7 @@ import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
 import io.github.wxmyyds.coldfront.ui.i18n.AppStrings
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
     val strings = LocalStrings.current
@@ -88,28 +90,29 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
     }
     DisposableEffect(Unit) { onDispose { vm.stopScan() } }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surfaceContainer),
-    ) {
-        // MD3E 弹性顶栏 + 返回导航
-        TopAppBar(
-            title = { Text(strings.scanTitle, style = MaterialTheme.typography.headlineSmall) },
-            windowInsets = WindowInsets(0, 0, 0, 0),
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = Color.Transparent,
-                scrolledContainerColor = Color.Transparent,
-            ),
-            navigationIcon = {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
-                }
-            },
-        )
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+
+    Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            // MD3E 小顶栏 + 返回导航:标题走默认 TitleLarge,滚动后容器转 surfaceContainer
+            TopAppBar(
+                title = { Text(strings.scanTitle) },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                scrollBehavior = scrollBehavior,
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                    }
+                },
+            )
+        },
+    ) { inner ->
         Column(
             modifier = Modifier
-                .weight(1f)
+                .fillMaxSize()
+                .padding(inner)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -473,6 +476,7 @@ private fun ScanningEmptyState(strings: AppStrings, scanning: Boolean, onRescan:
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun DeviceList(
     strings: AppStrings,
@@ -481,45 +485,43 @@ private fun DeviceList(
 ) {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items(devices, key = { it.address }) { device ->
-            Card(
-                modifier = Modifier.fillMaxWidth().clickable { onConnect(device) },
-                shape = MaterialTheme.shapes.large,
+            // MD3E 表达性列表行:用 ListItem(onClick = …) 重载——
+            // 自带状态层/涟漪/按钮语义,不再 Card + Modifier.clickable 手工拼;
+            // 独立行外角取 shapes.large(16dp),按下形变交给默认 pressedShape。
+            ListItem(
+                onClick = { onConnect(device) },
+                shapes = ListItemDefaults.shapes(shape = MaterialTheme.shapes.large),
+                modifier = Modifier.fillMaxWidth(),
+                supportingContent = {
+                    Text(
+                        device.deviceType.deviceName + " · ${device.rssi} dBm",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                },
+                overlineContent = if (device.matchedByName) {
+                    { Text(strings.scanMatchedByName, style = MaterialTheme.typography.labelSmall) }
+                } else {
+                    null
+                },
+                leadingContent = {
+                    CoolerArt(
+                        device.deviceType,
+                        modifier = Modifier.size(40.dp),
+                        iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                },
+                trailingContent = {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                },
             ) {
-                // MD3E 表达性列表行:色调图标容器 + 强调标题 + 尾随箭头
-                ListItem(
-                    headlineContent = {
-                        Text(
-                            device.displayName,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    },
-                    supportingContent = {
-                        Text(
-                            device.deviceType.deviceName + " · ${device.rssi} dBm",
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    },
-                    overlineContent = if (device.matchedByName) {
-                        { Text(strings.scanMatchedByName, style = MaterialTheme.typography.labelSmall) }
-                    } else {
-                        null
-                    },
-                    leadingContent = {
-                        CoolerArt(
-                            device.deviceType,
-                            modifier = Modifier.size(40.dp),
-                            iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
-                    trailingContent = {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                Text(
+                    device.displayName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
                 )
             }
         }

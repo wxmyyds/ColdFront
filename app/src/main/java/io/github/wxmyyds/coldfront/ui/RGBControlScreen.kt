@@ -39,13 +39,16 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberSliderState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -60,6 +63,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -69,11 +73,12 @@ import io.github.wxmyyds.coldfront.domain.RGBConfig
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 
 /**
- * RGB 灯效页(MD3E 重设计):
+ * RGB 灯效页(MD3E):
  * - 动态预览卡:呼吸/炫彩带动画,常亮带光晕
  * - 灯效选择即点即发;颜色 = 预设色板 + 彩色轨道 RGB 滑条,显式应用
  * - 初始值回读自设备当前灯效
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
     val strings = LocalStrings.current
@@ -99,23 +104,23 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surfaceContainer),
-    ) {
-        // 紧凑顶栏(透明,页面灰底透出)
-        TopAppBar(
-            title = { Text(strings.rgbTitle, style = MaterialTheme.typography.headlineSmall) },
-            windowInsets = WindowInsets(0, 0, 0, 0),
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = Color.Transparent,
-                scrolledContainerColor = Color.Transparent,
-            ),
-        )
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+
+    Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            TopAppBar(
+                title = { Text(strings.rgbTitle) },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                scrollBehavior = scrollBehavior,
+            )
+        },
+    ) { inner ->
         Column(
             modifier = Modifier
-                .weight(1f)
+                .fillMaxSize()
+                .padding(inner)
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -346,8 +351,14 @@ private fun PaletteRow(r: Int, g: Int, b: Int, onPick: (Int, Int, Int) -> Unit) 
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ColorSlider(label: String, value: Int, trackColor: Color, onChange: (Int) -> Unit) {
+    // alpha28 起 Slider(value=…) 无状态重载已弃用 → 走 SliderState。
+    // 拖动期间以滑条为准;松手后再把外部值(点色板预设)同步回来。
+    val sliderState = rememberSliderState(value = value.toFloat(), trackRange = 0f..255f)
+    var dragging by remember { mutableStateOf(false) }
+    LaunchedEffect(value) { if (!dragging) sliderState.value = value.toFloat() }
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
@@ -362,9 +373,12 @@ private fun ColorSlider(label: String, value: Int, trackColor: Color, onChange: 
             Text("$value", style = MaterialTheme.typography.bodySmall)
         }
         Slider(
-            value = value.toFloat(),
-            onValueChange = { onChange(it.toInt()) },
-            valueRange = 0f..255f,
+            state = sliderState,
+            onValueChange = {
+                dragging = true
+                onChange(it.toInt())
+            },
+            onValueChangeFinished = { dragging = false },
             colors = SliderDefaults.colors(
                 activeTrackColor = trackColor,
                 thumbColor = trackColor,
