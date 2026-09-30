@@ -1,8 +1,10 @@
 package io.github.wxmyyds.coldfront.data
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -38,6 +40,24 @@ class SettingsRepository(context: Context) {
 
     private val dataStore = context.applicationContext.settingsDataStore
 
+    // —— 主题设置 ——
+
+    /** 动态取色开关(默认开,跟随壁纸) */
+    val dynamicColor: Flow<Boolean> = dataStore.data.map { it[KEY_DYNAMIC_COLOR] ?: true }
+
+    /** 深色模式:system / light / dark */
+    val darkMode: Flow<String> = dataStore.data.map { it[KEY_DARK_MODE] ?: "system" }
+
+    suspend fun setDynamicColor(enabled: Boolean) {
+        dataStore.edit { it[KEY_DYNAMIC_COLOR] = enabled }
+    }
+
+    suspend fun setDarkMode(mode: String) {
+        dataStore.edit { it[KEY_DARK_MODE] = mode }
+    }
+
+    // —— 温控阈值 ——
+
     val thresholds: Flow<ThermalThresholds> = dataStore.data.map { prefs ->
         ThermalThresholds(
             lowTemp = prefs[KEY_LOW_TEMP] ?: 35,
@@ -63,6 +83,8 @@ class SettingsRepository(context: Context) {
     }
 
     companion object {
+        private val KEY_DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
+        private val KEY_DARK_MODE = stringPreferencesKey("dark_mode")
         private val KEY_LOW_TEMP = intPreferencesKey("low_temp")
         private val KEY_MID_TEMP = intPreferencesKey("mid_temp")
         private val KEY_HIGH_TEMP = intPreferencesKey("high_temp")

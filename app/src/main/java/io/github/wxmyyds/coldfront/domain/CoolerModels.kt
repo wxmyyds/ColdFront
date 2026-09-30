@@ -77,9 +77,18 @@ data class CoolerLiveState(
     val fanRpm: Int? = null,
     /** 功率(101D/1015上报, W) */
     val powerW: Int? = null,
-    /** 散热总开关(1011上报): 2=开 3=关 */
-    val coolingOn: Boolean? = null,
+    /** 散热总开关(1011): 2=开 3=关 */
+    val coolingOn: Boolean = false,
+    /** 智能温控(1018): 设备自主温控 */
+    val smartOn: Boolean = false,
+    /** 破坏神/Boost 超频(1017) */
+    val boostOn: Boolean = false,
+    /** 过冷/冷凝保护(101F bit2) */
+    val overcoldOn: Boolean = false,
 ) {
     val isConnected: Boolean get() = connection == ConnectionState.CONNECTED
     val temperatureText: String get() = if (temperatureC > 0) "%.1f°C".format(temperatureC) else "--"
+
+    /** 智能温控或散热关时不可手动调档 */
+    val manualLevelEnabled: Boolean get() = isConnected && coolingOn && !smartOn
 }

@@ -116,7 +116,7 @@ fun AddDeviceScreen(vm: CoolerViewModel) {
                     },
                 )
             }
-            devices.isEmpty() -> ScanningEmptyState(strings, scanning = state.connection == io.github.wxmyyds.coldfront.domain.ConnectionState.SCANNING) {
+            devices.isEmpty() -> ScanningEmptyState(strings, scanning = scanState.scanning) {
                 vm.startScan()
             }
             else -> DeviceList(strings, devices) { vm.connect(it); vm.stopScan() }

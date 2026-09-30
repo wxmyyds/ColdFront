@@ -59,6 +59,16 @@ object CoolerBleConstants {
     /** 功率(新):通知,byte0 = W */
     val POWER_UUID: UUID = UUID.fromString("0000101d-0000-1000-8000-00805f9b34fb")
 
+    /** 过冷/冷凝保护(101F):写 [flag, 0, 高阈值, 低阈值];flag = (开?0x04:0)|0x03 */
+    val PROTECTION_UUID: UUID = UUID.fromString("0000101f-0000-1000-8000-00805f9b34fb")
+    const val PROTECTION_FLAG_ON: Byte = 0x07   // 0x04 | 0x03
+    const val PROTECTION_FLAG_OFF: Byte = 0x03
+    const val PROTECTION_HIGH_DEFAULT: Byte = 100   // 0x64
+    const val PROTECTION_LOW_DEFAULT: Byte = -30    // 0xE2
+
+    /** 温度显示校准偏移(官方 App:显示 = raw − 6,以官方 App 显示为准) */
+    const val TEMPERATURE_OFFSET: Int = 6
+
     /** 灯光查询/握手命令(写单字节 0x11 到灯光特征) */
     const val LIGHT_QUERY_COMMAND: Byte = 0x11
 

@@ -5,7 +5,7 @@ import android.content.Intent
 import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import io.github.wxmyyds.coldfront.ble.CoolerBleManager
+import io.github.wxmyyds.coldfront.ble.BleManagerHolder
 import io.github.wxmyyds.coldfront.data.ProfileRepository
 import io.github.wxmyyds.coldfront.data.SettingsRepository
 import io.github.wxmyyds.coldfront.data.ThermalThresholds
@@ -30,7 +30,7 @@ import kotlinx.coroutines.launch
  */
 class CoolerViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val ble = CoolerBleManager(app)
+    private val ble = BleManagerHolder.get(app)
     private val profileRepo = ProfileRepository(app)
     private val settingsRepo = SettingsRepository(app)
     @Suppress("unused")
@@ -51,6 +51,18 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
 
     val thresholds: StateFlow<ThermalThresholds> =
         settingsRepo.thresholds.stateIn(viewModelScope, SharingStarted.Eagerly, ThermalThresholds())
+
+    // —— 主题设置 ——
+    val dynamicColor: StateFlow<Boolean> =
+        settingsRepo.dynamicColor.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+    val darkMode: StateFlow<String> =
+        settingsRepo.darkMode.stateIn(viewModelScope, SharingStarted.Eagerly, "system")
+
+    fun setDynamicColor(enabled: Boolean) =
+        viewModelScope.launch { settingsRepo.setDynamicColor(enabled) }
+
+    fun setDarkMode(mode: String) =
+        viewModelScope.launch { settingsRepo.setDarkMode(mode) }
 
     private val _bluetoothEnabled = MutableStateFlow(ble.isBluetoothEnabled)
     val bluetoothEnabled: StateFlow<Boolean> = _bluetoothEnabled.asStateFlow()
@@ -82,20 +94,21 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
     fun setFanSpeed(percent: Int) = ble.setFanSpeed(percent)
     fun setFanMode(mode: FanMode) = ble.setFanMode(mode)
 
-    fun setRGB(config: RGBConfig) {
-        // 自动模式运行时由服务端写入；否则用 UI 连接写入
-        val svc = CoolerService.getInstance()
-        if (svc != null) svc.setRGB(config) else ble.setRGB(config)
-    }
+    // —— 独立控制:散热开关/智能温控/破坏神/过冷保护 ——
+    fun setCooling(on: Boolean) = ble.setCooling(on)
+    fun setSmart(on: Boolean) = ble.setSmart(on)
+    fun setBoost(on: Boolean) = ble.setBoost(on)
+    fun setOvercoldProtection(on: Boolean) = ble.setOvercoldProtection(on)
+
+    fun setRGB(config: RGBConfig) = ble.setRGB(config)
 
     fun deleteProfile(id: String) = viewModelScope.launch { profileRepo.delete(id) }
     fun setActiveProfile(id: String?) = viewModelScope.launch { profileRepo.setActive(id) }
 
     fun saveProfile(profile: CoolerProfile) = viewModelScope.launch { profileRepo.upsert(profile) }
 
-    /** 启动自动模式：UI 让出连接，由前台服务接管 */
+    /** 启动智能温控常驻通知(共享连接,不断开) */
     fun startAutoMode(profile: CoolerProfile) {
-        ble.disconnect()
         viewModelScope.launch { profileRepo.setActive(profile.id) }
         val intent = Intent(getApplication(), CoolerService::class.java).apply {
             action = CoolerService.ACTION_START_AUTO
@@ -117,11 +130,10 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
         ctx.startService(Intent(ctx, CoolerService::class.java).apply {
             action = CoolerService.ACTION_STOP
         })
-        viewModelScope.launch { profileRepo.setActive(null) }
     }
 
-    /** 自动模式停止后，UI 重新接管连接 */
-    fun reconnectProfile(profile: CoolerProfile) {
+    /** 从已保存设备直连 */
+    fun connectProfile(profile: CoolerProfile) {
         ble.connectByAddress(profile.macAddress, profile.deviceType)
     }
 

@@ -30,7 +30,43 @@ interface AppStrings {
     val navHome: String
     val navDevices: String
     val navRgb: String
-    val navProfiles: String
+    val navSettings: String
+
+    // —— 首页:独立控制 ——
+    val homeCoolingSwitch: String
+    val homeCoolingSwitchDesc: String
+    val homeSmart: String
+    val homeSmartDesc: String
+    val homeBoost: String
+    val homeBoostDesc: String
+    val homeOvercold: String
+    val homeOvercoldDesc: String
+    val homeLevel: String
+    val homeLevelGear: String
+    val homeLevelPercent: String
+    val homeSmartActiveLevel: String
+
+    // —— 设备页 ——
+    val devicesTitle: String
+    val devicesEmpty: String
+    val devicesEmptyHint: String
+    val devicesAdd: String
+    val devicesConnect: String
+    val devicesConnected: String
+    val devicesDelete: String
+    val devicesLastSeen: String
+
+    // —— 设置页 ——
+    val settingsTitle: String
+    val settingsTheme: String
+    val settingsDynamicColor: String
+    val settingsDynamicColorDesc: String
+    val settingsDarkMode: String
+    val settingsDarkModeSystem: String
+    val settingsDarkModeLight: String
+    val settingsDarkModeDark: String
+    val settingsAbout: String
+    val settingsAboutDesc: String
 
     // —— 首页 ——
     val homeTitle: String
@@ -39,14 +75,15 @@ interface AppStrings {
     val homeAddDevice: String
     val homeConnecting: String
     val homeTemp: String
-    val homeFanSpeed: String
     val homeModeManual: String
-    val homeModeAuto: String
-    val homeModeOff: String
     val homeAutoRunning: String
     val homeSignal: String
     val homeConnected: String
     val homeDisconnected: String
+    val homeConnectionFailed: String
+    val homeRetryHint: String
+    val homeGoScan: String
+    val homeNotConnected: String
     val homeStartService: String
     val homeStopService: String
 
@@ -176,7 +213,40 @@ object ZhStrings : AppStrings {
     override val navHome = "首页"
     override val navDevices = "设备"
     override val navRgb = "灯效"
-    override val navProfiles = "档案"
+    override val navSettings = "设置"
+
+    override val homeCoolingSwitch = "散热开关"
+    override val homeCoolingSwitchDesc = "关闭后风扇全停"
+    override val homeSmart = "智能温控"
+    override val homeSmartDesc = "由散热器根据温度自动调节档位"
+    override val homeBoost = "破坏神"
+    override val homeBoostDesc = "超频增强模式(功耗更高)"
+    override val homeOvercold = "过冷保护"
+    override val homeOvercoldDesc = "防止冷凝:低温自动降档保护"
+    override val homeLevel = "制冷档位"
+    override val homeLevelGear = "%d 档"
+    override val homeLevelPercent = "%d%%"
+    override val homeSmartActiveLevel = "智能温控运行中,档位由设备调节"
+
+    override val devicesTitle = "我的设备"
+    override val devicesEmpty = "还没有保存的设备"
+    override val devicesEmptyHint = "点击下方按钮扫描并添加散热器"
+    override val devicesAdd = "添加设备"
+    override val devicesConnect = "连接"
+    override val devicesConnected = "已连接"
+    override val devicesDelete = "删除"
+    override val devicesLastSeen = "上次使用:%s"
+
+    override val settingsTitle = "设置"
+    override val settingsTheme = "主题与配色"
+    override val settingsDynamicColor = "动态取色"
+    override val settingsDynamicColorDesc = "跟随系统壁纸配色(Material You)"
+    override val settingsDarkMode = "深色模式"
+    override val settingsDarkModeSystem = "跟随系统"
+    override val settingsDarkModeLight = "浅色"
+    override val settingsDarkModeDark = "深色"
+    override val settingsAbout = "关于"
+    override val settingsAboutDesc = "ColdFront · 红魔散热器控制 · v1.0"
 
     override val homeTitle = "散热控制"
     override val homeNoDevice = "尚未连接散热器"
@@ -184,14 +254,15 @@ object ZhStrings : AppStrings {
     override val homeAddDevice = "添加设备"
     override val homeConnecting = "连接中…"
     override val homeTemp = "温度"
-    override val homeFanSpeed = "风扇转速"
     override val homeModeManual = "手动"
-    override val homeModeAuto = "自动"
-    override val homeModeOff = "关闭"
     override val homeAutoRunning = "自动模式运行中"
     override val homeSignal = "信号"
     override val homeConnected = "已连接"
     override val homeDisconnected = "已断开"
+    override val homeConnectionFailed = "连接失败"
+    override val homeRetryHint = "请确认散热器已通电并靠近后重试"
+    override val homeGoScan = "去扫描设备"
+    override val homeNotConnected = "未连接散热器"
     override val homeStartService = "开启自动模式"
     override val homeStopService = "停止自动模式"
 
@@ -313,7 +384,40 @@ object EnStrings : AppStrings {
     override val navHome = "Home"
     override val navDevices = "Devices"
     override val navRgb = "RGB"
-    override val navProfiles = "Profiles"
+    override val navSettings = "Settings"
+
+    override val homeCoolingSwitch = "Cooling switch"
+    override val homeCoolingSwitchDesc = "Off stops the fan completely"
+    override val homeSmart = "Smart temp control"
+    override val homeSmartDesc = "The cooler adjusts its level by itself"
+    override val homeBoost = "Boost (Destruction God)"
+    override val homeBoostDesc = "Overclocking mode (higher power draw)"
+    override val homeOvercold = "Over-cold protection"
+    override val homeOvercoldDesc = "Anti-condensation: auto throttling at low temps"
+    override val homeLevel = "Cooling level"
+    override val homeLevelGear = "Level %d"
+    override val homeLevelPercent = "%d%%"
+    override val homeSmartActiveLevel = "Smart control active - level managed by device"
+
+    override val devicesTitle = "My devices"
+    override val devicesEmpty = "No saved devices yet"
+    override val devicesEmptyHint = "Tap the button below to scan and add a cooler"
+    override val devicesAdd = "Add device"
+    override val devicesConnect = "Connect"
+    override val devicesConnected = "Connected"
+    override val devicesDelete = "Delete"
+    override val devicesLastSeen = "Last used: %s"
+
+    override val settingsTitle = "Settings"
+    override val settingsTheme = "Theme & colors"
+    override val settingsDynamicColor = "Dynamic color"
+    override val settingsDynamicColorDesc = "Follow system wallpaper (Material You)"
+    override val settingsDarkMode = "Dark mode"
+    override val settingsDarkModeSystem = "Follow system"
+    override val settingsDarkModeLight = "Light"
+    override val settingsDarkModeDark = "Dark"
+    override val settingsAbout = "About"
+    override val settingsAboutDesc = "ColdFront · Redmagic cooler control · v1.0"
 
     override val homeTitle = "Cooler Control"
     override val homeNoDevice = "No cooler connected"
@@ -321,14 +425,15 @@ object EnStrings : AppStrings {
     override val homeAddDevice = "Add device"
     override val homeConnecting = "Connecting…"
     override val homeTemp = "Temperature"
-    override val homeFanSpeed = "Fan speed"
     override val homeModeManual = "Manual"
-    override val homeModeAuto = "Auto"
-    override val homeModeOff = "Off"
     override val homeAutoRunning = "Auto mode running"
     override val homeSignal = "Signal"
     override val homeConnected = "Connected"
     override val homeDisconnected = "Disconnected"
+    override val homeConnectionFailed = "Connection failed"
+    override val homeRetryHint = "Make sure the cooler is powered on and nearby, then retry"
+    override val homeGoScan = "Scan for devices"
+    override val homeNotConnected = "Not connected"
     override val homeStartService = "Start auto mode"
     override val homeStopService = "Stop auto mode"
 

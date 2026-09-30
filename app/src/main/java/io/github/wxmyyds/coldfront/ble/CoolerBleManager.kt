@@ -87,6 +87,8 @@ class CoolerBleManager(private val context: Context) {
     private var switchChar: BluetoothGattCharacteristic? = null
     private var rpmChar: BluetoothGattCharacteristic? = null
     private var powerChar: BluetoothGattCharacteristic? = null
+    private var boostChar: BluetoothGattCharacteristic? = null
+    private var protectChar: BluetoothGattCharacteristic? = null
 
     private var scanning = false
     private var pendingRgb: RGBConfig? = null
@@ -154,7 +156,7 @@ class CoolerBleManager(private val context: Context) {
         _rawDevices.value = emptyList()
         scanning = true
         _scanState.update { it.copy(scanning = true, errorCode = null) }
-        _state.update { it.copy(connection = ConnectionState.SCANNING) }
+        // 注:不覆盖 connection 状态——已连接时进入扫描页不能显示"已断开"
         try {
             sc.startScan(
                 /* filters = */ null,
@@ -386,6 +388,8 @@ class CoolerBleManager(private val context: Context) {
         switchChar = null
         rpmChar = null
         powerChar = null
+        boostChar = null
+        protectChar = null
     }
 
     private val gattCallback = object : BluetoothGattCallback() {
@@ -438,6 +442,7 @@ class CoolerBleManager(private val context: Context) {
                         CoolerBleConstants.AUTO_MODE_CONTROL_UUID -> autoChar = ch
                         CoolerBleConstants.RPM_UUID -> rpmChar = ch
                         CoolerBleConstants.POWER_UUID -> powerChar = ch
+                        CoolerBleConstants.PROTECTION_UUID -> protectChar = ch
                     }
                 }
             }
@@ -468,6 +473,7 @@ class CoolerBleManager(private val context: Context) {
             statusChar?.let { ch -> enableNotification(g, ch) }
             rpmChar?.let { ch -> enableNotification(g, ch) }
             powerChar?.let { ch -> enableNotification(g, ch) }
+            protectChar?.let { ch -> enableNotification(g, ch) }
             lightChar?.let { ch -> enableNotification(g, ch) }
             // 关键:写散热总开关 ON(0x02)——不写它风扇不转!
             switchChar?.let { ch ->
@@ -475,11 +481,9 @@ class CoolerBleManager(private val context: Context) {
                 if (ok) _state.update { it.copy(coolingOn = true) } else Log.w(TAG, "散热开关写入失败")
             }
             fanChar?.let { ch ->
-                val v = enqueueRead(g, ch)
+                val v = readIfReadable(g, ch)
                 if (v != null) handleData(ch.uuid, v)
             }
-            // 注:不写 0x11 灯光握手——实测可用 App 从不写,旧协议专用,
-            // 且可能把 8 Pro 灯光状态机搞乱
             pendingRgb?.let {
                 applyRgbInternal(it)
                 pendingRgb = null
@@ -579,10 +583,21 @@ class CoolerBleManager(private val context: Context) {
             CoolerBleConstants.POWER_UUID -> {
                 value.firstOrNull()?.let { w -> _state.update { it.copy(powerW = w.toInt()) } }
             }
+            CoolerBleConstants.PROTECTION_UUID -> {
+                // bit2 = 过冷保护开;[2]=高阈值 [3]=低阈值(有符号)
+                if (value.isNotEmpty()) {
+                    val on = (value[0].toInt() and 0x04) != 0
+                    _state.update { it.copy(overcoldOn = on) }
+                }
+            }
+            CoolerBleConstants.BOOST_CONTROL_UUID -> {
+                if (value.isNotEmpty()) _state.update { it.copy(boostOn = value[0] == 1.toByte()) }
+            }
+            CoolerBleConstants.AUTO_MODE_CONTROL_UUID -> {
+                if (value.isNotEmpty()) _state.update { it.copy(smartOn = value[0] == 1.toByte()) }
+            }
         }
     }
-
-    /** 1015 状态包:[tag, ...] tag 0x08=后两字节大端 RPM,0x09=后一字节功率 W */
     private fun handleStatusValue(value: ByteArray) {
         if (value.isEmpty()) return
         when (value[0].toInt() and 0xFF) {
@@ -712,21 +727,36 @@ class CoolerBleManager(private val context: Context) {
 
     // ──────────────────────────── 控制 ────────────────────────────
 
+    /** 仅当特征具备读属性时才读(避免读只通知特征导致队列长时间超时) */
+    @SuppressLint("MissingPermission")
+    private suspend fun readIfReadable(g: BluetoothGatt, ch: BluetoothGattCharacteristic?): ByteArray? {
+        if (ch == null) return null
+        val props = ch.properties
+        if (props and BluetoothGattCharacteristic.PROPERTY_READ == 0) return null
+        return enqueueRead(g, ch)
+    }
+
     /**
      * 状态轮询循环(实测可用方案):8 Pro 的温度/转速/功率不主动推送,
-     * 需周期性 readCharacteristic 拉取。每轮串行读 1014/1015/101C/101D/1012,
-     * 间隔 500ms(操作间由队列保证串行)。
+     * 需周期性 readCharacteristic 拉取。每轮串行读各状态特征,间隔 500ms。
+     * 有控制写入(档位/灯光/智能)待执行时本轮让位,避免控制命令排队延迟。
      */
     @SuppressLint("MissingPermission")
     private fun startPollLoop(g: BluetoothGatt) {
         pollJob?.cancel()
         pollJob = scope.launch {
             while (isActive && gatt === g) {
-                tempChar?.let { ch -> enqueueRead(g, ch)?.let { handleData(ch.uuid, it) } }
-                statusChar?.let { ch -> enqueueRead(g, ch)?.let { handleData(ch.uuid, it) } }
-                rpmChar?.let { ch -> enqueueRead(g, ch)?.let { handleData(ch.uuid, it) } }
-                powerChar?.let { ch -> enqueueRead(g, ch)?.let { handleData(ch.uuid, it) } }
-                fanChar?.let { ch -> enqueueRead(g, ch)?.let { handleData(ch.uuid, it) } }
+                val controlBusy = fanJob?.isActive == true ||
+                    lightJob?.isActive == true ||
+                    autoJob?.isActive == true
+                if (!controlBusy) {
+                    tempChar?.let { ch -> readIfReadable(g, ch)?.let { handleData(ch.uuid, it) } }
+                    statusChar?.let { ch -> readIfReadable(g, ch)?.let { handleData(ch.uuid, it) } }
+                    rpmChar?.let { ch -> readIfReadable(g, ch)?.let { handleData(ch.uuid, it) } }
+                    powerChar?.let { ch -> readIfReadable(g, ch)?.let { handleData(ch.uuid, it) } }
+                    fanChar?.let { ch -> readIfReadable(g, ch)?.let { handleData(ch.uuid, it) } }
+                    protectChar?.let { ch -> readIfReadable(g, ch)?.let { handleData(ch.uuid, it) } }
+                }
                 delay(500)
             }
         }
@@ -734,14 +764,14 @@ class CoolerBleManager(private val context: Context) {
 
 
     /**
-     * 设置风扇转速百分比(0–100),按该型号 raw 范围换算(8 Pro: 40–80)。
+     * 制冷档位百分比(0–100),按型号 raw 范围换算(8 Pro: 40–80)。防抖 150ms。
      * 滑条拖动高频触发:防抖 150ms,取最终值写一次。
      */
     @SuppressLint("MissingPermission")
     fun setFanSpeed(percent: Int) {
         val type = _state.value.deviceType ?: return
         val clamped = percent.coerceIn(0, 100)
-        _state.update { it.copy(fanPercent = clamped, fanMode = FanMode.MANUAL) }
+        _state.update { it.copy(fanPercent = clamped) }
         val g = gatt ?: return
         val ch = fanChar ?: return
         fanJob?.cancel()
@@ -749,57 +779,86 @@ class CoolerBleManager(private val context: Context) {
             delay(150)
             val raw = CoolerBleConstants.percentageToRaw(clamped, type).toByte()
             val ok = enqueueWrite(g, ch, byteArrayOf(raw))
-            if (ok) Log.d(TAG, "风扇已写入 raw=$raw ($clamped%)")
+            if (ok) Log.d(TAG, "制冷档位已写入 raw=$raw ($clamped%)")
         }
     }
 
-    /** 设置风扇模式:OFF=写散热开关 0x03(全停);AUTO=1018 写 0x01;回手动=1018 写 0x00 */
+    /** 兼容旧接口:按模式语义分发到独立控制 */
     @SuppressLint("MissingPermission")
     fun setFanMode(mode: FanMode) {
-        val wasAuto = _state.value.fanMode == FanMode.AUTO
-        _state.update { it.copy(fanMode = mode) }
-        val g = gatt ?: return
         when (mode) {
-            FanMode.OFF -> {
-                // 散热总开关关(0x03):风扇全停
-                switchChar?.let { ch ->
-                    scope.launch {
-                        val ok = enqueueWrite(g, ch, byteArrayOf(CoolerBleConstants.COOLING_SWITCH_OFF))
-                        if (ok) _state.update { it.copy(coolingOn = false) }
-                    }
-                }
-                // 同时退出智能温控
-                if (wasAuto) writeAuto(g, CoolerBleConstants.AUTO_MODE_OFF)
-            }
-            FanMode.MANUAL -> {
-                // 确保散热开关开(切回时) + 退出智能温控
-                switchChar?.let { ch ->
-                    scope.launch {
-                        val ok = enqueueWrite(g, ch, byteArrayOf(CoolerBleConstants.COOLING_SWITCH_ON))
-                        if (ok) _state.update { it.copy(coolingOn = true) }
-                    }
-                }
-                if (wasAuto) writeAuto(g, CoolerBleConstants.AUTO_MODE_OFF)
-            }
-            FanMode.AUTO -> {
-                switchChar?.let { ch ->
-                    scope.launch {
-                        val ok = enqueueWrite(g, ch, byteArrayOf(CoolerBleConstants.COOLING_SWITCH_ON))
-                        if (ok) _state.update { it.copy(coolingOn = true) }
-                    }
-                }
-                writeAuto(g, CoolerBleConstants.AUTO_MODE_ON)
-            }
+            FanMode.OFF -> setCooling(false)
+            FanMode.MANUAL -> { setCooling(true); setSmart(false) }
+            FanMode.AUTO -> { setCooling(true); setSmart(true) }
         }
     }
 
+    /** 散热总开关(1011:0x02 开/0x03 关)——独立于档位/智能 */
     @SuppressLint("MissingPermission")
-    private fun writeAuto(g: BluetoothGatt, value: Byte) {
+    fun setCooling(on: Boolean) {
+        _state.update {
+            it.copy(
+                coolingOn = on,
+                fanMode = if (!on) FanMode.OFF else if (it.smartOn) FanMode.AUTO else FanMode.MANUAL,
+            )
+        }
+        val g = gatt ?: return
+        val ch = switchChar ?: return
+        autoJob?.cancel()
+        autoJob = scope.launch {
+            val cmd = if (on) CoolerBleConstants.COOLING_SWITCH_ON else CoolerBleConstants.COOLING_SWITCH_OFF
+            val ok = enqueueWrite(g, ch, byteArrayOf(cmd))
+            if (ok) Log.d(TAG, "散热开关已写入 0x%02X".format(cmd))
+        }
+    }
+
+    /** 智能温控(1018:0x01 开/0x00 关,设备自主控制) */
+    @SuppressLint("MissingPermission")
+    fun setSmart(on: Boolean) {
+        _state.update {
+            it.copy(
+                smartOn = on,
+                fanMode = if (on) FanMode.AUTO else if (it.coolingOn) FanMode.MANUAL else FanMode.OFF,
+            )
+        }
+        val g = gatt ?: return
         val ch = autoChar ?: return
         autoJob?.cancel()
         autoJob = scope.launch {
-            val ok = enqueueWrite(g, ch, byteArrayOf(value))
-            if (ok) Log.d(TAG, "自动模式命令已写入 0x%02X".format(value))
+            val cmd = if (on) CoolerBleConstants.AUTO_MODE_ON else CoolerBleConstants.AUTO_MODE_OFF
+            val ok = enqueueWrite(g, ch, byteArrayOf(cmd))
+            if (ok) Log.d(TAG, "智能温控已写入 0x%02X".format(cmd))
+        }
+    }
+
+    /** 破坏神/Boost 超频(1017:0x01 开/0x00 关) */
+    @SuppressLint("MissingPermission")
+    fun setBoost(on: Boolean) {
+        _state.update { it.copy(boostOn = on) }
+        val g = gatt ?: return
+        val ch = boostChar ?: return
+        scope.launch {
+            val cmd: Byte = if (on) 0x01 else 0x00
+            val ok = enqueueWrite(g, ch, byteArrayOf(cmd))
+            if (ok) Log.d(TAG, "破坏神已写入 0x%02X".format(cmd))
+        }
+    }
+
+    /** 过冷/冷凝保护(101F:[flag,0,高阈值,低阈值],flag = (开?0x04:0)|0x03) */
+    @SuppressLint("MissingPermission")
+    fun setOvercoldProtection(on: Boolean) {
+        _state.update { it.copy(overcoldOn = on) }
+        val g = gatt ?: return
+        val ch = protectChar ?: return
+        scope.launch {
+            val payload = byteArrayOf(
+                if (on) CoolerBleConstants.PROTECTION_FLAG_ON else CoolerBleConstants.PROTECTION_FLAG_OFF,
+                0,
+                CoolerBleConstants.PROTECTION_HIGH_DEFAULT,
+                CoolerBleConstants.PROTECTION_LOW_DEFAULT,
+            )
+            val ok = enqueueWrite(g, ch, payload)
+            if (ok) Log.d(TAG, "过冷保护已写入 ${payload.toHex()}")
         }
     }
 
@@ -844,8 +903,9 @@ class CoolerBleManager(private val context: Context) {
         } else {
             data[0].toInt()
         }
-        // 合法范围 -40..80,越界视为坏包丢弃
-        return if (t in -40..80) t.toFloat() else null
+        if (t !in -40..80) return null
+        // 官方 App 显示校准:显示值 = raw − 6
+        return (t - CoolerBleConstants.TEMPERATURE_OFFSET).toFloat()
     }
 
     private fun BluetoothDevice.safeName(): String? =

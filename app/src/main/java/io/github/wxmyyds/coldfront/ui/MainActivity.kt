@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -60,8 +61,15 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun AppContent(vm: CoolerViewModel) {
         val strings = rememberStrings()
+        val dynamicColor by vm.dynamicColor.collectAsStateWithLifecycle()
+        val darkMode by vm.darkMode.collectAsStateWithLifecycle()
+        val dark = when (darkMode) {
+            "light" -> false
+            "dark" -> true
+            else -> androidx.compose.foundation.isSystemInDarkTheme()
+        }
         CompositionLocalProvider(LocalStrings provides strings) {
-            RedmagicCoolerTheme {
+            RedmagicCoolerTheme(darkTheme = dark, dynamicColor = dynamicColor) {
                 PermissionAndBluetoothEffects(vm)
                 AppNav(vm)
             }
@@ -108,8 +116,9 @@ class MainActivity : ComponentActivity() {
 private object Routes {
     const val HOME = "home"
     const val DEVICES = "devices"
+    const val SCAN = "scan"
     const val RGB = "rgb"
-    const val PROFILES = "profiles"
+    const val SETTINGS = "settings"
 }
 
 @Composable
@@ -123,7 +132,7 @@ private fun AppNav(vm: CoolerViewModel) {
     val liveState by vm.liveState.collectAsStateWithLifecycle()
     LaunchedEffect(liveState.connection) {
         if (liveState.connection == ConnectionState.CONNECTED &&
-            current?.hierarchy?.any { it.route == Routes.DEVICES } == true
+            current?.hierarchy?.any { it.route == Routes.SCAN } == true
         ) {
             nav.navigate(Routes.HOME) { launchSingleTop = true }
         }
@@ -133,7 +142,7 @@ private fun AppNav(vm: CoolerViewModel) {
         Triple(Routes.HOME, Icons.Filled.AcUnit) { strings.navHome },
         Triple(Routes.DEVICES, Icons.Filled.Bluetooth) { strings.navDevices },
         Triple(Routes.RGB, Icons.Filled.Palette) { strings.navRgb },
-        Triple(Routes.PROFILES, Icons.Filled.Devices) { strings.navProfiles },
+        Triple(Routes.SETTINGS, Icons.Filled.Settings) { strings.navSettings },
     )
 
     Scaffold(
@@ -162,10 +171,11 @@ private fun AppNav(vm: CoolerViewModel) {
             startDestination = Routes.HOME,
             modifier = Modifier.padding(inner),
         ) {
-            composable(Routes.HOME) { HomeScreen(vm, onAddDevice = { nav.navigate(Routes.DEVICES) }) }
-            composable(Routes.DEVICES) { AddDeviceScreen(vm) }
+            composable(Routes.HOME) { HomeScreen(vm, onAddDevice = { nav.navigate(Routes.SCAN) }) }
+            composable(Routes.DEVICES) { DevicesScreen(vm, onAddDevice = { nav.navigate(Routes.SCAN) }) }
+            composable(Routes.SCAN) { AddDeviceScreen(vm) }
             composable(Routes.RGB) { RGBControlScreen(vm) }
-            composable(Routes.PROFILES) { ProfilesScreen(vm, onAddDevice = { nav.navigate(Routes.DEVICES) }) }
+            composable(Routes.SETTINGS) { SettingsScreen(vm) }
         }
     }
 }

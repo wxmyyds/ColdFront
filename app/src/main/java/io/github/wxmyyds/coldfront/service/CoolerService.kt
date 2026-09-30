@@ -14,6 +14,7 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import io.github.wxmyyds.coldfront.ble.BleManagerHolder
 import io.github.wxmyyds.coldfront.ble.CoolerBleManager
 import io.github.wxmyyds.coldfront.data.ProfileRepository
 import io.github.wxmyyds.coldfront.data.SettingsRepository
@@ -88,7 +89,8 @@ class CoolerService : Service() {
     override fun onCreate() {
         super.onCreate()
         instance = this
-        bleManager = CoolerBleManager(applicationContext)
+        // 共享应用级单例:服务与 UI 同一连接,启动服务不再断开 UI 连接
+        bleManager = BleManagerHolder.get(applicationContext)
         thermal = ThermalMonitor(applicationContext)
         profiles = ProfileRepository(applicationContext)
         settings = SettingsRepository(applicationContext)
@@ -108,7 +110,7 @@ class CoolerService : Service() {
             }
             ACTION_STOP -> stopSelfSafely()
             ACTION_SWITCH_TO_MANUAL -> {
-                bleManager.setFanMode(FanMode.MANUAL)
+                bleManager.setSmart(false)
                 stopSelfSafely()
             }
             ACTION_RECONNECT -> {
@@ -136,8 +138,12 @@ class CoolerService : Service() {
         scope.launch {
             thresholds = settings.thresholds.first()
         }
-        bleManager.connectByAddress(mac, type)
-        startMonitorLoop()
+        // 未连接时才连接(共享管理器:已连接则直接复用,绝不打断)
+        if (!bleManager.state.value.isConnected) {
+            bleManager.connectByAddress(mac, type)
+        }
+        // 智能温控为设备自主控制(1018 写 0x01),服务仅做状态常驻通知
+        bleManager.setSmart(true)
         startForegroundCompat(buildNotification(strings.serviceAutoOn, 0))
     }
 
@@ -154,39 +160,18 @@ class CoolerService : Service() {
         }
     }
 
-    /** 周期性根据温度调速 */
-    private fun startMonitorLoop() {
-        monitorJob?.cancel()
-        monitorJob = scope.launch {
-            while (true) {
-                delay(ADJUST_INTERVAL_MS)
-                val live = bleManager.state.value
-                if (!live.isConnected) continue
-                val temp = if (live.temperatureC > 0) live.temperatureC
-                else thermal.currentDeviceTempC() ?: continue
-                val target = thresholds.speedFor(temp)
-                if (live.fanPercent != target) {
-                    bleManager.setFanSpeed(target)
-                    Log.d(TAG, "自动调速：${live.fanPercent}→$target%%（温度 $temp°C）")
-                }
-            }
-        }
-    }
-
     /** 供 UI 调用：设置 RGB */
     fun setRGB(config: RGBConfig) = bleManager.setRGB(config)
 
-    @SuppressLint("MissingPermission")
     private fun stopSelfSafely() {
         monitorJob?.cancel()
-        bleManager.disconnect()
+        // 共享管理器:服务停止不断开连接(UI 可能仍在使用)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
     override fun onDestroy() {
         monitorJob?.cancel()
-        bleManager.release()
         scope.cancel()
         instance = null
         super.onDestroy()
