@@ -140,9 +140,6 @@ private fun DeviceList(
                             if (device.matchedByName) {
                                 ElevatedAssistChip(onClick = {}, label = { Text(strings.scanMatchedByName) })
                             }
-                            if (!device.deviceType.uuidConfirmed) {
-                                ElevatedAssistChip(onClick = {}, label = { Text(strings.scanUuidUnconfirmed) })
-                            }
                         }
                     }
                     Column(horizontalAlignment = Alignment.End) {

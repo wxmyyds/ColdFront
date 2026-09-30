@@ -233,7 +233,7 @@ object ZhStrings : AppStrings {
     override val permNotificationMsg = "前台服务需要通知权限以保持持续运行。"
 
     override val eightProUuidNotice =
-        "8 Pro 的广播 UUID 暂为占位值，当前靠蓝牙名称识别。拿到实机后用 nRF Connect 抓取 ServiceData(0x4A41) 的 payload 填入 JACKET_8_PRO.advertisingUUID 即可精确识别。"
+        "8 Pro 已按官方协议精确识别（厂商数据 0x08CA = [0x05, 0x08]）：风扇 raw 40–80、自动模式写 0x01/0x00、温度显示值 = 原始值 − 6。详见 docs/protocol-8pro.md。"
 }
 
 object EnStrings : AppStrings {
@@ -342,7 +342,7 @@ object EnStrings : AppStrings {
     override val permNotificationMsg = "Notifications are required to keep the foreground service running."
 
     override val eightProUuidNotice =
-        "The 8 Pro advertising UUID is a placeholder; detection currently relies on the Bluetooth name. Once you have the device, capture its ServiceData(0x4A41) payload with nRF Connect and fill in JACKET_8_PRO.advertisingUUID for exact identification."
+        "8 Pro is identified exactly per the official protocol (manufacturer data 0x08CA = [0x05, 0x08]): fan raw 40-80, auto mode writes 0x01/0x00, displayed temperature = raw - 6. See docs/protocol-8pro.md."
 }
 
 /** 当前 locale 对应的字符串表 */

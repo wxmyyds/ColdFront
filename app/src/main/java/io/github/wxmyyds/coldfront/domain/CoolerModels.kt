@@ -1,14 +1,15 @@
 package io.github.wxmyyds.coldfront.domain
 
 /**
- * RGB 灯效（逆向自官方 App，写入 0x1013 特征的第一字节）。
+ * RGB 灯效(逆向自官方 App,写入 0x1013 的命令格式 [mode][R][G][B]):
+ * 1=炫彩 2=全彩呼吸 3=单色呼吸 4=常亮 5=场景 6=关闭。
  */
 enum class LightEffect(val code: Byte, val labelZh: String, val labelEn: String) {
-    COLORFUL(0x01, "炫彩流转", "Colorful"),
-    BREATH_FULLCOLOR(0x02, "全彩呼吸", "Breathing (Full Color)"),
+    COLORFUL(0x01, "炫彩", "Colorful"),
+    BREATH_FULLCOLOR(0x02, "全彩呼吸", "Breathing"),
     BREATH_SINGLE(0x03, "单色呼吸", "Breathing (Single)"),
     ALWAYS_BRIGHT(0x04, "常亮", "Always On"),
-    OFF(0x00, "关闭", "Off"),
+    OFF(0x06, "关闭", "Off"),
     ;
 
     companion object {

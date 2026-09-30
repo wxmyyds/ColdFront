@@ -17,20 +17,21 @@
 
 ## 支持的设备
 
-| 型号 | 代数 | 识别方式 |
+| 型号 | 代数 | 识别方式（厂商数据 MSD 0x08CA 的 [mainType, subType]） |
 |---|---|---|
-| 双核散热背夹 / 涡轮 / 磁吸散热器 | 1–3 | ServiceData UUID |
-| Heat Sink 4 Pro / 5 Pro / 5 Lite / 6 / 6 Pro | 4–6 | ServiceData UUID |
-| Heat Sink 7 / 7 Pro | 7 | 广播名兜底（UUID 待确认） |
-| **Cryo Cooler 8 Pro** | 8 | **广播名兜底（UUID 待确认）** |
+| 双核/涡轮散热背夹 | 1–2 | 广播名兜底（旧协议） |
+| 磁吸散热器 / Heat Sink 4 Pro / 5 Pro / 5 Lite / 6 / 6 Pro | 3–6 | MSD (5,3) (5,4) (5,5) (5,6) |
+| **Cryo Cooler 8 Pro** | 8 | **MSD (5,8)，官方协议完整支持** |
 
-### ⚠️ 关于散热器 8 Pro
+### 散热器 8 Pro（官方 App smali 逆向，协议已确认）
 
-8 Pro（第 8 代 COLDLNG 架构，36W，11 叶 6200RPM，16 颗可寻址 RGB，NTC 温控）目前靠蓝牙广播名识别。全系列共用同一套 GATT 服务/特征，连接与控制已可用；如需精确识别，请按以下步骤补全广播 UUID：
+- **识别**：广播厂商数据（Company ID 0x08CA）前两字节 `[0x05, 0x08]`；广播 Service UUID 含 `00004a41-...`
+- **风扇**：单字节 raw，**40–80 共 8 档**（`raw = 40 + percent×40/100`）
+- **自动模式**：0x1018 写 **0x01 开 / 0x00 关**
+- **温度**：0x1015 通知，单字节有符号 °C，**显示值 = raw − 6**
+- **灯光**：0x1013 写 `[mode][R][G][B]`（1炫彩/2呼吸/3单色呼吸/4常亮/6关），查询写 0x11
 
-1. 用 **nRF Connect** 扫描 8 Pro，查看其广播包
-2. 找到 **ServiceData（键 0x4A41）** 的 payload（前 16 字节即设备专属 UUID）
-3. 填入 `domain/CoolerDeviceType.kt` 中 `JACKET_8_PRO.advertisingUUID` 的占位值
+完整协议文档：[docs/protocol-8pro.md](docs/protocol-8pro.md)
 
 ## 技术栈
 
@@ -45,12 +46,12 @@
 
 | 项 | UUID |
 |---|---|
-| 广播 ServiceData 键 | `00004a41-0000-1000-8000-00805f9b34fb` |
+| 广播 Service UUID / MSD | `00004a41-...` / Company `0x08CA`=[mainType,subType] |
 | Fan 主服务 | `d52082ad-e805-9f97-9d4e-1c682d9c9ce6` |
-| 风扇转速 | `00001012-...`（40–200 raw ↔ 0–100%） |
-| 温度通知 | `00001015-...`（notify，单字节有符号 °C） |
-| RGB 灯控 | `00001013-...`（写入 `[effect][R][G][B]`） |
-| 自动模式 | `00001018-...`（写 `0x00`） |
+| 风扇转速 | `00001012-...`（单字节 raw；8 Pro 40–80，旧型号 40–200） |
+| 温度通知 | `00001015-...`（单字节有符号 °C，显示 = raw − 6） |
+| RGB 灯控 | `00001013-...`（`[mode][R][G][B]`，查询写 0x11） |
+| 自动模式 | `00001018-...`（0x01 开 / 0x00 关） |
 
 ## 构建
 
