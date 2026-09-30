@@ -43,6 +43,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.ToggleFloatingActionButton
 import androidx.compose.material3.ToggleFloatingActionButtonDefaults.animateIcon
 import androidx.compose.runtime.Composable
@@ -82,9 +83,14 @@ fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
     val connected = state.connection == ConnectionState.CONNECTED
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
         topBar = {
             MediumFlexibleTopAppBar(
                 title = { Text(strings.homeTitle) },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    scrolledContainerColor = Color.Transparent,
+                ),
                 actions = {
                     FilledTonalIconButton(onClick = onAddDevice) {
                         Icon(Icons.Filled.Add, contentDescription = strings.devicesAdd)
@@ -115,22 +121,34 @@ fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
             }
         },
     ) { inner ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(inner)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            when (state.connection) {
-                ConnectionState.CONNECTED -> ConnectedContent(vm, state)
-                ConnectionState.CONNECTING, ConnectionState.DISCOVERING ->
-                    ConnectingContent(strings)
-                ConnectionState.FAILED -> FailedContent(strings, onAddDevice)
-                else -> NotConnectedContent(strings, onAddDevice)
+        if (connected) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(inner)
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                ConnectedContent(vm, state)
+                Spacer(Modifier.height(72.dp)) // 给 FAB 让位
             }
-            if (connected) Spacer(Modifier.height(72.dp)) // 给 FAB 让位
+        } else {
+            // 未连接/连接中/失败:内容垂直居中,不贴顶
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(inner)
+                    .padding(horizontal = 24.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                when (state.connection) {
+                    ConnectionState.CONNECTING, ConnectionState.DISCOVERING ->
+                        ConnectingContent(strings)
+                    ConnectionState.FAILED -> FailedContent(strings, onAddDevice)
+                    else -> NotConnectedContent(strings, onAddDevice)
+                }
+            }
         }
     }
 }
@@ -153,7 +171,7 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
                     stiffness = Spring.StiffnessMediumLow,
                 )
             ),
-        shape = MaterialTheme.shapes.extraLarge,
+        shape = MaterialTheme.shapes.large,
     ) {
         Column {
             ControlItem(
@@ -201,7 +219,7 @@ private fun TempHero(state: CoolerLiveState) {
     val onContainer = if (state.coolingOn) scheme.onPrimaryContainer else scheme.onSurface
 
     Surface(
-        shape = MaterialTheme.shapes.extraLarge,
+        shape = MaterialTheme.shapes.large,
         color = container,
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -294,22 +312,12 @@ private fun ControlItem(
             Text(desc, style = MaterialTheme.typography.bodyMedium)
         },
         leadingContent = {
-            Surface(
-                shape = MaterialTheme.shapes.small,
-                color = MaterialTheme.colorScheme.secondaryContainer,
-            ) {
-                Box(
-                    modifier = Modifier.size(40.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        icon,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-            }
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(24.dp),
+            )
         },
         trailingContent = {
             Switch(checked = checked, enabled = enabled, onCheckedChange = onChange)
@@ -360,7 +368,7 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
                     stiffness = Spring.StiffnessMediumLow,
                 )
             ),
-        shape = MaterialTheme.shapes.extraLarge,
+        shape = MaterialTheme.shapes.large,
     ) {
         Column(
             Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
@@ -406,7 +414,7 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
 private fun ConnectingContent(strings: AppStrings) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
+        shape = MaterialTheme.shapes.large,
     ) {
         Row(
             modifier = Modifier.padding(24.dp),
@@ -423,7 +431,7 @@ private fun ConnectingContent(strings: AppStrings) {
 private fun FailedContent(strings: AppStrings, onAddDevice: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
+        shape = MaterialTheme.shapes.large,
     ) {
         Column(
             Modifier.padding(28.dp),
@@ -453,7 +461,7 @@ private fun FailedContent(strings: AppStrings, onAddDevice: () -> Unit) {
 private fun NotConnectedContent(strings: AppStrings, onAddDevice: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
+        shape = MaterialTheme.shapes.large,
     ) {
         Column(
             Modifier.padding(32.dp),

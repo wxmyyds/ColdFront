@@ -35,6 +35,7 @@ import androidx.compose.material3.MediumFlexibleTopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -64,8 +65,15 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
     val state by vm.liveState.collectAsStateWithLifecycle()
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
         topBar = {
-            MediumFlexibleTopAppBar(title = { Text(strings.devicesTitle) })
+            MediumFlexibleTopAppBar(
+                title = { Text(strings.devicesTitle) },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    scrolledContainerColor = Color.Transparent,
+                ),
+            )
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
@@ -121,7 +129,7 @@ private fun SavedDeviceCard(
         modifier = Modifier
             .fillMaxWidth()
             .animateContentSize(spring(stiffness = Spring.StiffnessMediumLow)),
-        shape = MaterialTheme.shapes.extraLarge,
+        shape = MaterialTheme.shapes.large,
     ) {
         ListItem(
             headlineContent = {
@@ -150,24 +158,12 @@ private fun SavedDeviceCard(
                 }
             },
             leadingContent = {
-                // 色调图标容器(战术 4:容器分组)
-                Surface(
-                    shape = MaterialTheme.shapes.small,
-                    color = if (connected) MaterialTheme.colorScheme.primaryContainer
-                    else MaterialTheme.colorScheme.secondaryContainer,
-                ) {
-                    Box(
-                        modifier = Modifier.size(48.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        CoolerArt(
-                            profile.deviceType,
-                            modifier = Modifier.size(36.dp),
-                            iconTint = if (connected) MaterialTheme.colorScheme.onPrimaryContainer
-                            else MaterialTheme.colorScheme.onSecondaryContainer,
-                        )
-                    }
-                }
+                CoolerArt(
+                    profile.deviceType,
+                    modifier = Modifier.size(40.dp),
+                    iconTint = if (connected) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             },
             trailingContent = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -208,7 +204,7 @@ private fun EmptyState(strings: AppStrings, modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.Center,
     ) {
         Surface(
-            shape = MaterialTheme.shapes.extraLarge,
+            shape = MaterialTheme.shapes.large,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
         ) {
             Box(

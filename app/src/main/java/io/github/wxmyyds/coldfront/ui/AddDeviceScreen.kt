@@ -5,6 +5,7 @@ import android.content.Intent
 import android.provider.Settings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,6 +25,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.ListItem
@@ -85,10 +87,18 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
     }
     DisposableEffect(Unit) { onDispose { vm.stopScan() } }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surfaceContainer),
+    ) {
         // MD3E 弹性顶栏 + 返回导航
         MediumFlexibleTopAppBar(
             title = { Text(strings.scanTitle) },
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = Color.Transparent,
+                scrolledContainerColor = Color.Transparent,
+            ),
             navigationIcon = {
                 IconButton(onClick = onBack) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
@@ -281,7 +291,7 @@ private fun DiagnosticCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onSelect(entry) },
-        shape = MaterialTheme.shapes.extraLarge,
+        shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(
             containerColor = if (isCooler) {
                 MaterialTheme.colorScheme.secondaryContainer
@@ -471,7 +481,7 @@ private fun DeviceList(
         items(devices, key = { it.address }) { device ->
             Card(
                 modifier = Modifier.fillMaxWidth().clickable { onConnect(device) },
-                shape = MaterialTheme.shapes.extraLarge,
+                shape = MaterialTheme.shapes.large,
             ) {
                 // MD3E 表达性列表行:色调图标容器 + 强调标题 + 尾随箭头
                 ListItem(
@@ -494,21 +504,11 @@ private fun DeviceList(
                         null
                     },
                     leadingContent = {
-                        Surface(
-                            shape = MaterialTheme.shapes.small,
-                            color = MaterialTheme.colorScheme.secondaryContainer,
-                        ) {
-                            Box(
-                                modifier = Modifier.size(48.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                CoolerArt(
-                                    device.deviceType,
-                                    modifier = Modifier.size(36.dp),
-                                    iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                )
-                            }
-                        }
+                        CoolerArt(
+                            device.deviceType,
+                            modifier = Modifier.size(40.dp),
+                            iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     },
                     trailingContent = {
                         Icon(

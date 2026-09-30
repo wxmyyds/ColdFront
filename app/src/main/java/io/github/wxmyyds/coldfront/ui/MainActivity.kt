@@ -12,6 +12,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AcUnit
@@ -147,7 +148,7 @@ private fun AppNav(vm: CoolerViewModel) {
 
     Scaffold(
         bottomBar = {
-            NavigationBar {
+            NavigationBar(modifier = Modifier.height(64.dp)) {
                 items.forEach { (route, icon, label) ->
                     val selected = current?.hierarchy?.any { it.route == route } == true
                     NavigationBarItem(
