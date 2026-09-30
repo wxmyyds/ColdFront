@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -101,7 +100,6 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
             // MD3E 小顶栏 + 返回导航:标题走默认 TitleLarge,滚动后容器转 surfaceContainer
             TopAppBar(
                 title = { Text(strings.scanTitle) },
-                windowInsets = WindowInsets(0, 0, 0, 0),
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     IconButton(onClick = onBack) {

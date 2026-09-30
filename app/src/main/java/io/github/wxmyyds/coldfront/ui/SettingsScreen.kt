@@ -1,6 +1,5 @@
 package io.github.wxmyyds.coldfront.ui
 
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -76,7 +75,6 @@ fun SettingsScreen(vm: CoolerViewModel) {
         topBar = {
             TopAppBar(
                 title = { Text(strings.settingsTitle) },
-                windowInsets = WindowInsets(0, 0, 0, 0),
                 scrollBehavior = scrollBehavior,
             )
         },
