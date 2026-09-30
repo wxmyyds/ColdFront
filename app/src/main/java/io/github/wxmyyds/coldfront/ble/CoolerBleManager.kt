@@ -546,70 +546,70 @@ class CoolerBleManager(private val context: Context) {
         }
 
         private fun handleRead(uuid: UUID, value: ByteArray) {
-            handleData(uuid, value)
+            this@CoolerBleManager.handleData(uuid, value)
         }
 
         private fun handleChanged(uuid: UUID, value: ByteArray) {
-            handleData(uuid, value)
-        }
-
-        /** 读回与通知的统一解析入口 */
-        private fun handleData(uuid: UUID, value: ByteArray) {
-            when (uuid) {
-                CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID -> {
-                    val temp = parseTemperature(value)
-                    if (temp != null) _state.update { it.copy(temperatureC = temp) }
-                }
-                CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID -> handleFanValue(value)
-                CoolerBleConstants.LIGHT_CONTROL_UUID -> handleLightValue(value)
-                CoolerBleConstants.COOLING_SWITCH_UUID -> {
-                    // 通知: 2=开 3=关
-                    val on = value.firstOrNull()?.toInt() == 0x02
-                    _state.update { it.copy(coolingOn = on) }
-                }
-                CoolerBleConstants.STATUS_UUID -> handleStatusValue(value)
-                CoolerBleConstants.RPM_UUID -> {
-                    parseBigEndianShort(value)?.let { rpm ->
-                        _state.update { it.copy(fanRpm = rpm) }
-                    }
-                }
-                CoolerBleConstants.POWER_UUID -> {
-                    value.firstOrNull()?.let { w -> _state.update { it.copy(powerW = w.toInt()) } }
-                }
-            }
-        }
-
-        /** 1015 状态包:[tag, ...] tag 0x08=后两字节大端 RPM,0x09=后一字节功率 W */
-        private fun handleStatusValue(value: ByteArray) {
-            if (value.isEmpty()) return
-            when (value[0].toInt() and 0xFF) {
-                0x08 -> parseBigEndianShort(value.copyOfRange(1, value.size))?.let { rpm ->
-                    _state.update { it.copy(fanRpm = rpm) }
-                }
-                0x09 -> value.getOrNull(1)?.let { w ->
-                    _state.update { it.copy(powerW = w.toInt() and 0xFF) }
-                }
-            }
-        }
-
-        private fun handleFanValue(value: ByteArray) {
-            val type = _state.value.deviceType ?: return
-            val raw = value.firstOrNull()?.toInt() ?: return
-            _state.update { it.copy(fanPercent = CoolerBleConstants.rawToPercentage(raw, type)) }
-        }
-
-        /** 灯光状态上报:byte0 = 当前灯效模式 */
-        private fun handleLightValue(value: ByteArray) {
-            if (value.isEmpty()) return
-            val code = value[0].toInt()
-            val effect = LightEffect.entries.firstOrNull { it.code.toInt() == code } ?: return
-            _state.update {
-                it.copy(rgb = (it.rgb ?: RGBConfig(effect)).copy(effect = effect))
-            }
+            this@CoolerBleManager.handleData(uuid, value)
         }
     }
 
     // ────────────────────── GATT 串行队列原语 ──────────────────────
+
+    /** 读回与通知的统一解析入口 */
+    private fun handleData(uuid: UUID, value: ByteArray) {
+        when (uuid) {
+            CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID -> {
+                val temp = parseTemperature(value)
+                if (temp != null) _state.update { it.copy(temperatureC = temp) }
+            }
+            CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID -> handleFanValue(value)
+            CoolerBleConstants.LIGHT_CONTROL_UUID -> handleLightValue(value)
+            CoolerBleConstants.COOLING_SWITCH_UUID -> {
+                // 通知: 2=开 3=关
+                val on = value.firstOrNull()?.toInt() == 0x02
+                _state.update { it.copy(coolingOn = on) }
+            }
+            CoolerBleConstants.STATUS_UUID -> handleStatusValue(value)
+            CoolerBleConstants.RPM_UUID -> {
+                parseBigEndianShort(value)?.let { rpm ->
+                    _state.update { it.copy(fanRpm = rpm) }
+                }
+            }
+            CoolerBleConstants.POWER_UUID -> {
+                value.firstOrNull()?.let { w -> _state.update { it.copy(powerW = w.toInt()) } }
+            }
+        }
+    }
+
+    /** 1015 状态包:[tag, ...] tag 0x08=后两字节大端 RPM,0x09=后一字节功率 W */
+    private fun handleStatusValue(value: ByteArray) {
+        if (value.isEmpty()) return
+        when (value[0].toInt() and 0xFF) {
+            0x08 -> parseBigEndianShort(value.copyOfRange(1, value.size))?.let { rpm ->
+                _state.update { it.copy(fanRpm = rpm) }
+            }
+            0x09 -> value.getOrNull(1)?.let { w ->
+                _state.update { it.copy(powerW = w.toInt() and 0xFF) }
+            }
+        }
+    }
+
+    private fun handleFanValue(value: ByteArray) {
+        val type = _state.value.deviceType ?: return
+        val raw = value.firstOrNull()?.toInt() ?: return
+        _state.update { it.copy(fanPercent = CoolerBleConstants.rawToPercentage(raw, type)) }
+    }
+
+    /** 灯光状态上报:byte0 = 当前灯效模式 */
+    private fun handleLightValue(value: ByteArray) {
+        if (value.isEmpty()) return
+        val code = value[0].toInt()
+        val effect = LightEffect.entries.firstOrNull { it.code.toInt() == code } ?: return
+        _state.update {
+            it.copy(rgb = (it.rgb ?: RGBConfig(effect)).copy(effect = effect))
+        }
+    }
 
     /** 单次写尝试 */
     @SuppressLint("MissingPermission")
