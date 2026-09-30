@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -179,8 +180,8 @@ private fun ScanStatusCard(
             )
             if (!scanState.permissionGranted) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = onGrant) { Text(strings.diagGrantAgain) }
-                    OutlinedButton(onClick = onAppSettings) { Text(strings.diagOpenAppSettings) }
+                    OutlinedButton(onClick = onGrant, shapes = ButtonDefaults.shapes()) { Text(strings.diagGrantAgain) }
+                    OutlinedButton(onClick = onAppSettings, shapes = ButtonDefaults.shapes()) { Text(strings.diagOpenAppSettings) }
                 }
             }
             Text(
@@ -201,7 +202,7 @@ private fun ScanStatusCard(
                 else MaterialTheme.colorScheme.error,
             )
             if (!scanState.locationServiceEnabled) {
-                OutlinedButton(onClick = onLocation) { Text(strings.diagOpenLocation) }
+                OutlinedButton(onClick = onLocation, shapes = ButtonDefaults.shapes()) { Text(strings.diagOpenLocation) }
             }
             Text(
                 strings.diagStatusBluetooth + ": " +
@@ -373,10 +374,10 @@ private fun ConnectAsDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { onConfirm(selected) }) { Text(strings.scanSelect) }
+            Button(onClick = { onConfirm(selected) }, shapes = ButtonDefaults.shapes()) { Text(strings.scanSelect) }
         },
         dismissButton = {
-            OutlinedButton(onClick = onDismiss) { Text(strings.diagCancel) }
+            OutlinedButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text(strings.diagCancel) }
         },
     )
 }
@@ -398,9 +399,10 @@ private fun BluetoothOffState(strings: AppStrings) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Button(onClick = {
-                context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
-            }) { Text(strings.scanEnableBluetooth) }
+            Button(
+                onClick = { context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) },
+                shapes = ButtonDefaults.shapes(),
+            ) { Text(strings.scanEnableBluetooth) }
         }
     }
 }
@@ -426,7 +428,7 @@ private fun ScanningEmptyState(strings: AppStrings, scanning: Boolean, onRescan:
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            OutlinedButton(onClick = onRescan) {
+            OutlinedButton(onClick = onRescan, shapes = ButtonDefaults.shapes()) {
                 Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(strings.scanRescan)

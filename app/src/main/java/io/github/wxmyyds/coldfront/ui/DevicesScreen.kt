@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.Add
@@ -20,6 +18,7 @@ import androidx.compose.material3.Button
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -58,7 +57,7 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
         MediumFlexibleTopAppBar(
             title = { Text(strings.devicesTitle) },
             actions = {
-                FilledTonalButton(onClick = onAddDevice) {
+                FilledTonalButton(onClick = onAddDevice, shapes = ButtonDefaults.shapes()) {
                     Icon(Icons.Filled.Add, contentDescription = null)
                     Text(strings.devicesAdd)
                 }
@@ -67,7 +66,6 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
         Column(
             modifier = Modifier
                 .weight(1f)
-                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -182,7 +180,7 @@ private fun SavedDeviceCard(
                     "…",
                     style = MaterialTheme.typography.labelLarge,
                 )
-                else -> OutlinedButton(onClick = onConnect) {
+                else -> OutlinedButton(onClick = onConnect, shapes = ButtonDefaults.shapes()) {
                     Text(strings.devicesConnect)
                 }
             }
@@ -212,6 +210,6 @@ private fun EmptyState(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Button(onClick = onAddDevice) { Text(strings.devicesAdd) }
+        Button(onClick = onAddDevice, shapes = ButtonDefaults.shapes()) { Text(strings.devicesAdd) }
     }
 }

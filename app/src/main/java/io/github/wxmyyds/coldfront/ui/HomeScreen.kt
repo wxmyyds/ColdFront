@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.LoadingIndicator
@@ -315,7 +316,7 @@ private fun FailedContent(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            OutlinedButton(onClick = onAddDevice) { Text(strings.homeGoScan) }
+            OutlinedButton(onClick = onAddDevice, shapes = ButtonDefaults.shapes()) { Text(strings.homeGoScan) }
         }
     }
 }
@@ -338,7 +339,7 @@ private fun NotConnectedContent(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(strings.homeNotConnected, style = MaterialTheme.typography.titleMedium)
-            OutlinedButton(onClick = onAddDevice) { Text(strings.homeGoScan) }
+            OutlinedButton(onClick = onAddDevice, shapes = ButtonDefaults.shapes()) { Text(strings.homeGoScan) }
         }
     }
 }

@@ -193,8 +193,8 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
                             vm.setRGB(RGBConfig(effect, r, g, b))
                             applied = true
                         },
+                        shapes = ButtonDefaults.shapes(),
                         modifier = Modifier.fillMaxWidth().height(56.dp),
-                        shape = MaterialTheme.shapes.large,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(r / 255f, g / 255f, b / 255f),
                         ),
@@ -402,7 +402,7 @@ private fun NotConnectedCard(strings: io.github.wxmyyds.coldfront.ui.i18n.AppStr
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(strings.rgbConnectFirst, style = MaterialTheme.typography.titleMedium)
-            Button(onClick = onConnect) { Text(strings.rgbGoConnect) }
+            Button(onClick = onConnect, shapes = ButtonDefaults.shapes()) { Text(strings.rgbGoConnect) }
         }
     }
 }
