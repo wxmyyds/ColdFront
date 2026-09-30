@@ -9,6 +9,8 @@ import java.util.Locale
  * 不使用 strings.xml，保持工程尽量纯 Kotlin。
  */
 interface AppStrings {
+    /** 当前文案是否中文(灯效等枚举名本地化用) */
+    val langIsZh: Boolean
     val appName: String
 
     // —— 通用 ——
@@ -141,6 +143,11 @@ interface AppStrings {
     val rgbBlue: String
     val rgbPreview: String
     val rgbApply: String
+    val rgbSynced: String
+    val rgbConnectFirst: String
+    val rgbGoConnect: String
+    val rgbPalette: String
+    val rgbCustomColor: String
     val rgbOff: String
     val rgbNotSupported: String
 
@@ -195,6 +202,7 @@ interface AppStrings {
 }
 
 object ZhStrings : AppStrings {
+    override val langIsZh = true
     override val appName = "ColdFront"
     override val ok = "确定"
     override val cancel = "取消"
@@ -315,6 +323,11 @@ object ZhStrings : AppStrings {
     override val rgbGreen = "绿"
     override val rgbBlue = "蓝"
     override val rgbPreview = "预览"
+    override val rgbSynced = "已同步到设备"
+    override val rgbConnectFirst = "连接散热器后即可调节灯效"
+    override val rgbGoConnect = "去连接"
+    override val rgbPalette = "预设颜色"
+    override val rgbCustomColor = "自定义颜色"
     override val rgbApply = "应用"
     override val rgbOff = "关闭灯光"
     override val rgbNotSupported = "该设备不支持 RGB"
@@ -366,6 +379,7 @@ object ZhStrings : AppStrings {
 }
 
 object EnStrings : AppStrings {
+    override val langIsZh = false
     override val appName = "ColdFront"
     override val ok = "OK"
     override val cancel = "Cancel"
@@ -486,6 +500,11 @@ object EnStrings : AppStrings {
     override val rgbGreen = "G"
     override val rgbBlue = "B"
     override val rgbPreview = "Preview"
+    override val rgbSynced = "Synced to cooler"
+    override val rgbConnectFirst = "Connect your cooler to control lighting"
+    override val rgbGoConnect = "Connect"
+    override val rgbPalette = "Preset colors"
+    override val rgbCustomColor = "Custom color"
     override val rgbApply = "Apply"
     override val rgbOff = "Lights off"
     override val rgbNotSupported = "This device does not support RGB"

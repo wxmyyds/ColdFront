@@ -174,7 +174,7 @@ private fun AppNav(vm: CoolerViewModel) {
             composable(Routes.HOME) { HomeScreen(vm, onAddDevice = { nav.navigate(Routes.SCAN) }) }
             composable(Routes.DEVICES) { DevicesScreen(vm, onAddDevice = { nav.navigate(Routes.SCAN) }) }
             composable(Routes.SCAN) { AddDeviceScreen(vm) }
-            composable(Routes.RGB) { RGBControlScreen(vm) }
+            composable(Routes.RGB) { RGBControlScreen(vm, onConnect = { nav.navigate(Routes.SCAN) }) }
             composable(Routes.SETTINGS) { SettingsScreen(vm) }
         }
     }
