@@ -30,7 +30,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Gradient
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Waves
@@ -66,6 +65,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -75,9 +75,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
 import io.github.wxmyyds.coldfront.domain.LightEffect
 import io.github.wxmyyds.coldfront.domain.RGBConfig
+import io.github.wxmyyds.coldfront.ui.component.RowIcon
 import io.github.wxmyyds.coldfront.ui.component.SegmentedContainer
+import io.github.wxmyyds.coldfront.ui.component.SegmentedDropdownRow
 import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
-import io.github.wxmyyds.coldfront.ui.component.SegmentedRadioRow
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 
 /**
@@ -107,12 +108,13 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
     var b by remember { mutableIntStateOf(200) }
     var applied by remember { mutableStateOf(false) }
 
-    // 首次收到设备灯效回读时同步本地选择
+    // 首次收到设备灯效回读时同步本地选择。
+    // uiEffect：设备可能回报 0x03（单色呼吸），UI 已并入「呼吸」，不归一会选不中任何项。
     var initialized by remember { mutableStateOf(false) }
     LaunchedEffect(state.rgb) {
         if (!initialized) {
             state.rgb?.let { cfg ->
-                effect = cfg.effect
+                effect = cfg.effect.uiEffect
                 r = cfg.red
                 g = cfg.green
                 b = cfg.blue
@@ -178,16 +180,53 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
                     }
 
                     // ── 灯效选择(即点即发) ──
-                    EffectRows(
-                        effect = effect,
-                        onEffect = { e ->
-                            effect = e
-                            vm.setRGB(RGBConfig(e, r, g, b))
-                            applied = true
-                        },
-                    )
+                    // 选「呼吸」时沿用当前的呼吸变体；从别的灯效切过来默认全彩。
+                    val breathVariant =
+                        if (effect == LightEffect.BREATH_SINGLE) LightEffect.BREATH_SINGLE
+                        else LightEffect.BREATH_FULLCOLOR
+                    val applyEffect: (LightEffect) -> Unit = { e ->
+                        effect = e
+                        vm.setRGB(RGBConfig(e, r, g, b))
+                        applied = true
+                    }
+                    SegmentedGroup {
+                        item(key = "effect") {
+                            SegmentedDropdownRow(
+                                title = strings.rgbEffect,
+                                options = LightEffect.selectable,
+                                // 下拉里呼吸只有一个入口（BREATH_FULLCOLOR），具体变体由下一行决定
+                                selected = effect.uiEffect,
+                                onSelect = { e ->
+                                    applyEffect(
+                                        if (e == LightEffect.BREATH_FULLCOLOR) breathVariant else e
+                                    )
+                                },
+                                optionLabel = { effectLabel(it, strings) },
+                                leadingContent = { RowIcon(effectIcon(effect)) },
+                            )
+                        }
+                        // 「呼吸」底下挂一个子选项：单色（0x03，带颜色字节） / 全彩（0x02，不带）
+                        item(
+                            key = "breathMode",
+                            visible = effect.uiEffect == LightEffect.BREATH_FULLCOLOR,
+                        ) {
+                            SegmentedDropdownRow(
+                                title = strings.rgbBreathMode,
+                                options = listOf(
+                                    LightEffect.BREATH_SINGLE,
+                                    LightEffect.BREATH_FULLCOLOR,
+                                ),
+                                selected = effect,
+                                onSelect = applyEffect,
+                                optionLabel = {
+                                    if (it == LightEffect.BREATH_SINGLE) strings.rgbBreathSingle
+                                    else strings.rgbBreathFull
+                                },
+                            )
+                        }
+                    }
 
-                    // ── 颜色(仅单色系灯效需要) ──
+                    // ── 颜色(单色呼吸与常亮才带颜色字节；全彩呼吸/炫彩/关闭按协议置零) ──
                     if (effect == LightEffect.BREATH_SINGLE || effect == LightEffect.ALWAYS_BRIGHT) {
                         val applyColor = Color(r / 255f, g / 255f, b / 255f)
 
@@ -309,39 +348,13 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.glow(color: Color, 
 
 // ───────────────────────── 灯效选择 ─────────────────────────
 
-/**
- * 灯效单选:MD3E 单选行组。
- * 替掉原来 5 个无标签的图标 ToggleButton——单选应用 RadioButton 行,
- * 图标退到 trailing 做补充识别,文字标签才是主语义。
- */
-@Composable
-private fun EffectRows(effect: LightEffect, onEffect: (LightEffect) -> Unit) {
-    val strings = LocalStrings.current
-    val entries = listOf(
-        LightEffect.ALWAYS_BRIGHT to Icons.Filled.LightMode,
-        LightEffect.BREATH_SINGLE to Icons.Filled.Waves,
-        LightEffect.COLORFUL to Icons.Filled.Palette,
-        LightEffect.BREATH_FULLCOLOR to Icons.Filled.Gradient,
-        LightEffect.OFF to Icons.Filled.AcUnit,
-    )
-    SegmentedGroup(title = strings.rgbEffect) {
-        entries.forEach { (e, icon) ->
-            item(key = e.name) {
-                SegmentedRadioRow(
-                    title = effectLabel(e, strings),
-                    selected = effect == e,
-                    onClick = { onEffect(e) },
-                    trailingContent = {
-                        Icon(
-                            icon,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
-                )
-            }
-        }
-    }
+/** 灯效图标：行首跟着当前灯效走，菜单里不重复放图标。 */
+private fun effectIcon(e: LightEffect): ImageVector = when (e) {
+    LightEffect.ALWAYS_BRIGHT -> Icons.Filled.LightMode
+    // 合并后的「呼吸」（包括设备回报的单色呼吸）统一用波纹图标
+    LightEffect.BREATH_FULLCOLOR, LightEffect.BREATH_SINGLE -> Icons.Filled.Waves
+    LightEffect.COLORFUL -> Icons.Filled.Palette
+    LightEffect.OFF -> Icons.Filled.AcUnit
 }
 
 private fun effectLabel(e: LightEffect, s: io.github.wxmyyds.coldfront.ui.i18n.AppStrings): String =

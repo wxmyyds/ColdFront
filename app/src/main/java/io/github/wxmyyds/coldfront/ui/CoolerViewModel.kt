@@ -58,11 +58,18 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
     val darkMode: StateFlow<String> =
         settingsRepo.darkMode.stateIn(viewModelScope, SharingStarted.Eagerly, "system")
 
+    /** 界面语言：system / zh / en */
+    val appLanguage: StateFlow<String> =
+        settingsRepo.appLanguage.stateIn(viewModelScope, SharingStarted.Eagerly, "system")
+
     fun setDynamicColor(enabled: Boolean) =
         viewModelScope.launch { settingsRepo.setDynamicColor(enabled) }
 
     fun setDarkMode(mode: String) =
         viewModelScope.launch { settingsRepo.setDarkMode(mode) }
+
+    fun setAppLanguage(language: String) =
+        viewModelScope.launch { settingsRepo.setAppLanguage(language) }
 
     private val _bluetoothEnabled = MutableStateFlow(ble.isBluetoothEnabled)
     val bluetoothEnabled: StateFlow<Boolean> = _bluetoothEnabled.asStateFlow()
