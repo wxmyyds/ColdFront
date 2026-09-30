@@ -1,0 +1,74 @@
+package io.github.wxmyyds.coldfront.data
+
+import android.content.Context
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+
+private val Context.settingsDataStore by preferencesDataStore(name = "cooler_settings")
+
+/**
+ * 自动模式温控阈值与对应转速（百分比）。
+ *
+ * 默认：低温<35°C→20%，中温35–45°C→60%，高温>45°C→100%；
+ * 防凝露：低于 [condensationTemp] 时降速避免结露。
+ */
+data class ThermalThresholds(
+    val lowTemp: Int = 35,
+    val midTemp: Int = 45,
+    val highTemp: Int = 50,
+    val condensationTemp: Int = 10,
+    val lowSpeed: Int = 20,
+    val midSpeed: Int = 60,
+    val highSpeed: Int = 100,
+) {
+    /** 依据温度计算目标转速百分比 */
+    fun speedFor(tempC: Float): Int = when {
+        tempC <= condensationTemp -> lowSpeed.coerceAtMost(20)
+        tempC < lowTemp -> lowSpeed
+        tempC < midTemp -> midSpeed
+        tempC < highTemp -> ((midSpeed + highSpeed) / 2)
+        else -> highSpeed
+    }
+}
+
+class SettingsRepository(context: Context) {
+
+    private val dataStore = context.applicationContext.settingsDataStore
+
+    val thresholds: Flow<ThermalThresholds> = dataStore.data.map { prefs ->
+        ThermalThresholds(
+            lowTemp = prefs[KEY_LOW_TEMP] ?: 35,
+            midTemp = prefs[KEY_MID_TEMP] ?: 45,
+            highTemp = prefs[KEY_HIGH_TEMP] ?: 50,
+            condensationTemp = prefs[KEY_CONDENSATION] ?: 10,
+            lowSpeed = prefs[KEY_LOW_SPEED] ?: 20,
+            midSpeed = prefs[KEY_MID_SPEED] ?: 60,
+            highSpeed = prefs[KEY_HIGH_SPEED] ?: 100,
+        )
+    }
+
+    suspend fun update(thresholds: ThermalThresholds) {
+        dataStore.edit { prefs ->
+            prefs[KEY_LOW_TEMP] = thresholds.lowTemp
+            prefs[KEY_MID_TEMP] = thresholds.midTemp
+            prefs[KEY_HIGH_TEMP] = thresholds.highTemp
+            prefs[KEY_CONDENSATION] = thresholds.condensationTemp
+            prefs[KEY_LOW_SPEED] = thresholds.lowSpeed
+            prefs[KEY_MID_SPEED] = thresholds.midSpeed
+            prefs[KEY_HIGH_SPEED] = thresholds.highSpeed
+        }
+    }
+
+    companion object {
+        private val KEY_LOW_TEMP = intPreferencesKey("low_temp")
+        private val KEY_MID_TEMP = intPreferencesKey("mid_temp")
+        private val KEY_HIGH_TEMP = intPreferencesKey("high_temp")
+        private val KEY_CONDENSATION = intPreferencesKey("condensation_temp")
+        private val KEY_LOW_SPEED = intPreferencesKey("low_speed")
+        private val KEY_MID_SPEED = intPreferencesKey("mid_speed")
+        private val KEY_HIGH_SPEED = intPreferencesKey("high_speed")
+    }
+}
