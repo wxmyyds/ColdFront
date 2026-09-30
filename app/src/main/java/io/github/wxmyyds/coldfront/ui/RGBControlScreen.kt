@@ -36,6 +36,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MediumFlexibleTopAppBar
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -95,14 +96,16 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Text(strings.rgbTitle, style = MaterialTheme.typography.headlineMedium)
+    Column(modifier = Modifier.fillMaxSize()) {
+        // MD3E 弹性顶栏
+        MediumFlexibleTopAppBar(title = { Text(strings.rgbTitle) })
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
 
         when {
             !state.isConnected -> NotConnectedCard(strings, onConnect)
@@ -206,6 +209,7 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
                     }
                 }
             }
+        }
         }
     }
 }

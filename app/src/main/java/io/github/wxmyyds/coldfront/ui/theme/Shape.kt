@@ -8,9 +8,9 @@ import androidx.compose.ui.unit.dp
  * M3 形状阶梯。MD3E 提倡混用不同形状制造视觉层次，故刻意拉开圆角差。
  */
 val AppShapes = Shapes(
-    extraSmall = RoundedCornerShape(4.dp),
-    small = RoundedCornerShape(8.dp),
+    extraSmall = RoundedCornerShape(6.dp),
+    small = RoundedCornerShape(12.dp),
     medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(28.dp),
-    extraLarge = RoundedCornerShape(32.dp),
+    large = RoundedCornerShape(24.dp),
+    extraLarge = RoundedCornerShape(36.dp),
 )

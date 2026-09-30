@@ -9,14 +9,21 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.foundation.Image
 import androidx.compose.material3.Button
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MediumFlexibleTopAppBar
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -46,36 +53,38 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
     val profiles by vm.profiles.collectAsStateWithLifecycle()
     val state by vm.liveState.collectAsStateWithLifecycle()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                strings.devicesTitle,
-                style = MaterialTheme.typography.headlineMedium,
-                modifier = Modifier.weight(1f),
-            )
-            Button(onClick = onAddDevice) {
-                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.padding(0.dp))
-                Text(strings.devicesAdd)
-            }
-        }
+    Column(modifier = Modifier.fillMaxSize()) {
+        // MD3E 弹性顶栏
+        MediumFlexibleTopAppBar(
+            title = { Text(strings.devicesTitle) },
+            actions = {
+                FilledTonalButton(onClick = onAddDevice) {
+                    Icon(Icons.Filled.Add, contentDescription = null)
+                    Text(strings.devicesAdd)
+                }
+            },
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
 
-        if (profiles.isEmpty()) {
-            EmptyState(strings, onAddDevice)
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(profiles, key = { it.id }) { profile ->
-                    SavedDeviceCard(
-                        strings = strings,
-                        profile = profile,
-                        state = state,
-                        onConnect = { vm.connectProfile(profile) },
-                        onDelete = { vm.deleteProfile(profile.id) },
-                    )
+            if (profiles.isEmpty()) {
+                EmptyState(strings, onAddDevice)
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(profiles, key = { it.id }) { profile ->
+                        SavedDeviceCard(
+                            strings = strings,
+                            profile = profile,
+                            state = state,
+                            onConnect = { vm.connectProfile(profile) },
+                            onDelete = { vm.deleteProfile(profile.id) },
+                        )
+                    }
                 }
             }
         }
@@ -94,7 +103,12 @@ private fun SavedDeviceCard(
     val connecting = state.connection in listOf(
         ConnectionState.CONNECTING, ConnectionState.DISCOVERING,
     ) && state.deviceAddress == profile.macAddress
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(spring(stiffness = Spring.StiffnessMediumLow)),
+        shape = MaterialTheme.shapes.extraLarge,
+    ) {
         Row(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,

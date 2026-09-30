@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
+import androidx.compose.material3.MediumFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -32,21 +33,23 @@ fun SettingsScreen(vm: CoolerViewModel) {
     val dynamicColor by vm.dynamicColor.collectAsStateWithLifecycle()
     val darkMode by vm.darkMode.collectAsStateWithLifecycle()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(strings.settingsTitle, style = MaterialTheme.typography.headlineMedium)
+    Column(modifier = Modifier.fillMaxSize()) {
+        // MD3E 弹性顶栏
+        MediumFlexibleTopAppBar(title = { Text(strings.settingsTitle) })
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
 
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Text(strings.settingsTheme, style = MaterialTheme.typography.titleMedium)
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    Text(strings.settingsTheme, style = MaterialTheme.typography.titleMedium)
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -83,18 +86,19 @@ fun SettingsScreen(vm: CoolerViewModel) {
             }
         }
 
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                Modifier.padding(16.dp).fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(strings.settingsAbout, style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        strings.settingsAboutDesc,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    Modifier.padding(16.dp).fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(strings.settingsAbout, style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            strings.settingsAboutDesc,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         }
