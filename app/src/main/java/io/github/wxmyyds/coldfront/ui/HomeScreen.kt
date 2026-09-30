@@ -237,7 +237,8 @@ private fun TempHero(state: CoolerLiveState) {
                         color = onContainer.copy(alpha = 0.72f),
                     )
                     Text(
-                        if (state.coolingOn) strings.homeConnected else strings.homeDisconnected,
+                        // 此处必为已连接;制冷开/关由卡片容器颜色 + 形变 FAB 表达
+                        strings.homeConnected,
                         style = MaterialTheme.typography.labelLarge,
                         color = onContainer,
                     )
