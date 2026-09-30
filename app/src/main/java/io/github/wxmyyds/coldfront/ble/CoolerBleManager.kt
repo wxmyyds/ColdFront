@@ -13,6 +13,7 @@ import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
+import android.os.ParcelUuid
 import android.util.Log
 import io.github.wxmyyds.coldfront.domain.CoolerBleConstants
 import io.github.wxmyyds.coldfront.domain.CoolerDevice
@@ -132,7 +133,8 @@ class CoolerBleManager(private val context: Context) {
         val btDevice = result.device ?: return null
 
         // 1) 尝试 ServiceData payload → 设备专属 UUID
-        val payload = result.scanRecord?.serviceData?.get(CoolerBleConstants.ADVERTISING_SERVICE_UUID)
+        val payload = result.scanRecord?.serviceData
+            ?.get(ParcelUuid(CoolerBleConstants.ADVERTISING_SERVICE_UUID))
         var type: CoolerDeviceType? = null
         var matchedByName = false
         if (payload != null && payload.size >= 16) {

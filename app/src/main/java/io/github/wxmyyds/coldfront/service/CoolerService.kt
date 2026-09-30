@@ -58,6 +58,9 @@ class CoolerService : Service() {
         const val EXTRA_PROFILE_ID = "profile_id"
         const val EXTRA_DEVICE_TYPE = "device_type"
         const val EXTRA_DEVICE_MAC = "device_mac"
+
+        /** 自动调速周期 */
+        private const val ADJUST_INTERVAL_MS = 3000L
         const val EXTRA_DEVICE_NAME = "device_name"
         const val EXTRA_RGB_EFFECT = "rgb_effect"
         const val EXTRA_RGB_R = "rgb_r"
@@ -240,9 +243,5 @@ class CoolerService : Service() {
             this, action.hashCode(), intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-    }
-
-    private companion object {
-        const val ADJUST_INTERVAL_MS = 3000L
     }
 }
