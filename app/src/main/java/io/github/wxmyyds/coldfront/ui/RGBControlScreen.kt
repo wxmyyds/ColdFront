@@ -39,13 +39,15 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberSliderState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -60,20 +62,25 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
 import io.github.wxmyyds.coldfront.domain.LightEffect
 import io.github.wxmyyds.coldfront.domain.RGBConfig
+import io.github.wxmyyds.coldfront.ui.component.SegmentedContainer
+import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
+import io.github.wxmyyds.coldfront.ui.component.SegmentedRadioRow
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 
 /**
- * RGB 灯效页(MD3E 重设计):
+ * RGB 灯效页(MD3E):
  * - 动态预览卡:呼吸/炫彩带动画,常亮带光晕
  * - 灯效选择即点即发;颜色 = 预设色板 + 彩色轨道 RGB 滑条,显式应用
  * - 初始值回读自设备当前灯效
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
     val strings = LocalStrings.current
@@ -99,23 +106,23 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surfaceContainer),
-    ) {
-        // 紧凑顶栏(透明,页面灰底透出)
-        TopAppBar(
-            title = { Text(strings.rgbTitle, style = MaterialTheme.typography.headlineSmall) },
-            windowInsets = WindowInsets(0, 0, 0, 0),
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = Color.Transparent,
-                scrolledContainerColor = Color.Transparent,
-            ),
-        )
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+
+    Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            TopAppBar(
+                title = { Text(strings.rgbTitle) },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                scrollBehavior = scrollBehavior,
+            )
+        },
+    ) { inner ->
         Column(
             modifier = Modifier
-                .weight(1f)
+                .fillMaxSize()
+                .padding(inner)
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -154,7 +161,7 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
                 }
 
                 // ── 灯效选择(即点即发) ──
-                EffectChips(
+                EffectRows(
                     effect = effect,
                     onEffect = { e ->
                         effect = e
@@ -165,20 +172,25 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
 
                 // ── 颜色(仅单色系灯效需要) ──
                 if (effect == LightEffect.BREATH_SINGLE || effect == LightEffect.ALWAYS_BRIGHT) {
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(
-                            Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            Text(strings.rgbPalette, style = MaterialTheme.typography.titleSmall)
-                            PaletteRow(r, g, b) { pr, pg, pb ->
-                                r = pr; g = pg; b = pb
+                    SegmentedGroup(title = strings.rgbPalette) {
+                        item(key = "palette") {
+                            SegmentedContainer {
+                                PaletteRow(r, g, b) { pr, pg, pb ->
+                                    r = pr; g = pg; b = pb
+                                }
                             }
+                        }
+                    }
 
-                            Text(strings.rgbCustomColor, style = MaterialTheme.typography.titleSmall)
-                            ColorSlider(strings.rgbRed, r, Color.Red) { r = it }
-                            ColorSlider(strings.rgbGreen, g, Color.Green) { g = it }
-                            ColorSlider(strings.rgbBlue, b, Color.Blue) { b = it }
+                    SegmentedGroup(title = strings.rgbCustomColor) {
+                        item(key = "sliders") {
+                            SegmentedContainer {
+                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    ColorSlider(strings.rgbRed, r, Color.Red) { r = it }
+                                    ColorSlider(strings.rgbGreen, g, Color.Green) { g = it }
+                                    ColorSlider(strings.rgbBlue, b, Color.Blue) { b = it }
+                                }
+                            }
                         }
                     }
 
@@ -270,9 +282,13 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.glow(color: Color, 
 
 // ───────────────────────── 灯效选择 ─────────────────────────
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+/**
+ * 灯效单选:MD3E 单选行组。
+ * 替掉原来 5 个无标签的图标 ToggleButton——单选应用 RadioButton 行,
+ * 图标退到 trailing 做补充识别,文字标签才是主语义。
+ */
 @Composable
-private fun EffectChips(effect: LightEffect, onEffect: (LightEffect) -> Unit) {
+private fun EffectRows(effect: LightEffect, onEffect: (LightEffect) -> Unit) {
     val strings = LocalStrings.current
     val entries = listOf(
         LightEffect.ALWAYS_BRIGHT to Icons.Filled.LightMode,
@@ -281,18 +297,21 @@ private fun EffectChips(effect: LightEffect, onEffect: (LightEffect) -> Unit) {
         LightEffect.BREATH_FULLCOLOR to Icons.Filled.Gradient,
         LightEffect.OFF to Icons.Filled.AcUnit,
     )
-    // 参考图样式:圆角方块按钮行,选中 = 填充色 + 白图标
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
+    SegmentedGroup(title = strings.rgbEffect) {
         entries.forEach { (e, icon) ->
-            ToggleButton(
-                checked = effect == e,
-                onCheckedChange = { if (it) onEffect(e) },
-                modifier = Modifier.weight(1f),
-            ) {
-                Icon(icon, contentDescription = effectLabel(e, strings))
+            item(key = e.name) {
+                SegmentedRadioRow(
+                    title = effectLabel(e, strings),
+                    selected = effect == e,
+                    onClick = { onEffect(e) },
+                    trailingContent = {
+                        Icon(
+                            icon,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                )
             }
         }
     }
@@ -346,8 +365,14 @@ private fun PaletteRow(r: Int, g: Int, b: Int, onPick: (Int, Int, Int) -> Unit) 
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ColorSlider(label: String, value: Int, trackColor: Color, onChange: (Int) -> Unit) {
+    // alpha28 起 Slider(value=…) 无状态重载已弃用 → 走 SliderState。
+    // 拖动期间以滑条为准;松手后再把外部值(点色板预设)同步回来。
+    val sliderState = rememberSliderState(value = value.toFloat(), trackRange = 0f..255f)
+    var dragging by remember { mutableStateOf(false) }
+    LaunchedEffect(value) { if (!dragging) sliderState.value = value.toFloat() }
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
@@ -362,9 +387,12 @@ private fun ColorSlider(label: String, value: Int, trackColor: Color, onChange: 
             Text("$value", style = MaterialTheme.typography.bodySmall)
         }
         Slider(
-            value = value.toFloat(),
-            onValueChange = { onChange(it.toInt()) },
-            valueRange = 0f..255f,
+            state = sliderState,
+            onValueChange = {
+                dragging = true
+                onChange(it.toInt())
+            },
+            onValueChangeFinished = { dragging = false },
             colors = SliderDefaults.colors(
                 activeTrackColor = trackColor,
                 thumbColor = trackColor,

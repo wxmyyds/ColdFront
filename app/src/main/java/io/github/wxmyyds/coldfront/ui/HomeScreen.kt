@@ -23,8 +23,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Shield
@@ -32,36 +30,41 @@ import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.ToggleFloatingActionButton
 import androidx.compose.material3.ToggleFloatingActionButtonDefaults.animateIcon
+import androidx.compose.material3.rememberSliderState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.domain.CoolerLiveState
+import io.github.wxmyyds.coldfront.ui.component.RowIcon
+import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
+import io.github.wxmyyds.coldfront.ui.component.SegmentedSwitchRow
 import io.github.wxmyyds.coldfront.ui.i18n.AppStrings
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 import kotlin.math.roundToInt
@@ -77,23 +80,24 @@ import kotlin.math.roundToInt
  * - 战术 5(流体动效):颜色过渡走 MaterialTheme.motionScheme 的 effects spec。
  * - 开关行用官方 [ListItem](表达性列表),带色调图标容器。
  */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
     val strings = LocalStrings.current
     val state by vm.liveState.collectAsStateWithLifecycle()
     val connected = state.connection == ConnectionState.CONNECTED
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
+            // MD3E 小顶栏:标题用组件默认的 TitleLarge(旧写法 headlineSmall 24sp 超出小顶栏规格),
+            // 容器色不再强制透明——规范要求滚动后容器变为 surfaceContainer。
             TopAppBar(
-                title = { Text(strings.homeTitle, style = MaterialTheme.typography.headlineSmall) },
+                title = { Text(strings.homeTitle) },
                 windowInsets = WindowInsets(0, 0, 0, 0),
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                    scrolledContainerColor = Color.Transparent,
-                ),
+                scrollBehavior = scrollBehavior,
             )
         },
         floatingActionButton = {
@@ -159,45 +163,36 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
 
     TempHero(state)
 
-    // 三个带说明的开关:官方 ListItem + 色调图标容器
-    // 每个开关独立成卡,卡间留间隔(参考图的分组语言)
-    Column(
-        modifier = Modifier.animateContentSize(
-            spring(
-                dampingRatio = Spring.DampingRatioLowBouncy,
-                stiffness = Spring.StiffnessMediumLow,
-            )
-        ),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraSmall) {
-            ControlItem(
-                icon = Icons.Filled.AutoMode,
+    // 三个带说明的开关:分段选项列表(SegmentedGroup)——
+    // 外角 16dp / 内角 4dp / 缝隙 / 触感反馈全部由组件统一处理
+    SegmentedGroup {
+        item(key = "smart") {
+            SegmentedSwitchRow(
                 title = strings.homeSmart,
-                desc = strings.homeSmartDesc,
+                summary = strings.homeSmartDesc,
                 checked = state.smartOn,
                 enabled = state.coolingOn,
-                onChange = { vm.setSmart(it) },
+                onCheckedChange = { vm.setSmart(it) },
+                leadingContent = { RowIcon(Icons.Filled.AutoMode) },
             )
         }
-        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraSmall) {
-            ControlItem(
-                icon = Icons.Filled.Bolt,
+        item(key = "boost") {
+            SegmentedSwitchRow(
                 title = strings.homeBoost,
-                desc = strings.homeBoostDesc,
+                summary = strings.homeBoostDesc,
                 checked = state.boostOn,
                 enabled = state.coolingOn,
-                onChange = { vm.setBoost(it) },
+                onCheckedChange = { vm.setBoost(it) },
+                leadingContent = { RowIcon(Icons.Filled.Bolt) },
             )
         }
-        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraSmall) {
-            ControlItem(
-                icon = Icons.Filled.Shield,
+        item(key = "overcold") {
+            SegmentedSwitchRow(
                 title = strings.homeOvercold,
-                desc = strings.homeOvercoldDesc,
+                summary = strings.homeOvercoldDesc,
                 checked = state.overcoldOn,
-                enabled = true,
-                onChange = { vm.setOvercoldProtection(it) },
+                onCheckedChange = { vm.setOvercoldProtection(it) },
+                leadingContent = { RowIcon(Icons.Filled.Shield) },
             )
         }
     }
@@ -295,55 +290,8 @@ private fun MetricPill(icon: ImageVector, text: String, content: Color) {
     }
 }
 
-/** 开关行:官方 ListItem(表达性列表)+ 色调图标容器 */
-@Composable
-private fun ControlItem(
-    icon: ImageVector,
-    title: String,
-    desc: String,
-    checked: Boolean,
-    enabled: Boolean,
-    onChange: (Boolean) -> Unit,
-) {
-    ListItem(
-        headlineContent = {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-        },
-        supportingContent = {
-            Text(desc, style = MaterialTheme.typography.bodyMedium)
-        },
-        leadingContent = {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(24.dp),
-            )
-        },
-        trailingContent = {
-Switch(
-                checked = checked,
-                enabled = enabled,
-                onCheckedChange = onChange,
-                thumbContent = {
-                    Icon(
-                        imageVector = if (checked) Icons.Filled.Check else Icons.Filled.Close,
-                        contentDescription = null,
-                        modifier = Modifier.size(SwitchDefaults.IconSize),
-                        tint = if (checked) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onPrimary
-                        },
-                    )
-                },
-            )
-        },
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-    )
-}
-
 /** 制冷档位:强调数字 + 滑条(8 Pro 为 1–8 离散档) */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: AppStrings) {
     val type = state.deviceType
@@ -404,19 +352,33 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
+            // MD3E:Slider 走 SliderState(alpha28 起 Slider(value=…) 无状态重载已弃用)。
+            // 拖动期间以滑条为准,松手后再由设备回读值同步,避免两边互相打架。
+            var dragging by remember { mutableStateOf(false) }
+            val gear = levelToGear(state.fanPercent).toFloat()
+            val percent = state.fanPercent.toFloat()
+            val gearSlider = rememberSliderState(value = gear, steps = 6, trackRange = 1f..8f)
+            val percentSlider = rememberSliderState(value = percent, trackRange = 0f..100f)
+            LaunchedEffect(gear) { if (!dragging) gearSlider.value = gear }
+            LaunchedEffect(percent) { if (!dragging) percentSlider.value = percent }
             if (isGear) {
                 Slider(
-                    value = levelToGear(state.fanPercent).toFloat(),
-                    onValueChange = { vm.setFanSpeed(gearToLevel(it.roundToInt())) },
-                    valueRange = 1f..8f,
-                    steps = 6,
+                    state = gearSlider,
+                    onValueChange = {
+                        dragging = true
+                        vm.setFanSpeed(gearToLevel(it.roundToInt()))
+                    },
+                    onValueChangeFinished = { dragging = false },
                     enabled = !state.smartOn,
                 )
             } else {
                 Slider(
-                    value = state.fanPercent.toFloat(),
-                    onValueChange = { vm.setFanSpeed(it.toInt()) },
-                    valueRange = 0f..100f,
+                    state = percentSlider,
+                    onValueChange = {
+                        dragging = true
+                        vm.setFanSpeed(it.toInt())
+                    },
+                    onValueChangeFinished = { dragging = false },
                     enabled = !state.smartOn,
                 )
             }

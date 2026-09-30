@@ -1,198 +1,107 @@
 package io.github.wxmyyds.coldfront.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoMode
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material3.Card
-import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.ToggleButton
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.wxmyyds.coldfront.ui.component.RowIcon
+import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
+import io.github.wxmyyds.coldfront.ui.component.SegmentedRadioRow
+import io.github.wxmyyds.coldfront.ui.component.SegmentedRow
+import io.github.wxmyyds.coldfront.ui.component.SegmentedSwitchRow
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 
 /**
- * 设置页(MD3E):外观分组用官方 [ListItem] + 色调图标容器,与首页/设备页同一套列表语言;
- * 深色模式用单选分段按钮(M3 stable)。
+ * 设置页(MD3E 分段选项列表):
+ * - 外观组 = 1 个开关行 + 3 个单选行,同一组内共享外角 16dp / 内角 4dp;
+ * - 深色模式改单选行(leading RadioButton),替掉原来无标签的图标 ToggleButton 行;
+ * - 关于组是独立单行(count = 1 → 四角 16dp)。
  */
-@OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(vm: CoolerViewModel) {
     val strings = LocalStrings.current
     val dynamicColor by vm.dynamicColor.collectAsStateWithLifecycle()
     val darkMode by vm.darkMode.collectAsStateWithLifecycle()
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surfaceContainer),
-    ) {
-        TopAppBar(
-            title = { Text(strings.settingsTitle, style = MaterialTheme.typography.headlineSmall) },
-            windowInsets = WindowInsets(0, 0, 0, 0),
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = Color.Transparent,
-                scrolledContainerColor = Color.Transparent,
-            ),
-        )
+    val darkModeOptions = listOf(
+        "system" to strings.settingsDarkModeSystem,
+        "light" to strings.settingsDarkModeLight,
+        "dark" to strings.settingsDarkModeDark,
+    )
+
+    Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            TopAppBar(
+                title = { Text(strings.settingsTitle) },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                scrollBehavior = scrollBehavior,
+            )
+        },
+    ) { inner ->
         Column(
             modifier = Modifier
-                .weight(1f)
+                .fillMaxSize()
+                .padding(inner)
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            // ── 外观 ──
-            Text(
-                strings.settingsTheme,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = 8.dp),
-            )
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.extraSmall,
-            ) {
-                Column {
-                    SettingItem(
-                        icon = Icons.Filled.Palette,
+            SegmentedGroup(title = strings.settingsTheme) {
+                item(key = "dynamicColor") {
+                    SegmentedSwitchRow(
                         title = strings.settingsDynamicColor,
-                        desc = strings.settingsDynamicColorDesc,
-                        trailing = {
-Switch(
-                                checked = dynamicColor,
-                                onCheckedChange = { vm.setDynamicColor(it) },
-                                thumbContent = {
-                                    Icon(
-                                        imageVector = if (dynamicColor) Icons.Filled.Check else Icons.Filled.Close,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(SwitchDefaults.IconSize),
-                                        tint = if (dynamicColor) {
-                                            MaterialTheme.colorScheme.primary
-                                        } else {
-                                            MaterialTheme.colorScheme.onPrimary
-                                        },
-                                    )
-                                },
-                            )
-                        },
+                        summary = strings.settingsDynamicColorDesc,
+                        checked = dynamicColor,
+                        onCheckedChange = { vm.setDynamicColor(it) },
+                        leadingContent = { RowIcon(Icons.Filled.Palette) },
                     )
                 }
-            }
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.extraSmall,
-            ) {
-                Column {
-                    SettingItem(
-                        icon = Icons.Filled.DarkMode,
-                        title = strings.settingsDarkMode,
-                        desc = null,
-                    )
-                    // 参考图样式:圆角方块按钮行,选中 = 填充色 + 白图标
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        val options = listOf(
-                            Triple("system", Icons.Filled.AutoMode, strings.settingsDarkModeSystem),
-                            Triple("light", Icons.Filled.LightMode, strings.settingsDarkModeLight),
-                            Triple("dark", Icons.Filled.DarkMode, strings.settingsDarkModeDark),
+                darkModeOptions.forEach { (value, label) ->
+                    item(key = "darkMode-$value") {
+                        SegmentedRadioRow(
+                            title = label,
+                            selected = darkMode == value,
+                            onClick = { vm.setDarkMode(value) },
                         )
-                        options.forEach { (value, icon, label) ->
-                            ToggleButton(
-                                checked = darkMode == value,
-                                onCheckedChange = { vm.setDarkMode(value) },
-                                modifier = Modifier.weight(1f),
-                            ) {
-                                Icon(icon, contentDescription = label)
-                            }
-                        }
                     }
                 }
             }
 
-            // ── 关于 ──
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.extraSmall,
-            ) {
-                SettingItem(
-                    icon = Icons.Filled.Info,
-                    title = strings.settingsAbout,
-                    desc = strings.settingsAboutDesc,
-                )
+            SegmentedGroup {
+                item(key = "about") {
+                    SegmentedRow(
+                        title = strings.settingsAbout,
+                        summary = strings.settingsAboutDesc,
+                        leadingContent = { RowIcon(Icons.Filled.Info) },
+                    )
+                }
             }
             Spacer(Modifier.height(8.dp))
         }
     }
-}
-
-/** 设置行:官方 ListItem + 色调图标容器 */
-@Composable
-private fun SettingItem(
-    icon: ImageVector,
-    title: String,
-    desc: String?,
-    trailing: (@Composable () -> Unit)? = null,
-) {
-    ListItem(
-        headlineContent = {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-        },
-        supportingContent = desc?.let {
-            {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        },
-        leadingContent = {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(24.dp),
-            )
-        },
-        trailingContent = trailing,
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-    )
 }

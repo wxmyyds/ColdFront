@@ -148,8 +148,9 @@ private fun AppNav(vm: CoolerViewModel) {
     )
 
     Scaffold(
-        // 页面灰底延伸到状态栏和手势条后面,消掉白色断层
-        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        // MD3E:body area 用 background,surfaceContainer 留给导航区/卡片——
+        // 之前整页铺 surfaceContainer,和 NavigationBar 默认容器色撞成一片、没有分界。
+        containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             NavigationBar {
                 items.forEach { (route, icon, label) ->
