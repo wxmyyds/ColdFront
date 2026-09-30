@@ -5,12 +5,16 @@ import java.util.UUID
 /**
  * 红魔散热器 BLE 协议常量。
  *
- * 3–8 代共用同一套 GATT 服务/特征(逆向自 cn.nubia.externdevice,
- * 详见 docs/protocol-8pro.md)。8 Pro 差异:风扇 raw 40–80、自动模式写 0x01/0x00、温度显示 -6。
+ * 特征语义以实测可用的第三方 App(com.magcooler.cpucontrol)与官方 App 逆向交叉验证,
+ * 详见 docs/protocol-8pro.md。关键点:
+ * - 温度在 0x1014(单字节有符号;固件 8.4.7 为 [0x04, 温度] 包),无偏移;
+ * - 0x1011 是散热总开关(写 0x02 开 / 0x03 关)——不写它风扇不会转;
+ * - 0x1012 风扇 raw 40–80(8 Pro,8 档);旧型号 40–200;
+ * - 特征值不依赖特定服务 UUID:遍历所有服务查找(兼容服务 UUID 变体)。
  */
 object CoolerBleConstants {
 
-    /** 广播 Service UUID 家族标记(须出现在 ServiceUuids 列表) */
+    /** 广播 Service UUID 家族标记(出现在 ServiceUuids 列表;部分型号不广播) */
     val ADVERTISING_SERVICE_UUID: UUID = UUID.fromString("00004a41-0000-1000-8000-00805f9b34fb")
 
     /**
@@ -24,26 +28,36 @@ object CoolerBleConstants {
     /** MSD payload 中 subType 的下标 */
     const val MSD_INDEX_SUB_TYPE: Int = 1
 
-    /** 主服务:风扇/温度/灯光/自动模式都在此服务下 */
-    val FAN_SERVICE_UUID: UUID = UUID.fromString("d52082ad-e805-9f97-9d4e-1c682d9c9ce6")
+    // —— 特征值(16 位 UUID 扩展为标准 128 位) ——
 
-    /** 霍尔(磁吸检测) */
-    val HALL_CHARACTERISTIC_UUID: UUID = UUID.fromString("00001011-0000-1000-8000-00805f9b34fb")
+    /** 散热总开关:写 0x02 开 / 0x03 关;通知值 2=开 3=关 */
+    val COOLING_SWITCH_UUID: UUID = UUID.fromString("00001011-0000-1000-8000-00805f9b34fb")
+    const val COOLING_SWITCH_ON: Byte = 0x02
+    const val COOLING_SWITCH_OFF: Byte = 0x03
 
-    /** 风扇转速特征(写单字节 raw 调速,读取当前转速) */
+    /** 风扇调速:写单字节 raw(8 Pro: 40–80);可读回当前值 */
     val FAN_SPEED_CHARACTERISTIC_UUID: UUID = UUID.fromString("00001012-0000-1000-8000-00805f9b34fb")
 
-    /** RGB 灯光控制特征(模式 4 字节 / 自定义 [R,G,B];查询写 0x11) */
+    /** RGB 灯光:[mode][R][G][B];1炫彩 2全彩呼吸 3单色呼吸 4常亮 5保留 6关 */
     val LIGHT_CONTROL_UUID: UUID = UUID.fromString("00001013-0000-1000-8000-00805f9b34fb")
 
-    /** 温度通知特征(单字节有符号 °C,显示值 = raw − 6) */
-    val TEMPERATURE_NOTIFICATION_UUID: UUID = UUID.fromString("00001015-0000-1000-8000-00805f9b34fb")
+    /** 背夹温度:通知。单字节有符号 °C;固件 8.4.7 为 [0x04, 温度] 多字节包 */
+    val TEMPERATURE_NOTIFICATION_UUID: UUID = UUID.fromString("00001014-0000-1000-8000-00805f9b34fb")
 
-    /** 自动模式控制特征(写 0x01 开 / 0x00 关) */
+    /** 状态:通知。包格式 [tag, ...]:tag 0x08 → 后 2 字节大端转速;tag 0x09 → 后 1 字节功率 W */
+    val STATUS_UUID: UUID = UUID.fromString("00001015-0000-1000-8000-00805f9b34fb")
+
+    /** 智能温控(自动模式):写 0x01 开 / 0x00 关;通知 1=开 */
     val AUTO_MODE_CONTROL_UUID: UUID = UUID.fromString("00001018-0000-1000-8000-00805f9b34fb")
 
-    /** 温度告警/保护阈值特征(4 字节配置) */
-    val TEMPERATURE_WARNING_UUID: UUID = UUID.fromString("0000101f-0000-1000-8000-00805f9b34fb")
+    /** Boost/破坏神(超频):写 0x01 开 / 0x00 关 */
+    val BOOST_CONTROL_UUID: UUID = UUID.fromString("00001017-0000-1000-8000-00805f9b34fb")
+
+    /** 风扇转速(新):通知,大端 16 位 RPM */
+    val RPM_UUID: UUID = UUID.fromString("0000101c-0000-1000-8000-00805f9b34fb")
+
+    /** 功率(新):通知,byte0 = W */
+    val POWER_UUID: UUID = UUID.fromString("0000101d-0000-1000-8000-00805f9b34fb")
 
     /** 灯光查询/握手命令(写单字节 0x11 到灯光特征) */
     const val LIGHT_QUERY_COMMAND: Byte = 0x11
@@ -53,9 +67,6 @@ object CoolerBleConstants {
 
     /** 自动模式关(官方:"writeAutoOff 写0") */
     const val AUTO_MODE_OFF: Byte = 0x00
-
-    /** 温度显示校准偏移(官方显示值 = raw − 6) */
-    const val TEMPERATURE_OFFSET: Int = 6
 
     // —— 风扇调速换算:百分比 ↔ raw(逐型号范围) ——
 

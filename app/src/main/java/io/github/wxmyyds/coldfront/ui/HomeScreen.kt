@@ -132,6 +132,18 @@ private fun ConnectedState(
             Column {
                 Text(strings.homeTemp, style = MaterialTheme.typography.labelMedium)
                 Text(state.temperatureText, style = MaterialTheme.typography.displaySmall)
+                // 实测转速/功率(设备上报)
+                if (state.fanRpm != null || state.powerW != null) {
+                    Text(
+                        buildString {
+                            state.fanRpm?.let { append("$it RPM") }
+                            if (state.fanRpm != null && state.powerW != null) append(" · ")
+                            state.powerW?.let { append("$it W") }
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
             Spacer(Modifier.weight(1f))
             Column(horizontalAlignment = Alignment.End) {

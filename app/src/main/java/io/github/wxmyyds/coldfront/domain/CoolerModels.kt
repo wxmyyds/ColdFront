@@ -68,6 +68,12 @@ data class CoolerLiveState(
     val deviceName: String? = null,
     val deviceAddress: String? = null,
     val rssi: Int = 0,
+    /** 风扇转速(101C/1015上报, RPM) */
+    val fanRpm: Int? = null,
+    /** 功率(101D/1015上报, W) */
+    val powerW: Int? = null,
+    /** 散热总开关(1011上报): 2=开 3=关 */
+    val coolingOn: Boolean? = null,
 ) {
     val isConnected: Boolean get() = connection == ConnectionState.CONNECTED
     val temperatureText: String get() = if (temperatureC > 0) "%.1f°C".format(temperatureC) else "--"

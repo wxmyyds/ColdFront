@@ -79,8 +79,13 @@ class CoolerBleManager(private val context: Context) {
     private var gatt: BluetoothGatt? = null
     private var fanChar: BluetoothGattCharacteristic? = null
     private var tempChar: BluetoothGattCharacteristic? = null
+    private var statusChar: BluetoothGattCharacteristic? = null
     private var lightChar: BluetoothGattCharacteristic? = null
     private var autoChar: BluetoothGattCharacteristic? = null
+    private var boostChar: BluetoothGattCharacteristic? = null
+    private var switchChar: BluetoothGattCharacteristic? = null
+    private var rpmChar: BluetoothGattCharacteristic? = null
+    private var powerChar: BluetoothGattCharacteristic? = null
 
     private var scanning = false
     private var pendingRgb: RGBConfig? = null
@@ -369,8 +374,13 @@ class CoolerBleManager(private val context: Context) {
         gatt = null
         fanChar = null
         tempChar = null
+        statusChar = null
         lightChar = null
         autoChar = null
+        boostChar = null
+        switchChar = null
+        rpmChar = null
+        powerChar = null
     }
 
     private val gattCallback = object : BluetoothGattCallback() {
@@ -409,35 +419,55 @@ class CoolerBleManager(private val context: Context) {
                 _state.update { it.copy(connection = ConnectionState.FAILED) }
                 return
             }
-            val service = g.getService(CoolerBleConstants.FAN_SERVICE_UUID)
-            if (service == null) {
-                Log.e(TAG, "未找到散热器主服务 ${CoolerBleConstants.FAN_SERVICE_UUID}")
+            // 服务无关查找:遍历全部服务的全部特征(实测可用方案——
+            // 8 Pro 的服务 UUID 可能与 d52082ad 不同,不能只 getService(主服务))
+            for (svc in g.services) {
+                for (ch in svc.characteristics) {
+                    when (ch.uuid) {
+                        CoolerBleConstants.COOLING_SWITCH_UUID -> switchChar = ch
+                        CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID -> fanChar = ch
+                        CoolerBleConstants.LIGHT_CONTROL_UUID -> lightChar = ch
+                        CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID -> tempChar = ch
+                        CoolerBleConstants.STATUS_UUID -> statusChar = ch
+                        CoolerBleConstants.BOOST_CONTROL_UUID -> boostChar = ch
+                        CoolerBleConstants.AUTO_MODE_CONTROL_UUID -> autoChar = ch
+                        CoolerBleConstants.RPM_UUID -> rpmChar = ch
+                        CoolerBleConstants.POWER_UUID -> powerChar = ch
+                    }
+                }
+            }
+            Log.d(
+                TAG,
+                "特征: switch=${switchChar != null} fan=${fanChar != null} " +
+                    "light=${lightChar != null} temp=${tempChar != null} " +
+                    "status=${statusChar != null} auto=${autoChar != null} " +
+                    "boost=${boostChar != null} rpm=${rpmChar != null} " +
+                    "power=${powerChar != null}",
+            )
+            if (fanChar == null && switchChar == null) {
+                Log.e(TAG, "未找到散热器特征值(1011/1012)")
                 _state.update { it.copy(connection = ConnectionState.FAILED) }
                 return
             }
-            fanChar = service.getCharacteristic(CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID)
-            tempChar = service.getCharacteristic(CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID)
-            lightChar = service.getCharacteristic(CoolerBleConstants.LIGHT_CONTROL_UUID)
-            autoChar = service.getCharacteristic(CoolerBleConstants.AUTO_MODE_CONTROL_UUID)
-            Log.d(
-                TAG,
-                "特征: fan=${fanChar != null} temp=${tempChar != null} " +
-                    "light=${lightChar != null} auto=${autoChar != null}",
-            )
 
-            // 先上报已连接(骨架就绪),初始化命令在队列中依次执行:
-            // 订阅温度通知 → 订阅灯光通知 → 读风扇 → 灯光握手 0x11 → 应用待写 RGB
+            // 先上报已连接,初始化命令在队列中依次执行:
+            // 订阅(开关/温度/状态/转速/功率/灯光) → 写散热开(0x02!) → 读风扇 → 灯光握手 → 待写 RGB
             _state.update { it.copy(connection = ConnectionState.CONNECTED) }
             scope.launch { initializeAfterConnect(g) }
         }
 
         /** 串行初始化(全部走队列,一个完成才发起下一个) */
         private suspend fun initializeAfterConnect(g: BluetoothGatt) {
-            tempChar?.let { ch ->
-                if (!enableNotification(g, ch)) Log.w(TAG, "订阅温度通知失败")
-            }
-            lightChar?.let { ch ->
-                if (!enableNotification(g, ch)) Log.w(TAG, "订阅灯光通知失败")
+            switchChar?.let { ch -> enableNotification(g, ch) }
+            tempChar?.let { ch -> if (!enableNotification(g, ch)) Log.w(TAG, "订阅温度通知失败") }
+            statusChar?.let { ch -> enableNotification(g, ch) }
+            rpmChar?.let { ch -> enableNotification(g, ch) }
+            powerChar?.let { ch -> enableNotification(g, ch) }
+            lightChar?.let { ch -> enableNotification(g, ch) }
+            // 关键:写散热总开关 ON(0x02)——不写它风扇不转!
+            switchChar?.let { ch ->
+                val ok = enqueueWrite(g, ch, byteArrayOf(CoolerBleConstants.COOLING_SWITCH_ON))
+                if (ok) _state.update { it.copy(coolingOn = true) } else Log.w(TAG, "散热开关写入失败")
             }
             fanChar?.let { ch ->
                 val v = enqueueRead(g, ch)
@@ -524,6 +554,33 @@ class CoolerBleManager(private val context: Context) {
                 }
                 CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID -> handleFanValue(value)
                 CoolerBleConstants.LIGHT_CONTROL_UUID -> handleLightValue(value)
+                CoolerBleConstants.COOLING_SWITCH_UUID -> {
+                    // 通知: 2=开 3=关
+                    val on = value.firstOrNull()?.toInt() == 0x02
+                    _state.update { it.copy(coolingOn = on) }
+                }
+                CoolerBleConstants.STATUS_UUID -> handleStatusValue(value)
+                CoolerBleConstants.RPM_UUID -> {
+                    parseBigEndianShort(value)?.let { rpm ->
+                        _state.update { it.copy(fanRpm = rpm) }
+                    }
+                }
+                CoolerBleConstants.POWER_UUID -> {
+                    value.firstOrNull()?.let { w -> _state.update { it.copy(powerW = w.toInt()) } }
+                }
+            }
+        }
+
+        /** 1015 状态包:[tag, ...] tag 0x08=后两字节大端 RPM,0x09=后一字节功率 W */
+        private fun handleStatusValue(value: ByteArray) {
+            if (value.isEmpty()) return
+            when (value[0].toInt() and 0xFF) {
+                0x08 -> parseBigEndianShort(value.copyOfRange(1, value.size))?.let { rpm ->
+                    _state.update { it.copy(fanRpm = rpm) }
+                }
+                0x09 -> value.getOrNull(1)?.let { w ->
+                    _state.update { it.copy(powerW = w.toInt() and 0xFF) }
+                }
             }
         }
 
@@ -667,19 +724,43 @@ class CoolerBleManager(private val context: Context) {
         }
     }
 
-    /** 设置风扇模式(自动=写 0x01,离开自动=写 0x00) */
+    /** 设置风扇模式:OFF=写散热开关 0x03(全停);AUTO=1018 写 0x01;回手动=1018 写 0x00 */
     @SuppressLint("MissingPermission")
     fun setFanMode(mode: FanMode) {
         val wasAuto = _state.value.fanMode == FanMode.AUTO
         _state.update { it.copy(fanMode = mode) }
         val g = gatt ?: return
         when (mode) {
-            FanMode.OFF -> setFanSpeed(0)
-            FanMode.MANUAL -> {
-                // 从自动切回手动:写自动关
+            FanMode.OFF -> {
+                // 散热总开关关(0x03):风扇全停
+                switchChar?.let { ch ->
+                    scope.launch {
+                        val ok = enqueueWrite(g, ch, byteArrayOf(CoolerBleConstants.COOLING_SWITCH_OFF))
+                        if (ok) _state.update { it.copy(coolingOn = false) }
+                    }
+                }
+                // 同时退出智能温控
                 if (wasAuto) writeAuto(g, CoolerBleConstants.AUTO_MODE_OFF)
             }
-            FanMode.AUTO -> writeAuto(g, CoolerBleConstants.AUTO_MODE_ON)
+            FanMode.MANUAL -> {
+                // 确保散热开关开(切回时) + 退出智能温控
+                switchChar?.let { ch ->
+                    scope.launch {
+                        val ok = enqueueWrite(g, ch, byteArrayOf(CoolerBleConstants.COOLING_SWITCH_ON))
+                        if (ok) _state.update { it.copy(coolingOn = true) }
+                    }
+                }
+                if (wasAuto) writeAuto(g, CoolerBleConstants.AUTO_MODE_OFF)
+            }
+            FanMode.AUTO -> {
+                switchChar?.let { ch ->
+                    scope.launch {
+                        val ok = enqueueWrite(g, ch, byteArrayOf(CoolerBleConstants.COOLING_SWITCH_ON))
+                        if (ok) _state.update { it.copy(coolingOn = true) }
+                    }
+                }
+                writeAuto(g, CoolerBleConstants.AUTO_MODE_ON)
+            }
         }
     }
 
@@ -717,13 +798,25 @@ class CoolerBleManager(private val context: Context) {
 
     // ──────────────────────────── 工具 ────────────────────────────
 
+    /** 大端 16 位无符号解析(payload 长度≥2) */
+    private fun parseBigEndianShort(data: ByteArray): Int? {
+        if (data.size < 2) return null
+        return ((data[0].toInt() and 0xFF) shl 8) or (data[1].toInt() and 0xFF)
+    }
+
     /**
-     * 解析温度通知 payload:单字节有符号 °C,显示值 = raw − 6(官方校准)。
+     * 解析 1014 温度:单字节有符号 °C;固件 8.4.7 为 [0x04, 温度] 多字节包。
+     * 无偏移(实测可用方案)。
      */
     private fun parseTemperature(data: ByteArray): Float? {
         if (data.isEmpty()) return null
-        val signed = data[0].toInt() // Kotlin Byte.toInt() 已做符号扩展
-        return (signed - CoolerBleConstants.TEMPERATURE_OFFSET).toFloat()
+        val t = if (data.size >= 2 && (data[0].toInt() and 0xFF) == 0x04) {
+            data[1].toInt()
+        } else {
+            data[0].toInt()
+        }
+        // 合法范围 -40..80,越界视为坏包丢弃
+        return if (t in -40..80) t.toFloat() else null
     }
 
     private fun BluetoothDevice.safeName(): String? =
