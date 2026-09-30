@@ -23,8 +23,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Shield
@@ -35,16 +33,12 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.ToggleFloatingActionButton
@@ -68,6 +62,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.domain.CoolerLiveState
+import io.github.wxmyyds.coldfront.ui.component.RowIcon
+import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
+import io.github.wxmyyds.coldfront.ui.component.SegmentedSwitchRow
 import io.github.wxmyyds.coldfront.ui.i18n.AppStrings
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 import kotlin.math.roundToInt
@@ -166,48 +163,38 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
 
     TempHero(state)
 
-    // 三个带说明的开关:MD3E 分段列表(SegmentedListItem)——
-    // 外角 16dp / 内角 4dp 由 segmentedShapes(index, count) 自动算,行间留分段缝隙
-    val controlCount = 3
-    Column(
-        modifier = Modifier.animateContentSize(
-            spring(
-                dampingRatio = Spring.DampingRatioLowBouncy,
-                stiffness = Spring.StiffnessMediumLow,
+    // 三个带说明的开关:分段选项列表(SegmentedGroup)——
+    // 外角 16dp / 内角 4dp / 缝隙 / 触感反馈全部由组件统一处理
+    SegmentedGroup {
+        item(key = "smart") {
+            SegmentedSwitchRow(
+                title = strings.homeSmart,
+                summary = strings.homeSmartDesc,
+                checked = state.smartOn,
+                enabled = state.coolingOn,
+                onCheckedChange = { vm.setSmart(it) },
+                leadingContent = { RowIcon(Icons.Filled.AutoMode) },
             )
-        ),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        ControlItem(
-            index = 0,
-            count = controlCount,
-            icon = Icons.Filled.AutoMode,
-            title = strings.homeSmart,
-            desc = strings.homeSmartDesc,
-            checked = state.smartOn,
-            enabled = state.coolingOn,
-            onChange = { vm.setSmart(it) },
-        )
-        ControlItem(
-            index = 1,
-            count = controlCount,
-            icon = Icons.Filled.Bolt,
-            title = strings.homeBoost,
-            desc = strings.homeBoostDesc,
-            checked = state.boostOn,
-            enabled = state.coolingOn,
-            onChange = { vm.setBoost(it) },
-        )
-        ControlItem(
-            index = 2,
-            count = controlCount,
-            icon = Icons.Filled.Shield,
-            title = strings.homeOvercold,
-            desc = strings.homeOvercoldDesc,
-            checked = state.overcoldOn,
-            enabled = true,
-            onChange = { vm.setOvercoldProtection(it) },
-        )
+        }
+        item(key = "boost") {
+            SegmentedSwitchRow(
+                title = strings.homeBoost,
+                summary = strings.homeBoostDesc,
+                checked = state.boostOn,
+                enabled = state.coolingOn,
+                onCheckedChange = { vm.setBoost(it) },
+                leadingContent = { RowIcon(Icons.Filled.Bolt) },
+            )
+        }
+        item(key = "overcold") {
+            SegmentedSwitchRow(
+                title = strings.homeOvercold,
+                summary = strings.homeOvercoldDesc,
+                checked = state.overcoldOn,
+                onCheckedChange = { vm.setOvercoldProtection(it) },
+                leadingContent = { RowIcon(Icons.Filled.Shield) },
+            )
+        }
     }
 
     LevelSection(vm, state, strings)
@@ -300,64 +287,6 @@ private fun MetricPill(icon: ImageVector, text: String, content: Color) {
                 color = content,
             )
         }
-    }
-}
-
-/**
- * 开关行:MD3E [SegmentedListItem] 的 checked 重载——
- * - 整行可点(自带状态层 + toggle 语义 + 按下形变),不再把 Card 套在 ListItem 外面;
- * - 分组圆角(外 16dp / 内 4dp)由 [ListItemDefaults.segmentedShapes] 按 index/count 生成;
- * - 尾随 Switch 只做视觉指示(onCheckedChange = null),避免行与开关双重交互;
- *   thumbContent 的图标色由组件自动注入(SwitchTokens.SelectedIconColor = onPrimaryContainer),
- *   旧写法手写 tint = primary/onPrimary 盖掉了规范色,未选态对比不足 3:1。
- */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-private fun ControlItem(
-    index: Int,
-    count: Int,
-    icon: ImageVector,
-    title: String,
-    desc: String,
-    checked: Boolean,
-    enabled: Boolean,
-    onChange: (Boolean) -> Unit,
-) {
-    SegmentedListItem(
-        checked = checked,
-        onCheckedChange = onChange,
-        shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
-        modifier = Modifier.fillMaxWidth(),
-        enabled = enabled,
-        supportingContent = {
-            Text(desc, style = MaterialTheme.typography.bodyMedium)
-        },
-        leadingContent = {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(24.dp),
-            )
-        },
-        trailingContent = {
-            Switch(
-                checked = checked,
-                // 非交互指示器:点击交给整行(SegmentedListItem 的 checked 重载),
-                // 但 enabled 要跟行一致,否则行置灰时开关仍是可用态配色。
-                enabled = enabled,
-                onCheckedChange = null,
-                thumbContent = {
-                    Icon(
-                        imageVector = if (checked) Icons.Filled.Check else Icons.Filled.Close,
-                        contentDescription = null,
-                        modifier = Modifier.size(SwitchDefaults.IconSize),
-                    )
-                },
-            )
-        },
-    ) {
-        Text(title, style = MaterialTheme.typography.titleMedium)
     }
 }
 

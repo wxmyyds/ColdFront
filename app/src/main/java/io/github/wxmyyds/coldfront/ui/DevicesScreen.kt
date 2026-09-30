@@ -28,10 +28,8 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -48,6 +46,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.domain.CoolerLiveState
 import io.github.wxmyyds.coldfront.domain.CoolerProfile
+import io.github.wxmyyds.coldfront.ui.component.SegmentedRow
+import io.github.wxmyyds.coldfront.ui.component.SegmentedRowGap
+import io.github.wxmyyds.coldfront.ui.component.segmentedRowShapes
 import io.github.wxmyyds.coldfront.ui.i18n.AppStrings
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 import java.text.SimpleDateFormat
@@ -57,7 +58,7 @@ import java.util.Locale
 /**
  * 设备页(MD3E):
  * - 主操作「添加设备」放在 [ExtendedFloatingActionButton](战术 6:主行动用 FAB)
- * - 已保存设备行用 [SegmentedListItem] 分段列表,分组圆角由 segmentedShapes(index, count) 生成
+ * - 已保存设备行用分段选项行(SegmentedRow),分组圆角由 segmentedRowShapes(index, count) 生成
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -94,7 +95,7 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
                     .fillMaxSize()
                     .padding(inner)
                     .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+                verticalArrangement = Arrangement.spacedBy(SegmentedRowGap),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(
                     top = 8.dp,
                     bottom = 96.dp, // 给 FAB 让位
@@ -117,11 +118,10 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
 }
 
 /**
- * 已保存设备行:MD3E [SegmentedListItem](非交互重载)。
- * 行本身不可点,操作全部放在 trailing 的图标按钮/按钮里——
- * 避开规范禁止的「可操作面上再放操作」,也不再需要 Card + clickable 手工拼。
+ * 已保存设备行：分段选项行（非交互）。
+ * 行本身不可点，操作全部放在 trailing 的图标按钮/按钮里——
+ * 避开规范禁止的「可操作面上再放操作」。
  */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SavedDeviceCard(
     strings: AppStrings,
@@ -137,11 +137,10 @@ private fun SavedDeviceCard(
         ConnectionState.CONNECTING, ConnectionState.DISCOVERING,
     ) && state.deviceAddress == profile.macAddress
 
-    SegmentedListItem(
-        shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize(spring(stiffness = Spring.StiffnessMediumLow)),
+    SegmentedRow(
+        title = profile.name,
+        shapes = segmentedRowShapes(index = index, count = count),
+        modifier = Modifier.animateContentSize(spring(stiffness = Spring.StiffnessMediumLow)),
         supportingContent = {
             Column {
                 Text(
@@ -192,13 +191,7 @@ private fun SavedDeviceCard(
                 }
             }
         },
-    ) {
-        Text(
-            profile.name,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-        )
-    }
+    )
 }
 
 @Composable

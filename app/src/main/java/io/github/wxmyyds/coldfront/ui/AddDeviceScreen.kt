@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bluetooth
@@ -27,8 +28,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -63,6 +62,9 @@ import io.github.wxmyyds.coldfront.ble.BlePermissionManager
 import io.github.wxmyyds.coldfront.ble.BleScanDiagnostic
 import io.github.wxmyyds.coldfront.domain.CoolerDevice
 import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
+import io.github.wxmyyds.coldfront.ui.component.SegmentedRow
+import io.github.wxmyyds.coldfront.ui.component.SegmentedRowGap
+import io.github.wxmyyds.coldfront.ui.component.segmentedRowShapes
 import io.github.wxmyyds.coldfront.ui.i18n.AppStrings
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 
@@ -476,33 +478,22 @@ private fun ScanningEmptyState(strings: AppStrings, scanning: Boolean, onRescan:
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun DeviceList(
     strings: AppStrings,
     devices: List<CoolerDevice>,
     onConnect: (CoolerDevice) -> Unit,
 ) {
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(devices, key = { it.address }) { device ->
-            // MD3E 表达性列表行:用 ListItem(onClick = …) 重载——
-            // 自带状态层/涟漪/按钮语义,不再 Card + Modifier.clickable 手工拼;
-            // 独立行外角取 shapes.large(16dp),按下形变交给默认 pressedShape。
-            ListItem(
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(SegmentedRowGap)) {
+        itemsIndexed(devices, key = { _, device -> device.address }) { index, device ->
+            // 分段选项行:整行可点(自带状态层/涟漪/语义 + 触感),
+            // 分组外角 16dp / 内角 4dp 由 segmentedRowShapes(index, count) 给出。
+            SegmentedRow(
+                title = device.displayName,
+                summary = device.deviceType.deviceName + " · ${device.rssi} dBm",
+                overline = if (device.matchedByName) strings.scanMatchedByName else null,
                 onClick = { onConnect(device) },
-                shapes = ListItemDefaults.shapes(shape = MaterialTheme.shapes.large),
-                modifier = Modifier.fillMaxWidth(),
-                supportingContent = {
-                    Text(
-                        device.deviceType.deviceName + " · ${device.rssi} dBm",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                },
-                overlineContent = if (device.matchedByName) {
-                    { Text(strings.scanMatchedByName, style = MaterialTheme.typography.labelSmall) }
-                } else {
-                    null
-                },
+                shapes = segmentedRowShapes(index = index, count = devices.size),
                 leadingContent = {
                     CoolerArt(
                         device.deviceType,
@@ -517,13 +508,7 @@ private fun DeviceList(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 },
-            ) {
-                Text(
-                    device.displayName,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
+            )
         }
     }
 }

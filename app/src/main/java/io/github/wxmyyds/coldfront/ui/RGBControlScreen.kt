@@ -41,7 +41,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -70,6 +69,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
 import io.github.wxmyyds.coldfront.domain.LightEffect
 import io.github.wxmyyds.coldfront.domain.RGBConfig
+import io.github.wxmyyds.coldfront.ui.component.SegmentedContainer
+import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
+import io.github.wxmyyds.coldfront.ui.component.SegmentedRadioRow
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 
 /**
@@ -159,7 +161,7 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
                 }
 
                 // ── 灯效选择(即点即发) ──
-                EffectChips(
+                EffectRows(
                     effect = effect,
                     onEffect = { e ->
                         effect = e
@@ -170,20 +172,25 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
 
                 // ── 颜色(仅单色系灯效需要) ──
                 if (effect == LightEffect.BREATH_SINGLE || effect == LightEffect.ALWAYS_BRIGHT) {
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(
-                            Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            Text(strings.rgbPalette, style = MaterialTheme.typography.titleSmall)
-                            PaletteRow(r, g, b) { pr, pg, pb ->
-                                r = pr; g = pg; b = pb
+                    SegmentedGroup(title = strings.rgbPalette) {
+                        item(key = "palette") {
+                            SegmentedContainer {
+                                PaletteRow(r, g, b) { pr, pg, pb ->
+                                    r = pr; g = pg; b = pb
+                                }
                             }
+                        }
+                    }
 
-                            Text(strings.rgbCustomColor, style = MaterialTheme.typography.titleSmall)
-                            ColorSlider(strings.rgbRed, r, Color.Red) { r = it }
-                            ColorSlider(strings.rgbGreen, g, Color.Green) { g = it }
-                            ColorSlider(strings.rgbBlue, b, Color.Blue) { b = it }
+                    SegmentedGroup(title = strings.rgbCustomColor) {
+                        item(key = "sliders") {
+                            SegmentedContainer {
+                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    ColorSlider(strings.rgbRed, r, Color.Red) { r = it }
+                                    ColorSlider(strings.rgbGreen, g, Color.Green) { g = it }
+                                    ColorSlider(strings.rgbBlue, b, Color.Blue) { b = it }
+                                }
+                            }
                         }
                     }
 
@@ -275,9 +282,13 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.glow(color: Color, 
 
 // ───────────────────────── 灯效选择 ─────────────────────────
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+/**
+ * 灯效单选:MD3E 单选行组。
+ * 替掉原来 5 个无标签的图标 ToggleButton——单选应用 RadioButton 行,
+ * 图标退到 trailing 做补充识别,文字标签才是主语义。
+ */
 @Composable
-private fun EffectChips(effect: LightEffect, onEffect: (LightEffect) -> Unit) {
+private fun EffectRows(effect: LightEffect, onEffect: (LightEffect) -> Unit) {
     val strings = LocalStrings.current
     val entries = listOf(
         LightEffect.ALWAYS_BRIGHT to Icons.Filled.LightMode,
@@ -286,18 +297,21 @@ private fun EffectChips(effect: LightEffect, onEffect: (LightEffect) -> Unit) {
         LightEffect.BREATH_FULLCOLOR to Icons.Filled.Gradient,
         LightEffect.OFF to Icons.Filled.AcUnit,
     )
-    // 参考图样式:圆角方块按钮行,选中 = 填充色 + 白图标
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
+    SegmentedGroup(title = strings.rgbEffect) {
         entries.forEach { (e, icon) ->
-            ToggleButton(
-                checked = effect == e,
-                onCheckedChange = { if (it) onEffect(e) },
-                modifier = Modifier.weight(1f),
-            ) {
-                Icon(icon, contentDescription = effectLabel(e, strings))
+            item(key = e.name) {
+                SegmentedRadioRow(
+                    title = effectLabel(e, strings),
+                    selected = effect == e,
+                    onClick = { onEffect(e) },
+                    trailingContent = {
+                        Icon(
+                            icon,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                )
             }
         }
     }
