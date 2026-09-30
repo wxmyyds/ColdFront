@@ -11,6 +11,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -114,6 +115,7 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
         // 紧凑顶栏(透明,页面灰底透出)
         TopAppBar(
             title = { Text(strings.rgbTitle, style = MaterialTheme.typography.headlineSmall) },
+            windowInsets = WindowInsets(0, 0, 0, 0),
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = Color.Transparent,
                 scrolledContainerColor = Color.Transparent,

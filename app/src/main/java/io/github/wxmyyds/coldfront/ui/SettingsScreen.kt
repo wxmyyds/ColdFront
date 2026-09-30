@@ -1,6 +1,7 @@
 package io.github.wxmyyds.coldfront.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -59,6 +60,7 @@ fun SettingsScreen(vm: CoolerViewModel) {
     ) {
         TopAppBar(
             title = { Text(strings.settingsTitle, style = MaterialTheme.typography.headlineSmall) },
+            windowInsets = WindowInsets(0, 0, 0, 0),
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = Color.Transparent,
                 scrolledContainerColor = Color.Transparent,

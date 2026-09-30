@@ -3,6 +3,7 @@ package io.github.wxmyyds.coldfront.ui
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -69,6 +70,7 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
         topBar = {
             TopAppBar(
                 title = { Text(strings.devicesTitle, style = MaterialTheme.typography.headlineSmall) },
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
                     scrolledContainerColor = Color.Transparent,

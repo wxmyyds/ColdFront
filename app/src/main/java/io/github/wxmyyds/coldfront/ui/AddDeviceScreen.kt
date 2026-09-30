@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -95,6 +96,7 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
         // MD3E 弹性顶栏 + 返回导航
         TopAppBar(
             title = { Text(strings.scanTitle, style = MaterialTheme.typography.headlineSmall) },
+            windowInsets = WindowInsets(0, 0, 0, 0),
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = Color.Transparent,
                 scrolledContainerColor = Color.Transparent,

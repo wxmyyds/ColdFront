@@ -4,6 +4,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -87,6 +88,7 @@ fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
         topBar = {
             TopAppBar(
                 title = { Text(strings.homeTitle, style = MaterialTheme.typography.headlineSmall) },
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
                     scrolledContainerColor = Color.Transparent,
@@ -412,77 +414,81 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ConnectingContent(strings: AppStrings) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Row(
-            modifier = Modifier.padding(24.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            LoadingIndicator(Modifier.size(32.dp))
-            Text(strings.homeConnecting, style = MaterialTheme.typography.titleMedium)
-        }
+        LoadingIndicator(Modifier.size(40.dp))
+        Text(strings.homeConnecting, style = MaterialTheme.typography.titleLarge)
     }
 }
 
 @Composable
 private fun FailedContent(strings: AppStrings, onAddDevice: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Column(
-            Modifier.padding(28.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Icon(
-                Icons.Filled.AcUnit,
-                contentDescription = null,
-                modifier = Modifier.size(64.dp),
-                tint = MaterialTheme.colorScheme.error,
-            )
-            Text(strings.homeConnectionFailed, style = MaterialTheme.typography.titleLarge)
-            Text(
-                strings.homeRetryHint,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Button(onClick = onAddDevice, shapes = ButtonDefaults.shapes()) {
-                Text(strings.homeGoScan)
-            }
+        Icon(
+            Icons.Filled.AcUnit,
+            contentDescription = null,
+            modifier = Modifier.size(64.dp),
+            tint = MaterialTheme.colorScheme.error,
+        )
+        Text(
+            strings.homeConnectionFailed,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            strings.homeRetryHint,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(8.dp))
+        Button(onClick = onAddDevice, shapes = ButtonDefaults.shapes()) {
+            Text(strings.homeGoScan)
         }
     }
 }
 
 @Composable
 private fun NotConnectedContent(strings: AppStrings, onAddDevice: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Column(
-            Modifier.padding(32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+        // 色调圆底图标章(参考图的克制风格,不用整块灰卡)
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surfaceContainerHighest,
         ) {
-            Icon(
-                Icons.Filled.AcUnit,
-                contentDescription = null,
-                modifier = Modifier.size(72.dp),
-                tint = MaterialTheme.colorScheme.primary,
-            )
-            Text(strings.homeNotConnected, style = MaterialTheme.typography.headlineSmall)
-            Text(
-                strings.homeNoDeviceHint,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Button(onClick = onAddDevice, shapes = ButtonDefaults.shapes()) {
-                Text(strings.homeGoScan)
+            Box(
+                modifier = Modifier.size(112.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Filled.AcUnit,
+                    contentDescription = null,
+                    modifier = Modifier.size(56.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
             }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            strings.homeNotConnected,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            strings.homeNoDeviceHint,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(8.dp))
+        Button(onClick = onAddDevice, shapes = ButtonDefaults.shapes()) {
+            Text(strings.homeGoScan)
         }
     }
 }
