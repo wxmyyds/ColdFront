@@ -135,18 +135,16 @@ class CoolerBleManager(private val context: Context) {
     private fun recordRaw(result: ScanResult) {
         val record = result.scanRecord ?: return
         val name = record.deviceName ?: result.device.safeName()
+        val msdSparse = record.manufacturerSpecificData
         val msd = buildList {
-            for (i in 0 until record.manufacturerSpecificData.size()) {
-                val key = record.manufacturerSpecificData.keyAt(i)
-                add(key to (record.manufacturerSpecificData.valueAt(i)?.toHex() ?: ""))
+            for (i in 0 until msdSparse.size) {
+                val key = msdSparse.keyAt(i)
+                add(key to (msdSparse.valueAt(i)?.toHex() ?: ""))
             }
         }
-        val serviceData = buildList {
-            for (i in 0 until record.serviceData.size()) {
-                val key = record.serviceData.keyAt(i)
-                add(key.toString() to (record.serviceData.valueAt(i)?.toHex() ?: ""))
-            }
-        }
+        val serviceData = record.serviceData?.entries
+            ?.map { (k, v) -> k.uuid.toString() to (v?.toHex() ?: "") }
+            ?: emptyList()
         val entry = BleScanDiagnostic(
             address = result.device.address,
             name = name,

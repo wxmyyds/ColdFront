@@ -10,6 +10,7 @@ import io.github.wxmyyds.coldfront.data.ProfileRepository
 import io.github.wxmyyds.coldfront.data.SettingsRepository
 import io.github.wxmyyds.coldfront.data.ThermalThresholds
 import io.github.wxmyyds.coldfront.domain.CoolerDevice
+import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
 import io.github.wxmyyds.coldfront.ble.BleScanDiagnostic
 import io.github.wxmyyds.coldfront.domain.CoolerProfile
 import io.github.wxmyyds.coldfront.domain.FanMode
