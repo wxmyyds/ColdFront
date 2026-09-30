@@ -6,7 +6,10 @@ plugins {
 android {
     namespace = "io.github.wxmyyds.coldfront"
     compileSdk {
-        version = release(37)
+        // Compose 1.13-alpha（compose-bom-alpha）要求 compileSdk ≥ 37.1
+        version = release(37) {
+            minorApiLevel = 1
+        }
     }
 
     defaultConfig {
