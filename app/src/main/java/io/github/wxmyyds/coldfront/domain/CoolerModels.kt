@@ -34,8 +34,13 @@ data class RGBConfig(
         require(blue in 0..255) { "blue 越界：$blue" }
     }
 
-    /** 序列化为 [effect][R][G][B] 4 字节命令 */
-    fun toCommand(): ByteArray = byteArrayOf(effect.code, red.toByte(), green.toByte(), blue.toByte())
+    /** 序列化为 [effect][R][G][B] 4 字节命令;炫彩/全彩呼吸不带颜色字节(实测 App 同样置零) */
+    fun toCommand(): ByteArray = when (effect) {
+        LightEffect.COLORFUL, LightEffect.BREATH_FULLCOLOR, LightEffect.OFF ->
+            byteArrayOf(effect.code, 0, 0, 0)
+        else ->
+            byteArrayOf(effect.code, red.toByte(), green.toByte(), blue.toByte())
+    }
 }
 
 /** 风扇模式 */

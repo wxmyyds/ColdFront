@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
@@ -100,6 +101,9 @@ class CoolerBleManager(private val context: Context) {
     private var fanJob: Job? = null
     private var lightJob: Job? = null
     private var autoJob: Job? = null
+
+    // —— 状态轮询循环(8 Pro 温度/转速/功率靠主动读,不靠推送) ——
+    private var pollJob: Job? = null
 
     private val _state = MutableStateFlow(CoolerLiveState(connection = ConnectionState.DISCONNECTED))
     val state: StateFlow<CoolerLiveState> = _state.asStateFlow()
@@ -363,6 +367,7 @@ class CoolerBleManager(private val context: Context) {
         fanJob?.cancel()
         lightJob?.cancel()
         autoJob?.cancel()
+        pollJob?.cancel()
         gatt?.let {
             try {
                 it.disconnect()
@@ -471,15 +476,15 @@ class CoolerBleManager(private val context: Context) {
             }
             fanChar?.let { ch ->
                 val v = enqueueRead(g, ch)
-                if (v != null) handleFanValue(v)
+                if (v != null) handleData(ch.uuid, v)
             }
-            lightChar?.let { ch ->
-                enqueueWrite(g, ch, byteArrayOf(CoolerBleConstants.LIGHT_QUERY_COMMAND))
-            }
+            // 注:不写 0x11 灯光握手——实测可用 App 从不写,旧协议专用,
+            // 且可能把 8 Pro 灯光状态机搞乱
             pendingRgb?.let {
                 applyRgbInternal(it)
                 pendingRgb = null
             }
+            startPollLoop(g)
         }
 
         override fun onCharacteristicWrite(
@@ -541,12 +546,15 @@ class CoolerBleManager(private val context: Context) {
         }
 
         private fun handleRead(uuid: UUID, value: ByteArray) {
-            when (uuid) {
-                CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID -> handleFanValue(value)
-            }
+            handleData(uuid, value)
         }
 
         private fun handleChanged(uuid: UUID, value: ByteArray) {
+            handleData(uuid, value)
+        }
+
+        /** 读回与通知的统一解析入口 */
+        private fun handleData(uuid: UUID, value: ByteArray) {
             when (uuid) {
                 CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID -> {
                     val temp = parseTemperature(value)
@@ -703,6 +711,27 @@ class CoolerBleManager(private val context: Context) {
         }
 
     // ──────────────────────────── 控制 ────────────────────────────
+
+    /**
+     * 状态轮询循环(实测可用方案):8 Pro 的温度/转速/功率不主动推送,
+     * 需周期性 readCharacteristic 拉取。每轮串行读 1014/1015/101C/101D/1012,
+     * 间隔 500ms(操作间由队列保证串行)。
+     */
+    @SuppressLint("MissingPermission")
+    private fun startPollLoop(g: BluetoothGatt) {
+        pollJob?.cancel()
+        pollJob = scope.launch {
+            while (isActive && gatt === g) {
+                tempChar?.let { ch -> enqueueRead(g, ch)?.let { handleData(ch.uuid, it) } }
+                statusChar?.let { ch -> enqueueRead(g, ch)?.let { handleData(ch.uuid, it) } }
+                rpmChar?.let { ch -> enqueueRead(g, ch)?.let { handleData(ch.uuid, it) } }
+                powerChar?.let { ch -> enqueueRead(g, ch)?.let { handleData(ch.uuid, it) } }
+                fanChar?.let { ch -> enqueueRead(g, ch)?.let { handleData(ch.uuid, it) } }
+                delay(500)
+            }
+        }
+    }
+
 
     /**
      * 设置风扇转速百分比(0–100),按该型号 raw 范围换算(8 Pro: 40–80)。
