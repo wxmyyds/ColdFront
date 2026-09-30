@@ -44,7 +44,8 @@ import androidx.compose.ui.unit.dp
  * 全部基于 androidx 原生原语（[SegmentedListItem] / [ListItemDefaults.segmentedShapes] /
  * [ListItemDefaults.segmentedColors]），观感对齐 Material 3 Expressive 列表规格：
  *
- * - 分组外角 16dp、内角 4dp，由 segmentedShapes(index, count) 生成，含按下/选中形变；
+ * - 分组外角 16dp、内角 4dp，由 segmentedShapes(index, count) 生成；选中/按下不做圆角形变
+ *   （在紧凑分组里会把整组撑散），反馈交给颜色、RadioButton 与涟漪；
  * - 行间留分段缝隙；
  * - 行容器用 surfaceBright，页面用 background —— 靠明度分层，不靠阴影；
  * - 组标题 titleSmall + primary；
@@ -85,14 +86,34 @@ fun segmentedRowColors(): ListItemColors = ListItemDefaults.segmentedColors(
 
 /** 独立单行：四角 16dp（segmentedShapes(0,1) 的基形是 4dp，单独一行会显得方）。 */
 @Composable
-fun standaloneRowShapes(): ListItemShapes =
-    ListItemDefaults.shapes(shape = MaterialTheme.shapes.large)
+fun standaloneRowShapes(): ListItemShapes = ListItemDefaults.shapes(
+    shape = MaterialTheme.shapes.large,
+    selectedShape = MaterialTheme.shapes.large,
+    pressedShape = MaterialTheme.shapes.large,
+    focusedShape = MaterialTheme.shapes.large,
+    hoveredShape = MaterialTheme.shapes.large,
+)
 
-/** 分组中第 [index] 行（共 [count] 行）：外角 16dp、内角 4dp。 */
+/**
+ * 分组中第 [index] 行（共 [count] 行）：外角 16dp、内角 4dp。
+ *
+ * selected / pressed / focused / hovered 形状全部压回基准形状：默认 token 会让这些状态
+ * 四角变成 16dp（ItemSelected/PressedContainerExpressiveShape = CornerLarge），在紧凑分组里
+ * 会把整组“撑散”、与相邻行的 4dp 内角对不上。选中态改由颜色与 leading 的 RadioButton
+ * 表达，按下反馈交给涟漪/状态层（它们仍会被裁到基准形状）。
+ */
 @Composable
-fun segmentedRowShapes(index: Int, count: Int): ListItemShapes =
-    if (count <= 1) standaloneRowShapes()
-    else ListItemDefaults.segmentedShapes(index = index, count = count)
+fun segmentedRowShapes(index: Int, count: Int): ListItemShapes {
+    if (count <= 1) return standaloneRowShapes()
+    val base = ListItemDefaults.segmentedShapes(index = index, count = count)
+    return ListItemDefaults.shapes(
+        shape = base.shape,
+        selectedShape = base.shape,
+        pressedShape = base.shape,
+        focusedShape = base.shape,
+        hoveredShape = base.shape,
+    )
+}
 
 @Composable
 private fun currentRowShapes(explicit: ListItemShapes?): ListItemShapes =
@@ -311,7 +332,7 @@ fun SegmentedSwitchRow(
     }
 }
 
-/** 单选行：leading 为 RadioButton（非交互，点击由整行承担），选中时形状形变到 16dp。 */
+/** 单选行：leading 为 RadioButton（非交互，点击由整行承担），选中只变色不变形。 */
 @Composable
 fun SegmentedRadioRow(
     title: String,
