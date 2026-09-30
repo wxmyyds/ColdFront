@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.foundation.Image
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
@@ -23,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.wxmyyds.coldfront.domain.CoolerLiveState
@@ -96,10 +98,18 @@ private fun SavedDeviceCard(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                profile.deviceType.suggestedIcon,
-                style = MaterialTheme.typography.headlineSmall,
-            )
+            if (profile.deviceType == io.github.wxmyyds.coldfront.domain.CoolerDeviceType.JACKET_8_PRO) {
+                Image(
+                    painter = painterResource(io.github.wxmyyds.coldfront.R.drawable.img_cooler_8pro),
+                    contentDescription = profile.displayName,
+                    modifier = Modifier.size(48.dp),
+                )
+            } else {
+                Text(
+                    profile.deviceType.suggestedIcon,
+                    style = MaterialTheme.typography.headlineSmall,
+                )
+            }
             Column(
                 Modifier
                     .weight(1f)

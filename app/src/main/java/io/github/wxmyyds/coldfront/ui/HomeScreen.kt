@@ -1,5 +1,6 @@
 package io.github.wxmyyds.coldfront.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
@@ -87,7 +89,15 @@ private fun ConnectedContent(vm: CoolerViewModel, state: io.github.wxmyyds.coldf
             modifier = Modifier.padding(20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Filled.Thermostat, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            if (type == io.github.wxmyyds.coldfront.domain.CoolerDeviceType.JACKET_8_PRO) {
+                Image(
+                    painter = painterResource(io.github.wxmyyds.coldfront.R.drawable.img_cooler_8pro),
+                    contentDescription = null,
+                    modifier = Modifier.size(56.dp),
+                )
+            } else {
+                Icon(Icons.Filled.Thermostat, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            }
             Spacer(Modifier.width(12.dp))
             Column {
                 Text(strings.homeTemp, style = MaterialTheme.typography.labelMedium)
