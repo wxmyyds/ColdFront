@@ -137,7 +137,7 @@ class CoolerBleManager(private val context: Context) {
         val name = record.deviceName ?: result.device.safeName()
         val msdSparse = record.manufacturerSpecificData
         val msd = buildList {
-            for (i in 0 until msdSparse.size) {
+            for (i in 0 until msdSparse.size()) {
                 val key = msdSparse.keyAt(i)
                 add(key to (msdSparse.valueAt(i)?.toHex() ?: ""))
             }
