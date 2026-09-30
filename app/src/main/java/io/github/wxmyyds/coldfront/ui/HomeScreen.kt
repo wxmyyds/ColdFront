@@ -89,9 +89,16 @@ private fun ConnectedContent(vm: CoolerViewModel, state: io.github.wxmyyds.coldf
             modifier = Modifier.padding(20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (type == io.github.wxmyyds.coldfront.domain.CoolerDeviceType.JACKET_8_PRO) {
+            val deviceImage = when (type) {
+                io.github.wxmyyds.coldfront.domain.CoolerDeviceType.JACKET_8_PRO ->
+                    io.github.wxmyyds.coldfront.R.drawable.img_cooler_8pro
+                io.github.wxmyyds.coldfront.domain.CoolerDeviceType.JACKET_4 ->
+                    io.github.wxmyyds.coldfront.R.drawable.img_cooler_4pro
+                else -> 0
+            }
+            if (deviceImage != 0) {
                 Image(
-                    painter = painterResource(io.github.wxmyyds.coldfront.R.drawable.img_cooler_8pro),
+                    painter = painterResource(deviceImage),
                     contentDescription = null,
                     modifier = Modifier.size(56.dp),
                 )

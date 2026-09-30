@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -98,9 +99,16 @@ private fun SavedDeviceCard(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (profile.deviceType == io.github.wxmyyds.coldfront.domain.CoolerDeviceType.JACKET_8_PRO) {
+            val deviceImage = when (profile.deviceType) {
+                io.github.wxmyyds.coldfront.domain.CoolerDeviceType.JACKET_8_PRO ->
+                    io.github.wxmyyds.coldfront.R.drawable.img_cooler_8pro
+                io.github.wxmyyds.coldfront.domain.CoolerDeviceType.JACKET_4 ->
+                    io.github.wxmyyds.coldfront.R.drawable.img_cooler_4pro
+                else -> 0
+            }
+            if (deviceImage != 0) {
                 Image(
-                    painter = painterResource(io.github.wxmyyds.coldfront.R.drawable.img_cooler_8pro),
+                    painter = painterResource(deviceImage),
                     contentDescription = profile.displayName,
                     modifier = Modifier.size(48.dp),
                 )
