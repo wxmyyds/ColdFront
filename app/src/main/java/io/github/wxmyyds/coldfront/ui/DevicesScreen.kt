@@ -122,6 +122,7 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
  * 行本身不可点，操作全部放在 trailing 的图标按钮/按钮里——
  * 避开规范禁止的「可操作面上再放操作」。
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class) // LoadingIndicator 在 alpha28 仍为实验 API
 @Composable
 private fun SavedDeviceCard(
     strings: AppStrings,
