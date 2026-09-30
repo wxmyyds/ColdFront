@@ -180,22 +180,54 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
                     }
 
                     // ── 灯效选择(即点即发) ──
-                    // 一行 + 下拉菜单：5 行单选把页面拉得太长，而灯效名本身不需要常驻展示。
-                    SegmentedDropdownRow(
-                        title = strings.rgbEffect,
-                        options = LightEffect.selectable,
-                        selected = effect,
-                        onSelect = { e ->
-                            effect = e
-                            vm.setRGB(RGBConfig(e, r, g, b))
-                            applied = true
-                        },
-                        optionLabel = { effectLabel(it, strings) },
-                        leadingContent = { RowIcon(effectIcon(effect)) },
-                    )
+                    // 选「呼吸」时沿用当前的呼吸变体；从别的灯效切过来默认全彩。
+                    val breathVariant =
+                        if (effect == LightEffect.BREATH_SINGLE) LightEffect.BREATH_SINGLE
+                        else LightEffect.BREATH_FULLCOLOR
+                    val applyEffect: (LightEffect) -> Unit = { e ->
+                        effect = e
+                        vm.setRGB(RGBConfig(e, r, g, b))
+                        applied = true
+                    }
+                    SegmentedGroup {
+                        item(key = "effect") {
+                            SegmentedDropdownRow(
+                                title = strings.rgbEffect,
+                                options = LightEffect.selectable,
+                                // 下拉里呼吸只有一个入口（BREATH_FULLCOLOR），具体变体由下一行决定
+                                selected = effect.uiEffect,
+                                onSelect = { e ->
+                                    applyEffect(
+                                        if (e == LightEffect.BREATH_FULLCOLOR) breathVariant else e
+                                    )
+                                },
+                                optionLabel = { effectLabel(it, strings) },
+                                leadingContent = { RowIcon(effectIcon(effect)) },
+                            )
+                        }
+                        // 「呼吸」底下挂一个子选项：单色（0x03，带颜色字节） / 全彩（0x02，不带）
+                        item(
+                            key = "breathMode",
+                            visible = effect.uiEffect == LightEffect.BREATH_FULLCOLOR,
+                        ) {
+                            SegmentedDropdownRow(
+                                title = strings.rgbBreathMode,
+                                options = listOf(
+                                    LightEffect.BREATH_SINGLE,
+                                    LightEffect.BREATH_FULLCOLOR,
+                                ),
+                                selected = effect,
+                                onSelect = applyEffect,
+                                optionLabel = {
+                                    if (it == LightEffect.BREATH_SINGLE) strings.rgbBreathSingle
+                                    else strings.rgbBreathFull
+                                },
+                            )
+                        }
+                    }
 
-                    // ── 颜色(只有常亮带颜色字节；呼吸/炫彩/关闭按协议置零) ──
-                    if (effect == LightEffect.ALWAYS_BRIGHT) {
+                    // ── 颜色(单色呼吸与常亮才带颜色字节；全彩呼吸/炫彩/关闭按协议置零) ──
+                    if (effect == LightEffect.BREATH_SINGLE || effect == LightEffect.ALWAYS_BRIGHT) {
                         val applyColor = Color(r / 255f, g / 255f, b / 255f)
 
                         SegmentedGroup(title = strings.rgbPalette) {

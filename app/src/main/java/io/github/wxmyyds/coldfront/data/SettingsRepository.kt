@@ -48,12 +48,19 @@ class SettingsRepository(context: Context) {
     /** 深色模式:system / light / dark */
     val darkMode: Flow<String> = dataStore.data.map { it[KEY_DARK_MODE] ?: "system" }
 
+    /** 界面语言:system / zh / en */
+    val appLanguage: Flow<String> = dataStore.data.map { it[KEY_APP_LANGUAGE] ?: "system" }
+
     suspend fun setDynamicColor(enabled: Boolean) {
         dataStore.edit { it[KEY_DYNAMIC_COLOR] = enabled }
     }
 
     suspend fun setDarkMode(mode: String) {
         dataStore.edit { it[KEY_DARK_MODE] = mode }
+    }
+
+    suspend fun setAppLanguage(language: String) {
+        dataStore.edit { it[KEY_APP_LANGUAGE] = language }
     }
 
     // —— 温控阈值 ——
@@ -85,6 +92,7 @@ class SettingsRepository(context: Context) {
     companion object {
         private val KEY_DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         private val KEY_DARK_MODE = stringPreferencesKey("dark_mode")
+        private val KEY_APP_LANGUAGE = stringPreferencesKey("app_language")
         private val KEY_LOW_TEMP = intPreferencesKey("low_temp")
         private val KEY_MID_TEMP = intPreferencesKey("mid_temp")
         private val KEY_HIGH_TEMP = intPreferencesKey("high_temp")

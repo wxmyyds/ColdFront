@@ -64,9 +64,10 @@ interface AppStrings {
     val settingsDynamicColor: String
     val settingsDynamicColorDesc: String
     val settingsThemeMode: String
-    val settingsDarkModeSystem: String
+    val settingsFollowSystem: String
     val settingsDarkModeLight: String
     val settingsDarkModeDark: String
+    val settingsLanguage: String
     val settingsAbout: String
     val settingsAboutDesc: String
 
@@ -136,6 +137,9 @@ interface AppStrings {
     // —— RGB ——
     val rgbTitle: String
     val rgbEffect: String
+    val rgbBreathMode: String
+    val rgbBreathSingle: String
+    val rgbBreathFull: String
     val rgbColor: String
     val rgbRed: String
     val rgbGreen: String
@@ -246,9 +250,10 @@ object ZhStrings : AppStrings {
     override val settingsDynamicColor = "动态取色"
     override val settingsDynamicColorDesc = "跟随系统壁纸配色(Material You)"
     override val settingsThemeMode = "主题模式"
-    override val settingsDarkModeSystem = "跟随系统"
+    override val settingsFollowSystem = "跟随系统"
     override val settingsDarkModeLight = "浅色"
     override val settingsDarkModeDark = "深色"
+    override val settingsLanguage = "语言"
     override val settingsAbout = "关于"
     override val settingsAboutDesc = "ColdFront · 红魔散热器控制 · v1.0"
 
@@ -313,6 +318,9 @@ object ZhStrings : AppStrings {
 
     override val rgbTitle = "RGB 灯效"
     override val rgbEffect = "灯效模式"
+    override val rgbBreathMode = "呼吸颜色"
+    override val rgbBreathSingle = "单色"
+    override val rgbBreathFull = "全彩"
     override val rgbColor = "颜色"
     override val rgbRed = "红"
     override val rgbGreen = "绿"
@@ -419,9 +427,10 @@ object EnStrings : AppStrings {
     override val settingsDynamicColor = "Dynamic color"
     override val settingsDynamicColorDesc = "Follow system wallpaper (Material You)"
     override val settingsThemeMode = "Theme mode"
-    override val settingsDarkModeSystem = "Follow system"
+    override val settingsFollowSystem = "Follow system"
     override val settingsDarkModeLight = "Light"
     override val settingsDarkModeDark = "Dark"
+    override val settingsLanguage = "Language"
     override val settingsAbout = "About"
     override val settingsAboutDesc = "ColdFront · Redmagic cooler control · v1.0"
 
@@ -486,6 +495,9 @@ object EnStrings : AppStrings {
 
     override val rgbTitle = "RGB Lighting"
     override val rgbEffect = "Effect"
+    override val rgbBreathMode = "Breath color"
+    override val rgbBreathSingle = "Single color"
+    override val rgbBreathFull = "Full color"
     override val rgbColor = "Color"
     override val rgbRed = "R"
     override val rgbGreen = "G"
@@ -543,11 +555,21 @@ object EnStrings : AppStrings {
     override val permNotificationMsg = "Notifications are required to keep the foreground service running."
 }
 
-/** 当前 locale 对应的字符串表 */
-fun stringsFor(locale: Locale): AppStrings =
-    if (locale.language.equals("zh", ignoreCase = true)) ZhStrings else EnStrings
+/**
+ * 当前生效的字符串表。
+ *
+ * @param override 用户在设置里选的语言："zh" / "en" 强制，其余（包括 "system"）跟随系统 locale。
+ * 工程文案全在这张 Kotlin 表里、没有 strings.xml，所以覆盖语言不需要 per-app locale，
+ * 换表即可。（副作用：系统级文案如权限弹框仍跟随系统语言。）
+ */
+fun stringsFor(locale: Locale, override: String? = null): AppStrings = when (override) {
+    "zh" -> ZhStrings
+    "en" -> EnStrings
+    else -> if (locale.language.equals("zh", ignoreCase = true)) ZhStrings else EnStrings
+}
 
 val LocalStrings = staticCompositionLocalOf<AppStrings> { error("AppStrings not provided") }
 
 @Composable
-fun rememberStrings(): AppStrings = stringsFor(Locale.getDefault())
+fun rememberStrings(override: String? = null): AppStrings =
+    stringsFor(Locale.getDefault(), override)

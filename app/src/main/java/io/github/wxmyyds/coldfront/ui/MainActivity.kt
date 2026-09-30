@@ -62,9 +62,11 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun AppContent(vm: CoolerViewModel) {
-        val strings = rememberStrings()
         val dynamicColor by vm.dynamicColor.collectAsStateWithLifecycle()
         val darkMode by vm.darkMode.collectAsStateWithLifecycle()
+        val appLanguage by vm.appLanguage.collectAsStateWithLifecycle()
+        // 语言覆盖必须在取文案之前生效
+        val strings = rememberStrings(override = appLanguage)
         val dark = when (darkMode) {
             "light" -> false
             "dark" -> true

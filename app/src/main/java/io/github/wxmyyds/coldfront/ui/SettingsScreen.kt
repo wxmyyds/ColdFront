@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -38,9 +39,10 @@ import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 
 /**
  * 设置页(MD3E 分段选项列表):
- * - 外观组 = 1 个开关行 + 1 个「主题模式」下拉行；
- *   三档主题模式收成一行是因为选项本身没有需要常驻展示的信息，铺成三行只是把页面拉长。
- * - 关于组是独立单行(count = 1 → 四角 16dp)。
+ * - 外观组 = 动态取色开关行 + 「主题模式」下拉行；
+ * - 通用组 = 「语言」下拉行 + 关于行。
+ * 三档主题、三档语言都收成一行 + 下拉菜单：选项本身没有需要常驻展示的信息，
+ * 铺成多行只是把页面拉长。
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -48,16 +50,25 @@ fun SettingsScreen(vm: CoolerViewModel) {
     val strings = LocalStrings.current
     val dynamicColor by vm.dynamicColor.collectAsStateWithLifecycle()
     val darkMode by vm.darkMode.collectAsStateWithLifecycle()
+    val appLanguage by vm.appLanguage.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
     // (存储值, 展示文案)；MainActivity 按同一套 "system"/"light"/"dark" 解析
     val themeOptions = listOf(
-        "system" to strings.settingsDarkModeSystem,
+        "system" to strings.settingsFollowSystem,
         "light" to strings.settingsDarkModeLight,
         "dark" to strings.settingsDarkModeDark,
     )
+    // 语言选项用自称(endonym)：不管当前界面是什么语言，用户都能认出自己的语言，
+    // 所以 "中文"/"English" 故意不进双语表。
+    val languageOptions = listOf(
+        "system" to strings.settingsFollowSystem,
+        "zh" to "中文",
+        "en" to "English",
+    )
     // 存储里出现意外值时按「跟随系统」呈现，避免下拉行显示空白
     val themeMode = if (themeOptions.any { it.first == darkMode }) darkMode else "system"
+    val language = if (languageOptions.any { it.first == appLanguage }) appLanguage else "system"
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -103,6 +114,18 @@ fun SettingsScreen(vm: CoolerViewModel) {
             }
 
             SegmentedGroup {
+                item(key = "language") {
+                    SegmentedDropdownRow(
+                        title = strings.settingsLanguage,
+                        options = languageOptions.map { it.first },
+                        selected = language,
+                        onSelect = { vm.setAppLanguage(it) },
+                        optionLabel = { value ->
+                            languageOptions.firstOrNull { it.first == value }?.second ?: value
+                        },
+                        leadingContent = { RowIcon(Icons.Filled.Language) },
+                    )
+                }
                 item(key = "about") {
                     SegmentedRow(
                         title = strings.settingsAbout,
