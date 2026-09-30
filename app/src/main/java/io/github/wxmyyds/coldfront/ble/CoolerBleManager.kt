@@ -1004,7 +1004,7 @@ class CoolerBleManager(private val context: Context) {
             if (signed in -40..80) return signed.toFloat()
         }
         // 兜底:首字节按有符号处理
-        return data[0].toInt().toFloat().takeIf { it in -40..80 }
+        return data[0].toInt().toFloat().takeIf { it in -40f..80f }
     }
 
     private fun BluetoothDevice.safeName(): String? =
