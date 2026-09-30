@@ -157,18 +157,17 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
     TempHero(state)
 
     // 三个带说明的开关:官方 ListItem + 色调图标容器
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize(
-                spring(
-                    dampingRatio = Spring.DampingRatioLowBouncy,
-                    stiffness = Spring.StiffnessMediumLow,
-                )
-            ),
-        shape = MaterialTheme.shapes.large,
+    // 每个开关独立成卡,卡间留间隔(参考图的分组语言)
+    Column(
+        modifier = Modifier.animateContentSize(
+            spring(
+                dampingRatio = Spring.DampingRatioLowBouncy,
+                stiffness = Spring.StiffnessMediumLow,
+            )
+        ),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Column {
+        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
             ControlItem(
                 icon = Icons.Filled.AutoMode,
                 title = strings.homeSmart,
@@ -177,6 +176,8 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
                 enabled = state.coolingOn,
                 onChange = { vm.setSmart(it) },
             )
+        }
+        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
             ControlItem(
                 icon = Icons.Filled.Bolt,
                 title = strings.homeBoost,
@@ -185,6 +186,8 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
                 enabled = state.coolingOn,
                 onChange = { vm.setBoost(it) },
             )
+        }
+        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
             ControlItem(
                 icon = Icons.Filled.Shield,
                 title = strings.homeOvercold,

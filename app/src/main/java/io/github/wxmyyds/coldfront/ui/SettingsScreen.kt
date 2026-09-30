@@ -21,7 +21,6 @@ import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.Card
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
@@ -74,17 +73,17 @@ fun SettingsScreen(vm: CoolerViewModel) {
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             // ── 外观 ──
+            Text(
+                strings.settingsTheme,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = 8.dp),
+            )
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = MaterialTheme.shapes.large,
             ) {
                 Column {
-                    Text(
-                        strings.settingsTheme,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp),
-                    )
                     SettingItem(
                         icon = Icons.Filled.Palette,
                         title = strings.settingsDynamicColor,
@@ -96,7 +95,13 @@ fun SettingsScreen(vm: CoolerViewModel) {
                             )
                         },
                     )
-                    HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                }
+            }
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.large,
+            ) {
+                Column {
                     SettingItem(
                         icon = Icons.Filled.DarkMode,
                         title = strings.settingsDarkMode,
