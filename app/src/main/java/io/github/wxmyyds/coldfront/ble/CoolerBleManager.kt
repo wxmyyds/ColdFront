@@ -21,6 +21,7 @@ import io.github.wxmyyds.coldfront.domain.CoolerLiveState
 import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.domain.FanMode
 import io.github.wxmyyds.coldfront.domain.RGBConfig
+import io.github.wxmyyds.coldfront.ble.BleScanDiagnostic
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -64,6 +65,10 @@ class CoolerBleManager(private val context: Context) {
     private val _discoveredDevices = MutableStateFlow<List<CoolerDevice>>(emptyList())
     val discoveredDevices: StateFlow<List<CoolerDevice>> = _discoveredDevices.asStateFlow()
 
+    /** 诊断模式：未过滤的全部原始扫描结果(按地址去重,保留最新) */
+    private val _rawDevices = MutableStateFlow<List<BleScanDiagnostic>>(emptyList())
+    val rawDevices: StateFlow<List<BleScanDiagnostic>> = _rawDevices.asStateFlow()
+
     val isBluetoothEnabled: Boolean get() = bluetoothAdapter?.isEnabled == true
 
     // ──────────────────────────── 扫描 ────────────────────────────
@@ -77,6 +82,7 @@ class CoolerBleManager(private val context: Context) {
             return
         }
         _discoveredDevices.value = emptyList()
+        _rawDevices.value = emptyList()
         scanning = true
         _state.update { it.copy(connection = ConnectionState.SCANNING) }
         try {
@@ -108,6 +114,8 @@ class CoolerBleManager(private val context: Context) {
     private val scanCallback = object : ScanCallback() {
         @SuppressLint("MissingPermission")
         override fun onScanResult(callbackType: Int, result: ScanResult) {
+            // 诊断:先记录原始广播(不做任何过滤)
+            recordRaw(result)
             val device = identify(result) ?: return
             _discoveredDevices.update { list ->
                 if (list.any { it.address == device.address }) {
@@ -119,6 +127,46 @@ class CoolerBleManager(private val context: Context) {
         override fun onScanFailed(errorCode: Int) {
             Log.e(TAG, "扫描失败 errorCode=$errorCode")
             scanning = false
+        }
+    }
+
+    /** 记录原始扫描结果(诊断用,不过滤) */
+    @SuppressLint("MissingPermission")
+    private fun recordRaw(result: ScanResult) {
+        val record = result.scanRecord ?: return
+        val name = record.deviceName ?: result.device.safeName()
+        val msd = buildList {
+            for (i in 0 until record.manufacturerSpecificData.size()) {
+                val key = record.manufacturerSpecificData.keyAt(i)
+                add(key to (record.manufacturerSpecificData.valueAt(i)?.toHex() ?: ""))
+            }
+        }
+        val serviceData = buildList {
+            for (i in 0 until record.serviceData.size()) {
+                val key = record.serviceData.keyAt(i)
+                add(key.toString() to (record.serviceData.valueAt(i)?.toHex() ?: ""))
+            }
+        }
+        val entry = BleScanDiagnostic(
+            address = result.device.address,
+            name = name,
+            rssi = result.rssi,
+            msd = msd,
+            serviceUuids = record.serviceUuids?.map { it.toString() } ?: emptyList(),
+            serviceData = serviceData,
+            bluetoothDevice = result.device,
+        )
+        if (msd.isNotEmpty() || entry.serviceUuids.isNotEmpty() || entry.serviceData.isNotEmpty()) {
+            Log.d(
+                "BleDiag",
+                "${entry.address} name=${entry.name} rssi=${entry.rssi} " +
+                    "msd=${entry.msd} uuids=${entry.serviceUuids} svcData=${entry.serviceData}",
+            )
+        }
+        _rawDevices.update { list ->
+            (list.filterNot { it.address == entry.address } + entry)
+                .sortedByDescending { it.rssi }
+                .take(120)
         }
     }
 
@@ -179,6 +227,22 @@ class CoolerBleManager(private val context: Context) {
             )
         }
         gatt = device.bluetoothDevice.connectGatt(context, false, gattCallback)
+    }
+
+    /** 诊断模式:手动指定型号连接(不做识别检查) */
+    @SuppressLint("MissingPermission")
+    fun connectRaw(entry: BleScanDiagnostic, type: CoolerDeviceType) {
+        val btDevice = entry.bluetoothDevice
+            ?: bluetoothAdapter?.getRemoteDevice(entry.address)
+            ?: return
+        connect(
+            CoolerDevice(
+                bluetoothDevice = btDevice,
+                deviceType = type,
+                rssi = entry.rssi,
+                matchedByName = true,
+            )
+        )
     }
 
     /** 按 MAC + 型号直连(用于自动模式恢复连接) */

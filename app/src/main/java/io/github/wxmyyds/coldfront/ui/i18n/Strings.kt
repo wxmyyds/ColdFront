@@ -65,6 +65,19 @@ interface AppStrings {
     val scanPermissionNeeded: String
     val scanGrantPermission: String
 
+    // —— 诊断模式 ——
+    val diagToggle: String
+    val diagHint: String
+    val diagNoName: String
+    val diagNoSignal: String
+    val diagNoSignalHint: String
+    val diagMsd: String
+    val diagServiceData: String
+    val diagServiceUuids: String
+    val diagConnectAs: String
+    val diagCancel: String
+    val diagRawCount: String
+
     // —— RGB ——
     val rgbTitle: String
     val rgbEffect: String
@@ -179,6 +192,18 @@ object ZhStrings : AppStrings {
     override val scanPermissionNeeded = "需要权限"
     override val scanGrantPermission = "授予权限"
 
+    override val diagToggle = "显示全部设备（诊断）"
+    override val diagHint = "不过滤识别，显示周围全部 BLE 原始广播：MSD/UUID。散热器广播的内容可直接读出，也可手动选型号连接。"
+    override val diagNoName = "（无名设备）"
+    override val diagNoSignal = "一个广播都没收到"
+    override val diagNoSignalHint = "检查：①散热器已通电（插电/磁吸亮灯） ②系统定位服务已开启（旧系统扫描依赖定位） ③蓝牙已开启 ④距离足够近"
+    override val diagMsd = "厂商数据"
+    override val diagServiceData = "服务数据"
+    override val diagServiceUuids = "服务 UUID"
+    override val diagConnectAs = "选择型号连接"
+    override val diagCancel = "取消"
+    override val diagRawCount = "共 %d 个设备"
+
     override val rgbTitle = "RGB 灯效"
     override val rgbEffect = "灯效模式"
     override val rgbColor = "颜色"
@@ -287,6 +312,18 @@ object EnStrings : AppStrings {
     override val scanEnableBluetooth = "Enable Bluetooth"
     override val scanPermissionNeeded = "Permissions required"
     override val scanGrantPermission = "Grant permission"
+
+    override val diagToggle = "Show all devices (diagnostics)"
+    override val diagHint = "No identification filtering — shows every raw BLE advertisement around you: MSD/UUID. Read what your cooler actually broadcasts, or connect by manually picking its model."
+    override val diagNoName = "(unnamed)"
+    override val diagNoSignal = "Not a single advertisement received"
+    override val diagNoSignalHint = "Check: ① cooler is powered (plugged in / magnetically attached with LED on) ② system Location service is ON (scanning depends on it on older Android) ③ Bluetooth is ON ④ stay close"
+    override val diagMsd = "Manufacturer data"
+    override val diagServiceData = "Service data"
+    override val diagServiceUuids = "Service UUIDs"
+    override val diagConnectAs = "Connect as model…"
+    override val diagCancel = "Cancel"
+    override val diagRawCount = "%d devices total"
 
     override val rgbTitle = "RGB Lighting"
     override val rgbEffect = "Effect"

@@ -10,6 +10,7 @@ import io.github.wxmyyds.coldfront.data.ProfileRepository
 import io.github.wxmyyds.coldfront.data.SettingsRepository
 import io.github.wxmyyds.coldfront.data.ThermalThresholds
 import io.github.wxmyyds.coldfront.domain.CoolerDevice
+import io.github.wxmyyds.coldfront.ble.BleScanDiagnostic
 import io.github.wxmyyds.coldfront.domain.CoolerProfile
 import io.github.wxmyyds.coldfront.domain.FanMode
 import io.github.wxmyyds.coldfront.domain.RGBConfig
@@ -38,6 +39,9 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
 
     val discoveredDevices: StateFlow<List<CoolerDevice>> = ble.discoveredDevices
 
+    /** 诊断模式:全部未过滤扫描结果 */
+    val rawDevices: StateFlow<List<BleScanDiagnostic>> = ble.rawDevices
+
     val profiles: StateFlow<List<CoolerProfile>> =
         profileRepo.profiles.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -54,6 +58,9 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun startScan() = ble.startScan()
     fun stopScan() = ble.stopScan()
+
+    /** 诊断模式:手动指定型号连接 */
+    fun connectRaw(entry: BleScanDiagnostic, type: CoolerDeviceType) = ble.connectRaw(entry, type)
 
     fun connect(device: CoolerDevice) {
         viewModelScope.launch {
