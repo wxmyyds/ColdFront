@@ -2,8 +2,6 @@ package io.github.wxmyyds.coldfront.ui
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -57,7 +55,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.wxmyyds.coldfront.domain.ConnectionState
@@ -67,6 +65,7 @@ import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
 import io.github.wxmyyds.coldfront.ui.component.SegmentedSwitchRow
 import io.github.wxmyyds.coldfront.ui.i18n.AppStrings
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
+import io.github.wxmyyds.coldfront.ui.theme.EmphasizedTypography
 import kotlin.math.roundToInt
 
 /**
@@ -137,7 +136,7 @@ fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 ConnectedContent(vm, state)
-                Spacer(Modifier.height(72.dp)) // 给 FAB 让位
+                Spacer(Modifier.height(FabClearance))
             }
         } else {
             // 未连接/连接中/失败:内容垂直居中,不贴顶
@@ -244,8 +243,7 @@ private fun TempHero(state: CoolerLiveState) {
                     )
                     Text(
                         state.temperatureText,
-                        style = MaterialTheme.typography.displayLarge,
-                        fontWeight = FontWeight.SemiBold,
+                        style = EmphasizedTypography.displayLarge,
                         color = onContainer,
                     )
                 }
@@ -267,7 +265,14 @@ private fun TempHero(state: CoolerLiveState) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 MetricPill(Icons.Filled.Speed, "${state.fanRpm ?: "--"} RPM", onContainer)
                 MetricPill(Icons.Filled.Bolt, "${state.powerW ?: "--"} W", onContainer)
-                MetricPill(Icons.Filled.Bluetooth, strings.homeSignal, onContainer)
+                // RSSI 由 CoolerBleManager 在发起连接时写入 liveState（非持续刷新）；
+                // 0 = 未取到 → 显示占位符，与旁边两粒的 "--" 一致。
+                // 旧写法只显示“信号”两个字、不带数值，信息量为零。
+                MetricPill(
+                    Icons.Filled.Bluetooth,
+                    "${if (state.rssi != 0) state.rssi.toString() else "--"} dBm",
+                    onContainer,
+                )
             }
         }
     }
@@ -336,12 +341,8 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .animateContentSize(
-                spring(
-                    dampingRatio = Spring.DampingRatioLowBouncy,
-                    stiffness = Spring.StiffnessMediumLow,
-                )
-            ),
+            // 尺寸/展开类动画统一从主题取 spec，不在业务代码里硬编码 spring
+            .animateContentSize(MaterialTheme.motionScheme.defaultSpatialSpec<IntSize>()),
         shape = MaterialTheme.shapes.large,
     ) {
         Column(
@@ -356,8 +357,7 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
                 Text(
                     if (isGear) strings.homeLevelGear.format(levelToGear(state.fanPercent))
                     else strings.homeLevelPercent.format(state.fanPercent),
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.SemiBold,
+                    style = EmphasizedTypography.headlineLarge,
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
@@ -423,8 +423,7 @@ private fun FailedContent(strings: AppStrings, onAddDevice: () -> Unit) {
         )
         Text(
             strings.homeConnectionFailed,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.SemiBold,
+            style = EmphasizedTypography.headlineSmall,
         )
         Text(
             strings.homeRetryHint,
@@ -464,8 +463,7 @@ private fun NotConnectedContent(strings: AppStrings, onAddDevice: () -> Unit) {
         Spacer(Modifier.height(8.dp))
         Text(
             strings.homeNotConnected,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.SemiBold,
+            style = EmphasizedTypography.headlineSmall,
         )
         Text(
             strings.homeNoDeviceHint,
@@ -480,6 +478,9 @@ private fun NotConnectedContent(strings: AppStrings, onAddDevice: () -> Unit) {
 }
 
 // ───────────────────── 工具 ─────────────────────
+
+/** 滚动内容底部给 FAB 让位：FAB 56dp + Scaffold 默认 16dp 边距。 */
+private val FabClearance = 72.dp
 
 /** 8 Pro:百分比 → 1..8 档 */
 private fun levelToGear(percent: Int): Int = ((percent + 12) / 13f).toInt().coerceIn(1, 8)

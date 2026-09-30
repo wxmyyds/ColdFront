@@ -6,7 +6,6 @@ import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.expressiveLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
@@ -25,7 +24,11 @@ fun RedmagicCoolerTheme(
     val colorScheme = if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
     } else {
-        if (darkTheme) DarkColorScheme else expressiveLightColorScheme()
+        // 品牌冷蓝（种子 #0288D1）成对使用。此前浅色走 expressiveLightColorScheme()，
+        // 会退回官方默认紫，而深色仍是自建冷蓝 —— Color.kt 里的 LightColorScheme
+        // 定义了却从未被引用，关掉动态取色后品牌割裂。
+        // alpha28 没有 expressiveDarkColorScheme()，深色本来就只能自建，故两侧统一。
+        if (darkTheme) DarkColorScheme else LightColorScheme
     }
     MaterialExpressiveTheme(
         colorScheme = colorScheme,

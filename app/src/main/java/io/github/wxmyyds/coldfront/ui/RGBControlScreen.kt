@@ -7,7 +7,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.WindowInsets
@@ -68,7 +67,6 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -145,104 +143,106 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
 
-        when {
-            !state.isConnected -> NotConnectedCard(strings, onConnect)
-            state.deviceType?.supportsRgb == false -> NotSupportedCard(strings)
-            else -> {
-                // ── 动态预览卡 ──
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.extraLarge,
-                    colors = CardDefaults.cardColors(containerColor = PreviewStage),
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().height(160.dp).padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+            when {
+                !state.isConnected -> NotConnectedCard(strings, onConnect)
+                state.deviceType?.supportsRgb == false -> NotSupportedCard(strings)
+                else -> {
+                    // ── 动态预览卡 ──
+                    // extraLarge(28dp) 是全应用唯一的强调形状（战术 1：故意打破周围形状语言），
+                    // 其余卡片走默认 medium(12dp)、列表行 large(16dp)，不再出现第三种圆角。
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.extraLarge,
+                        colors = CardDefaults.cardColors(containerColor = PreviewStage),
                     ) {
-                        LightPreview(effect, r, g, b, Modifier.weight(1f).fillMaxSize())
-                        Spacer(Modifier.width(16.dp))
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CoolerArt(
-                                state.deviceType,
-                                modifier = Modifier.size(96.dp),
-                                iconTint = MaterialTheme.colorScheme.outline,
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                effectLabel(effect, strings),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = PreviewStageContent,
-                            )
-                        }
-                    }
-                }
-
-                // ── 灯效选择(即点即发) ──
-                EffectRows(
-                    effect = effect,
-                    onEffect = { e ->
-                        effect = e
-                        vm.setRGB(RGBConfig(e, r, g, b))
-                        applied = true
-                    },
-                )
-
-                // ── 颜色(仅单色系灯效需要) ──
-                if (effect == LightEffect.BREATH_SINGLE || effect == LightEffect.ALWAYS_BRIGHT) {
-                    val applyColor = Color(r / 255f, g / 255f, b / 255f)
-
-                    SegmentedGroup(title = strings.rgbPalette) {
-                        item(key = "palette") {
-                            SegmentedContainer {
-                                PaletteRow(r, g, b) { pr, pg, pb ->
-                                    r = pr; g = pg; b = pb
-                                }
+                        Row(
+                            modifier = Modifier.fillMaxWidth().height(160.dp).padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            LightPreview(effect, r, g, b, Modifier.weight(1f).fillMaxSize())
+                            Spacer(Modifier.width(16.dp))
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CoolerArt(
+                                    state.deviceType,
+                                    modifier = Modifier.size(96.dp),
+                                    iconTint = MaterialTheme.colorScheme.outline,
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    effectLabel(effect, strings),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = PreviewStageContent,
+                                )
                             }
                         }
                     }
 
-                    SegmentedGroup(title = strings.rgbCustomColor) {
-                        item(key = "sliders") {
-                            SegmentedContainer {
-                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    ColorSlider(strings.rgbRed, r, Color.Red) { r = it }
-                                    ColorSlider(strings.rgbGreen, g, Color.Green) { g = it }
-                                    ColorSlider(strings.rgbBlue, b, Color.Blue) { b = it }
-                                }
-                            }
-                        }
-                    }
-
-                    Button(
-                        onClick = {
-                            vm.setRGB(RGBConfig(effect, r, g, b))
+                    // ── 灯效选择(即点即发) ──
+                    EffectRows(
+                        effect = effect,
+                        onEffect = { e ->
+                            effect = e
+                            vm.setRGB(RGBConfig(e, r, g, b))
                             applied = true
                         },
-                        shapes = ButtonDefaults.shapes(),
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = applyColor,
-                            // 底色是用户选的实际 RGB，contentColor 必须按亮度算：
-                            // 默认 onPrimary 近白，选白/黄预设时会白字压白底。
-                            // 0.179 是黑/白文字对比度相等的相对亮度分界点。
-                            contentColor = if (applyColor.luminance() > 0.179f) {
-                                Color.Black
-                            } else {
-                                Color.White
+                    )
+
+                    // ── 颜色(仅单色系灯效需要) ──
+                    if (effect == LightEffect.BREATH_SINGLE || effect == LightEffect.ALWAYS_BRIGHT) {
+                        val applyColor = Color(r / 255f, g / 255f, b / 255f)
+
+                        SegmentedGroup(title = strings.rgbPalette) {
+                            item(key = "palette") {
+                                SegmentedContainer {
+                                    PaletteRow(r, g, b) { pr, pg, pb ->
+                                        r = pr; g = pg; b = pb
+                                    }
+                                }
+                            }
+                        }
+
+                        SegmentedGroup(title = strings.rgbCustomColor) {
+                            item(key = "sliders") {
+                                SegmentedContainer {
+                                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        ColorSlider(strings.rgbRed, r, Color.Red) { r = it }
+                                        ColorSlider(strings.rgbGreen, g, Color.Green) { g = it }
+                                        ColorSlider(strings.rgbBlue, b, Color.Blue) { b = it }
+                                    }
+                                }
+                            }
+                        }
+
+                        Button(
+                            onClick = {
+                                vm.setRGB(RGBConfig(effect, r, g, b))
+                                applied = true
                             },
-                        ),
-                    ) {
-                        if (applied) {
-                            Icon(Icons.Filled.Check, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text(strings.rgbSynced)
-                        } else {
-                            Text(strings.rgbApply)
+                            shapes = ButtonDefaults.shapes(),
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = applyColor,
+                                // 底色是用户选的实际 RGB，contentColor 必须按亮度算：
+                                // 默认 onPrimary 近白，选白/黄预设时会白字压白底。
+                                // 0.179 是黑/白文字对比度相等的相对亮度分界点。
+                                contentColor = if (applyColor.luminance() > 0.179f) {
+                                    Color.Black
+                                } else {
+                                    Color.White
+                                },
+                            ),
+                        ) {
+                            if (applied) {
+                                Icon(Icons.Filled.Check, contentDescription = null)
+                                Spacer(Modifier.width(8.dp))
+                                Text(strings.rgbSynced)
+                            } else {
+                                Text(strings.rgbApply)
+                            }
                         }
                     }
                 }
             }
-        }
         }
     }
 }

@@ -1,12 +1,11 @@
 package io.github.wxmyyds.coldfront.ui
 
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -40,7 +39,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.wxmyyds.coldfront.domain.ConnectionState
@@ -51,6 +50,7 @@ import io.github.wxmyyds.coldfront.ui.component.SegmentedRowGap
 import io.github.wxmyyds.coldfront.ui.component.segmentedRowShapes
 import io.github.wxmyyds.coldfront.ui.i18n.AppStrings
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
+import io.github.wxmyyds.coldfront.ui.theme.EmphasizedTypography
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -96,9 +96,9 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
                     .padding(inner)
                     .padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(SegmentedRowGap),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                contentPadding = PaddingValues(
                     top = 8.dp,
-                    bottom = 96.dp, // 给 FAB 让位
+                    bottom = FabClearance,
                 ),
             ) {
                 itemsIndexed(profiles, key = { _, profile -> profile.id }) { index, profile ->
@@ -141,7 +141,10 @@ private fun SavedDeviceCard(
     SegmentedRow(
         title = profile.name,
         shapes = segmentedRowShapes(index = index, count = count),
-        modifier = Modifier.animateContentSize(spring(stiffness = Spring.StiffnessMediumLow)),
+        // 尺寸/展开类动画统一从主题取 spec，不在业务代码里硬编码 spring
+        modifier = Modifier.animateContentSize(
+            MaterialTheme.motionScheme.defaultSpatialSpec<IntSize>()
+        ),
         supportingContent = {
             Column {
                 Text(
@@ -223,8 +226,7 @@ private fun EmptyState(strings: AppStrings, modifier: Modifier = Modifier) {
         Spacer(Modifier.height(20.dp))
         Text(
             strings.devicesEmpty,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.SemiBold,
+            style = EmphasizedTypography.headlineSmall,
         )
         Spacer(Modifier.height(8.dp))
         Text(
@@ -235,3 +237,6 @@ private fun EmptyState(strings: AppStrings, modifier: Modifier = Modifier) {
         // 主操作「添加设备」由 Scaffold 的 ExtendedFAB 承担,此处不重复放按钮
     }
 }
+
+/** 列表底部给 ExtendedFAB 让位：FAB 56dp + Scaffold 默认 16dp 边距 + 一行呼吸空间。 */
+private val FabClearance = 96.dp
