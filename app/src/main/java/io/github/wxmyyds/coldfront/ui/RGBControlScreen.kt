@@ -77,8 +77,8 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
 
     var effect by remember { mutableStateOf(LightEffect.ALWAYS_BRIGHT) }
     var r by remember { mutableIntStateOf(0) }
-    var g by remember { mutableIntState(80) }
-    var b by remember { mutableIntState(200) }
+    var g by remember { mutableIntStateOf(80) }
+    var b by remember { mutableIntStateOf(200) }
     var applied by remember { mutableStateOf(false) }
 
     // 首次收到设备灯效回读时同步本地选择
@@ -294,7 +294,7 @@ private fun EffectChips(effect: LightEffect, onEffect: (LightEffect) -> Unit) {
                         modifier = Modifier.weight(1f),
                     )
                 }
-                if (rowEntries.size < 3) Spacer(Modifier.weight(3 - rowEntries.size))
+                if (rowEntries.size < 3) Spacer(Modifier.weight((3 - rowEntries.size).toFloat()))
             }
         }
     }
