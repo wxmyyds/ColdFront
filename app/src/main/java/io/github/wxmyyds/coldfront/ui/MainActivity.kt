@@ -12,7 +12,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -148,8 +150,15 @@ private fun AppNav(vm: CoolerViewModel) {
     )
 
     Scaffold(
+        // 页面灰底延伸到状态栏和手势条后面,消掉白色断层
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
         bottomBar = {
-            NavigationBar(modifier = Modifier.height(64.dp)) {
+            NavigationBar(
+                modifier = Modifier
+                    .height(64.dp)
+                    .navigationBarsPadding(),
+                windowInsets = WindowInsets(0, 0, 0, 0),
+            ) {
                 items.forEach { (route, icon, label) ->
                     val selected = current?.hierarchy?.any { it.route == route } == true
                     NavigationBarItem(
