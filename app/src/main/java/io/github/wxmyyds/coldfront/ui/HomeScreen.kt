@@ -273,10 +273,7 @@ private fun InfoChip(icon: androidx.compose.ui.graphics.vector.ImageVector, text
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun QuickToolbar(vm: CoolerViewModel, state: CoolerLiveState, strings: io.github.wxmyyds.coldfront.ui.i18n.AppStrings) {
-    HorizontalFloatingToolbar(
-        expanded = true,
-        modifier = Modifier.align(Alignment.CenterVertically),
-    ) {
+    HorizontalFloatingToolbar(expanded = true) {
         IconToggleButton(
             checked = state.coolingOn,
             onCheckedChange = { vm.setCooling(it) },

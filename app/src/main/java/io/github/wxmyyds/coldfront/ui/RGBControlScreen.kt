@@ -124,31 +124,11 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
                         LightPreview(effect, r, g, b, Modifier.weight(1f).fillMaxSize())
                         Spacer(Modifier.width(16.dp))
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            val deviceImage = when (state.deviceType) {
-                                CoolerDeviceType.JACKET_8_PRO -> io.github.wxmyyds.coldfront.R.drawable.img_cooler_8pro
-                                CoolerDeviceType.JACKET_4 -> io.github.wxmyyds.coldfront.R.drawable.img_cooler_4pro
-                                CoolerDeviceType.JACKET_6, CoolerDeviceType.JACKET_6_PRO ->
-                                    io.github.wxmyyds.coldfront.R.drawable.img_cooler_6pro
-                                CoolerDeviceType.JACKET_1 -> io.github.wxmyyds.coldfront.R.drawable.img_cooler_dual
-                                CoolerDeviceType.JACKET_2 -> io.github.wxmyyds.coldfront.R.drawable.img_cooler_turbo
-                                CoolerDeviceType.JACKET_3 -> io.github.wxmyyds.coldfront.R.drawable.img_cooler_gen3
-                                CoolerDeviceType.JACKET_5 -> io.github.wxmyyds.coldfront.R.drawable.img_cooler_5pro
-                                else -> 0
-                            }
-                            if (deviceImage != 0) {
-                                Image(
-                                    painter = painterResource(deviceImage),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(96.dp),
-                                )
-                            } else {
-                                Icon(
-                                    Icons.Filled.AcUnit,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.outline,
-                                    modifier = Modifier.size(96.dp),
-                                )
-                            }
+                            CoolerArt(
+                                state.deviceType,
+                                modifier = Modifier.size(96.dp),
+                                iconTint = MaterialTheme.colorScheme.outline,
+                            )
                             Spacer(Modifier.height(8.dp))
                             Text(
                                 effectLabel(effect, strings),
