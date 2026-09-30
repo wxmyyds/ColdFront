@@ -40,6 +40,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import io.github.wxmyyds.coldfront.ble.BlePermissionManager
+import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 import io.github.wxmyyds.coldfront.ui.i18n.rememberStrings
 import io.github.wxmyyds.coldfront.ui.theme.RedmagicCoolerTheme
@@ -117,6 +118,16 @@ private fun AppNav(vm: CoolerViewModel) {
     val strings = LocalStrings.current
     val backStack by nav.currentBackStackEntryAsState()
     val current = backStack?.destination
+
+    // 连接成功后自动离开扫描页,回主页看状态(避免连上后停在列表里像「没反应」)
+    val liveState by vm.liveState.collectAsStateWithLifecycle()
+    LaunchedEffect(liveState.connection) {
+        if (liveState.connection == ConnectionState.CONNECTED &&
+            current?.hierarchy?.any { it.route == Routes.DEVICES } == true
+        ) {
+            nav.navigate(Routes.HOME) { launchSingleTop = true }
+        }
+    }
 
     val items: List<Triple<String, ImageVector, () -> String>> = listOf(
         Triple(Routes.HOME, Icons.Filled.AcUnit) { strings.navHome },

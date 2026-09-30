@@ -24,9 +24,9 @@ enum class LightEffect(val code: Byte, val labelZh: String, val labelEn: String)
  */
 data class RGBConfig(
     val effect: LightEffect,
-    val red: Int,
-    val green: Int,
-    val blue: Int,
+    val red: Int = 255,
+    val green: Int = 0,
+    val blue: Int = 0,
 ) {
     init {
         require(red in 0..255) { "red 越界：$red" }

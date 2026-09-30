@@ -20,20 +20,31 @@ import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
 import io.github.wxmyyds.coldfront.domain.CoolerLiveState
 import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.domain.FanMode
+import io.github.wxmyyds.coldfront.domain.LightEffect
 import io.github.wxmyyds.coldfront.domain.RGBConfig
-import io.github.wxmyyds.coldfront.ble.BleScanDiagnostic
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 
 private const val TAG = "CoolerBleManager"
 private val CCC_DESCRIPTOR_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+
+/** 单个 GATT 操作等待回调的超时(ms) */
+private const val OP_TIMEOUT_MS = 2500L
+/** 两个 GATT 操作之间的最小间隔(ms),给固件喘息 */
+private const val OP_SPACING_MS = 60L
 
 /** 扫描器实时状态（诊断可视化用） */
 data class ScanState(
@@ -48,8 +59,13 @@ data class ScanState(
 /**
  * BLE 控制器:封装扫描、连接、GATT 操作与状态广播。
  *
- * 识别:优先解析厂商数据 MSD(公司 ID 0x08CA)的 [mainType, subType](8 Pro = 5,8),
- * 回退广播名匹配。协议细节见 docs/protocol-8pro.md。
+ * 关键设计——GATT 命令串行队列:
+ * Android BLE 栈同一时刻只允许一个在途操作,并发发起会被静默丢弃。
+ * 所有读/写/描述符写都经 [gattMutex] 串行化,等待对应回调确认(超时重试一次),
+ * 操作间保留间隔。没有这套机制,「连接成功但风扇/温度/灯光全无反应」是必然的。
+ *
+ * 识别:MSD(公司 0x08CA)的 [mainType, subType](8 Pro = 5,8),回退广播名。
+ * 协议详见 docs/protocol-8pro.md。
  */
 class CoolerBleManager(private val context: Context) {
 
@@ -68,6 +84,17 @@ class CoolerBleManager(private val context: Context) {
 
     private var scanning = false
     private var pendingRgb: RGBConfig? = null
+
+    // —— GATT 串行队列 ——
+    private val gattMutex = Mutex()
+    private var writeWaiter: CompletableDeferred<Int>? = null
+    private var readWaiter: CompletableDeferred<Pair<Int, ByteArray>>? = null
+    private var descWaiter: CompletableDeferred<Int>? = null
+
+    // —— 防抖任务 ——
+    private var fanJob: Job? = null
+    private var lightJob: Job? = null
+    private var autoJob: Job? = null
 
     private val _state = MutableStateFlow(CoolerLiveState(connection = ConnectionState.DISCONNECTED))
     val state: StateFlow<CoolerLiveState> = _state.asStateFlow()
@@ -272,7 +299,10 @@ class CoolerBleManager(private val context: Context) {
                 rssi = device.rssi,
             )
         }
-        gatt = device.bluetoothDevice.connectGatt(context, false, gattCallback)
+        // TRANSPORT_LE 显式指定:避免双模手机走 BR/EDR 导致连接失败
+        gatt = device.bluetoothDevice.connectGatt(
+            context, false, gattCallback, BluetoothDevice.TRANSPORT_LE,
+        )
     }
 
     /** 诊断模式:手动指定型号连接(不做识别检查) */
@@ -307,7 +337,7 @@ class CoolerBleManager(private val context: Context) {
                 deviceAddress = macAddress,
             )
         }
-        gatt = device.connectGatt(context, false, gattCallback)
+        gatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
     }
 
     @SuppressLint("MissingPermission")
@@ -318,6 +348,16 @@ class CoolerBleManager(private val context: Context) {
 
     @SuppressLint("MissingPermission")
     private fun disconnectInternal() {
+        // 释放等待中的操作,避免协程悬挂
+        writeWaiter?.complete(BluetoothGatt.GATT_FAILURE)
+        writeWaiter = null
+        readWaiter?.complete(BluetoothGatt.GATT_FAILURE to ByteArray(0))
+        readWaiter = null
+        descWaiter?.complete(BluetoothGatt.GATT_FAILURE)
+        descWaiter = null
+        fanJob?.cancel()
+        lightJob?.cancel()
+        autoJob?.cancel()
         gatt?.let {
             try {
                 it.disconnect()
@@ -336,17 +376,26 @@ class CoolerBleManager(private val context: Context) {
     private val gattCallback = object : BluetoothGattCallback() {
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
+            Log.d(TAG, "onConnectionStateChange status=$status newState=$newState")
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
                     _state.update { it.copy(connection = ConnectionState.DISCOVERING) }
-                    try {
-                        g.discoverServices()
-                    } catch (e: Exception) {
-                        Log.e(TAG, "discoverServices 异常: ${e.message}")
-                        _state.update { it.copy(connection = ConnectionState.FAILED) }
+                    // 等待 300ms 再发现服务:部分固件连接后需要缓冲
+                    scope.launch {
+                        delay(300)
+                        try {
+                            if (!g.discoverServices()) {
+                                Log.e(TAG, "discoverServices 调用失败")
+                                _state.update { it.copy(connection = ConnectionState.FAILED) }
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "discoverServices 异常: ${e.message}")
+                            _state.update { it.copy(connection = ConnectionState.FAILED) }
+                        }
                     }
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
+                    Log.w(TAG, "连接断开 status=$status")
                     _state.update { it.copy(connection = ConnectionState.DISCONNECTED) }
                     disconnectInternal()
                 }
@@ -355,6 +404,7 @@ class CoolerBleManager(private val context: Context) {
 
         @SuppressLint("MissingPermission")
         override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
+            Log.d(TAG, "onServicesDiscovered status=$status")
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 _state.update { it.copy(connection = ConnectionState.FAILED) }
                 return
@@ -369,22 +419,53 @@ class CoolerBleManager(private val context: Context) {
             tempChar = service.getCharacteristic(CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID)
             lightChar = service.getCharacteristic(CoolerBleConstants.LIGHT_CONTROL_UUID)
             autoChar = service.getCharacteristic(CoolerBleConstants.AUTO_MODE_CONTROL_UUID)
+            Log.d(
+                TAG,
+                "特征: fan=${fanChar != null} temp=${tempChar != null} " +
+                    "light=${lightChar != null} auto=${autoChar != null}",
+            )
 
-            // 订阅温度通知
-            tempChar?.let { enableNotification(g, it) }
-
+            // 先上报已连接(骨架就绪),初始化命令在队列中依次执行:
+            // 订阅温度通知 → 订阅灯光通知 → 读风扇 → 灯光握手 0x11 → 应用待写 RGB
             _state.update { it.copy(connection = ConnectionState.CONNECTED) }
+            scope.launch { initializeAfterConnect(g) }
+        }
 
-            // 读取当前转速
-            fanChar?.let { runCatching { g.readCharacteristic(it) } }
-
-            // 灯光握手(写 0x11 触发状态上报)
-            lightChar?.let {
-                scope.launch { writeCharacteristic(g, it, byteArrayOf(CoolerBleConstants.LIGHT_QUERY_COMMAND)) }
+        /** 串行初始化(全部走队列,一个完成才发起下一个) */
+        private suspend fun initializeAfterConnect(g: BluetoothGatt) {
+            tempChar?.let { ch ->
+                if (!enableNotification(g, ch)) Log.w(TAG, "订阅温度通知失败")
             }
+            lightChar?.let { ch ->
+                if (!enableNotification(g, ch)) Log.w(TAG, "订阅灯光通知失败")
+            }
+            fanChar?.let { ch ->
+                val v = enqueueRead(g, ch)
+                if (v != null) handleFanValue(v)
+            }
+            lightChar?.let { ch ->
+                enqueueWrite(g, ch, byteArrayOf(CoolerBleConstants.LIGHT_QUERY_COMMAND))
+            }
+            pendingRgb?.let {
+                applyRgbInternal(it)
+                pendingRgb = null
+            }
+        }
 
-            // 应用待写入的 RGB
-            pendingRgb?.let { applyRgbInternal(it); pendingRgb = null }
+        override fun onCharacteristicWrite(
+            g: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            status: Int,
+        ) {
+            Log.d(TAG, "onCharacteristicWrite ${characteristic.uuid} status=$status")
+            writeWaiter?.complete(status)
+            writeWaiter = null
+        }
+
+        override fun onDescriptorWrite(g: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
+            Log.d(TAG, "onDescriptorWrite status=$status")
+            descWaiter?.complete(status)
+            descWaiter = null
         }
 
         override fun onCharacteristicRead(
@@ -393,8 +474,9 @@ class CoolerBleManager(private val context: Context) {
             value: ByteArray,
             status: Int,
         ) {
-            if (status != BluetoothGatt.GATT_SUCCESS) return
-            handleRead(characteristic.uuid, value)
+            readWaiter?.complete(status to value)
+            readWaiter = null
+            if (status == BluetoothGatt.GATT_SUCCESS) handleRead(characteristic.uuid, value)
         }
 
         /** 旧重载：Android 13 以下调用 */
@@ -404,8 +486,11 @@ class CoolerBleManager(private val context: Context) {
             characteristic: BluetoothGattCharacteristic,
             status: Int,
         ) {
-            if (status != BluetoothGatt.GATT_SUCCESS) return
-            handleRead(characteristic.uuid, characteristic.value ?: ByteArray(0))
+            readWaiter?.complete(status to (characteristic.value ?: ByteArray(0)))
+            readWaiter = null
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                handleRead(characteristic.uuid, characteristic.value ?: ByteArray(0))
+            }
         }
 
         override fun onCharacteristicChanged(
@@ -438,6 +523,7 @@ class CoolerBleManager(private val context: Context) {
                     if (temp != null) _state.update { it.copy(temperatureC = temp) }
                 }
                 CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID -> handleFanValue(value)
+                CoolerBleConstants.LIGHT_CONTROL_UUID -> handleLightValue(value)
             }
         }
 
@@ -446,23 +532,125 @@ class CoolerBleManager(private val context: Context) {
             val raw = value.firstOrNull()?.toInt() ?: return
             _state.update { it.copy(fanPercent = CoolerBleConstants.rawToPercentage(raw, type)) }
         }
-    }
 
-    @SuppressLint("MissingPermission")
-    private fun enableNotification(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
-        runCatching {
-            gatt.setCharacteristicNotification(characteristic, true)
-            val descriptor = characteristic.getDescriptor(CCC_DESCRIPTOR_UUID) ?: return
-            @Suppress("DEPRECATION")
-            descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-            @Suppress("DEPRECATION")
-            gatt.writeDescriptor(descriptor)
+        /** 灯光状态上报:byte0 = 当前灯效模式 */
+        private fun handleLightValue(value: ByteArray) {
+            if (value.isEmpty()) return
+            val code = value[0].toInt()
+            val effect = LightEffect.entries.firstOrNull { it.code.toInt() == code } ?: return
+            _state.update {
+                it.copy(rgb = (it.rgb ?: RGBConfig(effect)).copy(effect = effect))
+            }
         }
     }
 
+    // ────────────────────── GATT 串行队列原语 ──────────────────────
+
+    /** 单次写尝试 */
+    @SuppressLint("MissingPermission")
+    private suspend fun writeOnce(g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray): Boolean {
+        @Suppress("DEPRECATION")
+        ch.value = value
+        val accepted = try {
+            @Suppress("DEPRECATION")
+            g.writeCharacteristic(ch)
+        } catch (e: Exception) {
+            Log.e(TAG, "writeCharacteristic 异常: ${e.message}")
+            false
+        }
+        if (!accepted) return false
+        val waiter = CompletableDeferred<Int>()
+        writeWaiter = waiter
+        val status = withTimeoutOrNull(OP_TIMEOUT_MS) { waiter.await() }
+        writeWaiter = null
+        return status == BluetoothGatt.GATT_SUCCESS
+    }
+
+    /**
+     * 串行写:加锁排队,等 onCharacteristicWrite 确认,失败/超时重试一次。
+     * 必须在队列中调用——绝不可直接 gatt.writeCharacteristic。
+     */
+    @SuppressLint("MissingPermission")
+    private suspend fun enqueueWrite(g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray): Boolean =
+        gattMutex.withLock {
+            var ok = writeOnce(g, ch, value)
+            if (!ok) {
+                delay(120)
+                ok = writeOnce(g, ch, value)
+            }
+            if (!ok) Log.e(TAG, "写入失败(重试后) ${ch.uuid} value=${value.toHex()}")
+            delay(OP_SPACING_MS)
+            ok
+        }
+
+    /** 串行读:等待 onCharacteristicRead 携带数据返回 */
+    @SuppressLint("MissingPermission")
+    private suspend fun enqueueRead(g: BluetoothGatt, ch: BluetoothGattCharacteristic): ByteArray? =
+        gattMutex.withLock {
+            val waiter = CompletableDeferred<Pair<Int, ByteArray>>()
+            readWaiter = waiter
+            val accepted = try {
+                g.readCharacteristic(ch)
+            } catch (e: Exception) {
+                Log.e(TAG, "readCharacteristic 异常: ${e.message}")
+                false
+            }
+            if (!accepted) {
+                readWaiter = null
+                delay(OP_SPACING_MS)
+                return@withLock null
+            }
+            val (status, value) = withTimeoutOrNull(OP_TIMEOUT_MS) { waiter.await() }
+                ?: (BluetoothGatt.GATT_FAILURE to ByteArray(0))
+            readWaiter = null
+            delay(OP_SPACING_MS)
+            if (status == BluetoothGatt.GATT_SUCCESS) value else null
+        }
+
+    /** 串行订阅通知:本地开关 + CCC 描述符写(等 onDescriptorWrite 确认) */
+    @SuppressLint("MissingPermission")
+    private suspend fun enableNotification(g: BluetoothGatt, ch: BluetoothGattCharacteristic): Boolean =
+        gattMutex.withLock {
+            try {
+                g.setCharacteristicNotification(ch, true)
+            } catch (e: Exception) {
+                Log.e(TAG, "setCharacteristicNotification 异常: ${e.message}")
+            }
+            val descriptor = ch.getDescriptor(CCC_DESCRIPTOR_UUID)
+            if (descriptor == null) {
+                Log.w(TAG, "特征 ${ch.uuid} 无 CCC 描述符")
+                delay(OP_SPACING_MS)
+                return@withLock false
+            }
+            @Suppress("DEPRECATION")
+            descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            val accepted = try {
+                @Suppress("DEPRECATION")
+                g.writeDescriptor(descriptor)
+            } catch (e: Exception) {
+                Log.e(TAG, "writeDescriptor 异常: ${e.message}")
+                false
+            }
+            if (!accepted) {
+                delay(OP_SPACING_MS)
+                return@withLock false
+            }
+            val waiter = CompletableDeferred<Int>()
+            descWaiter = waiter
+            val status = withTimeoutOrNull(OP_TIMEOUT_MS) { waiter.await() }
+            descWaiter = null
+            delay(OP_SPACING_MS)
+            val ok = status == BluetoothGatt.GATT_SUCCESS
+            if (!ok) Log.e(TAG, "订阅通知失败 ${ch.uuid} status=$status")
+            ok
+        }
+
     // ──────────────────────────── 控制 ────────────────────────────
 
-    /** 设置风扇转速百分比(0–100),按该型号 raw 范围换算(8 Pro: 40–80) */
+    /**
+     * 设置风扇转速百分比(0–100),按该型号 raw 范围换算(8 Pro: 40–80)。
+     * 滑条拖动高频触发:防抖 150ms,取最终值写一次。
+     */
     @SuppressLint("MissingPermission")
     fun setFanSpeed(percent: Int) {
         val type = _state.value.deviceType ?: return
@@ -470,9 +658,12 @@ class CoolerBleManager(private val context: Context) {
         _state.update { it.copy(fanPercent = clamped, fanMode = FanMode.MANUAL) }
         val g = gatt ?: return
         val ch = fanChar ?: return
-        scope.launch {
+        fanJob?.cancel()
+        fanJob = scope.launch {
+            delay(150)
             val raw = CoolerBleConstants.percentageToRaw(clamped, type).toByte()
-            writeCharacteristic(g, ch, byteArrayOf(raw))
+            val ok = enqueueWrite(g, ch, byteArrayOf(raw))
+            if (ok) Log.d(TAG, "风扇已写入 raw=$raw ($clamped%)")
         }
     }
 
@@ -486,23 +677,23 @@ class CoolerBleManager(private val context: Context) {
             FanMode.OFF -> setFanSpeed(0)
             FanMode.MANUAL -> {
                 // 从自动切回手动:写自动关
-                if (wasAuto) {
-                    val ch = autoChar ?: return
-                    scope.launch {
-                        writeCharacteristic(g, ch, byteArrayOf(CoolerBleConstants.AUTO_MODE_OFF))
-                    }
-                }
+                if (wasAuto) writeAuto(g, CoolerBleConstants.AUTO_MODE_OFF)
             }
-            FanMode.AUTO -> {
-                val ch = autoChar ?: return
-                scope.launch {
-                    writeCharacteristic(g, ch, byteArrayOf(CoolerBleConstants.AUTO_MODE_ON))
-                }
-            }
+            FanMode.AUTO -> writeAuto(g, CoolerBleConstants.AUTO_MODE_ON)
         }
     }
 
-    /** 设置 RGB 灯效(命令格式见 [RGBConfig.toCommand]) */
+    @SuppressLint("MissingPermission")
+    private fun writeAuto(g: BluetoothGatt, value: Byte) {
+        val ch = autoChar ?: return
+        autoJob?.cancel()
+        autoJob = scope.launch {
+            val ok = enqueueWrite(g, ch, byteArrayOf(value))
+            if (ok) Log.d(TAG, "自动模式命令已写入 0x%02X".format(value))
+        }
+    }
+
+    /** 设置 RGB 灯效(命令格式见 [RGBConfig.toCommand]),防抖 200ms */
     @SuppressLint("MissingPermission")
     fun setRGB(config: RGBConfig) {
         _state.update { it.copy(rgb = config) }
@@ -515,23 +706,12 @@ class CoolerBleManager(private val context: Context) {
     private fun applyRgbInternal(config: RGBConfig) {
         val g = gatt ?: return
         val ch = lightChar ?: return
-        scope.launch { writeCharacteristic(g, ch, config.toCommand()) }
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun writeCharacteristic(
-        gatt: BluetoothGatt,
-        ch: BluetoothGattCharacteristic,
-        value: ByteArray,
-    ) {
-        try {
-            // 兼容 API 24–37:旧 setValue 路径全版本可用(高版本仅告警)
-            @Suppress("DEPRECATION")
-            ch.value = value
-            @Suppress("DEPRECATION")
-            gatt.writeCharacteristic(ch)
-        } catch (e: Exception) {
-            Log.e(TAG, "写入特征失败 ${ch.uuid}: ${e.message}")
+        lightJob?.cancel()
+        lightJob = scope.launch {
+            delay(200)
+            val cmd = config.toCommand()
+            val ok = enqueueWrite(g, ch, cmd)
+            if (ok) Log.d(TAG, "灯效已写入 ${cmd.toHex()}")
         }
     }
 
@@ -542,8 +722,7 @@ class CoolerBleManager(private val context: Context) {
      */
     private fun parseTemperature(data: ByteArray): Float? {
         if (data.isEmpty()) return null
-        val raw = data[0].toInt()
-        val signed = if (raw > 127) raw - 256 else raw
+        val signed = data[0].toInt() // Kotlin Byte.toInt() 已做符号扩展
         return (signed - CoolerBleConstants.TEMPERATURE_OFFSET).toFloat()
     }
 
