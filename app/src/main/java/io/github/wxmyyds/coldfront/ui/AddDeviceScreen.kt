@@ -35,8 +35,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.ElevatedAssistChip
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -62,8 +60,10 @@ import io.github.wxmyyds.coldfront.ble.BlePermissionManager
 import io.github.wxmyyds.coldfront.ble.BleScanDiagnostic
 import io.github.wxmyyds.coldfront.domain.CoolerDevice
 import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
+import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
 import io.github.wxmyyds.coldfront.ui.component.SegmentedRow
 import io.github.wxmyyds.coldfront.ui.component.SegmentedRowGap
+import io.github.wxmyyds.coldfront.ui.component.SegmentedSwitchRow
 import io.github.wxmyyds.coldfront.ui.component.segmentedRowShapes
 import io.github.wxmyyds.coldfront.ui.i18n.AppStrings
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
@@ -159,22 +159,17 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
             else -> DeviceList(strings, devices) { vm.connect(it); vm.stopScan() }
         }
 
-        if (!btEnabled) {
-            // 蓝牙关闭时不显示切换
-        } else {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                FilterChip(
-                    selected = diagMode,
-                    onClick = { diagMode = !diagMode },
-                    label = { Text(strings.diagToggle) },
-                )
-            }
-            if (diagMode) {
-                Text(
-                    strings.diagHint,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+        if (btEnabled) {
+            // 诊断模式是「显示设置」而不是集合筛选 → 用开关行，不用 FilterChip
+            SegmentedGroup {
+                item(key = "diagMode") {
+                    SegmentedSwitchRow(
+                        title = strings.diagToggle,
+                        summary = if (diagMode) strings.diagHint else null,
+                        checked = diagMode,
+                        onCheckedChange = { diagMode = it },
+                    )
+                }
             }
         }
     }
@@ -293,11 +288,12 @@ private fun DiagnosticCard(
     entry: BleScanDiagnostic,
     onSelect: (BleScanDiagnostic) -> Unit,
 ) {
-    val isCooler = entry.coolerType != null
+    val coolerType = entry.coolerType
+    val isCooler = coolerType != null
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onSelect(entry) },
+        // Card 官方 onClick 重载：整卡涟漪 + 按钮语义 + 状态层，不再 Modifier.clickable 手工拼
+        onClick = { onSelect(entry) },
+        modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(
             containerColor = if (isCooler) {
@@ -316,15 +312,20 @@ private fun DiagnosticCard(
                     modifier = Modifier.weight(1f),
                 )
                 if (isCooler) {
-                    ElevatedAssistChip(
-                        onClick = {},
-                        label = {
-                            Text(
-                                "${entry.coolerType!!.suggestedIcon} " +
-                                    strings.diagCoolerBadge.format(entry.coolerType.deviceName)
-                            )
-                        },
-                    )
+                    // 静态徽标：不用 ElevatedAssistChip(onClick = {})——那是假可供性
+                    // （TalkBack 播报为按钮、有涟漪却无动作），且规范禁止在可操作面上再放操作。
+                    Surface(
+                        shape = MaterialTheme.shapes.small,
+                        color = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ) {
+                        Text(
+                            text = "${coolerType.suggestedIcon} " +
+                                strings.diagCoolerBadge.format(coolerType.deviceName),
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        )
+                    }
                 }
                 Text(
                     "${entry.rssi} dBm",

@@ -10,11 +10,12 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -47,6 +49,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.rememberSliderState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -61,9 +64,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
@@ -73,6 +81,15 @@ import io.github.wxmyyds.coldfront.ui.component.SegmentedContainer
 import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
 import io.github.wxmyyds.coldfront.ui.component.SegmentedRadioRow
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
+
+/**
+ * 灯效预览与 R/G/B 轨道用的是“设备真实发出的光”，属内容而非 UI 表面：
+ * 跟着主题走会让光晕在浅色底下完全看不见，因此这里刻意不走 colorScheme。
+ * 除此之外页面不得出现硬编码颜色。
+ */
+private val PreviewStage = Color.Black
+private val PreviewStageContent = Color.White
+private val PreviewLedOff = Color(0xFF101418)
 
 /**
  * RGB 灯效页(MD3E):
@@ -136,7 +153,7 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.extraLarge,
-                    colors = CardDefaults.cardColors(containerColor = Color.Black),
+                    colors = CardDefaults.cardColors(containerColor = PreviewStage),
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth().height(160.dp).padding(16.dp),
@@ -154,7 +171,7 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
                             Text(
                                 effectLabel(effect, strings),
                                 style = MaterialTheme.typography.labelLarge,
-                                color = Color.White.copy(alpha = 0.8f),
+                                color = PreviewStageContent,
                             )
                         }
                     }
@@ -172,6 +189,8 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
 
                 // ── 颜色(仅单色系灯效需要) ──
                 if (effect == LightEffect.BREATH_SINGLE || effect == LightEffect.ALWAYS_BRIGHT) {
+                    val applyColor = Color(r / 255f, g / 255f, b / 255f)
+
                     SegmentedGroup(title = strings.rgbPalette) {
                         item(key = "palette") {
                             SegmentedContainer {
@@ -202,7 +221,15 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
                         shapes = ButtonDefaults.shapes(),
                         modifier = Modifier.fillMaxWidth().height(56.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(r / 255f, g / 255f, b / 255f),
+                            containerColor = applyColor,
+                            // 底色是用户选的实际 RGB，contentColor 必须按亮度算：
+                            // 默认 onPrimary 近白，选白/黄预设时会白字压白底。
+                            // 0.179 是黑/白文字对比度相等的相对亮度分界点。
+                            contentColor = if (applyColor.luminance() > 0.179f) {
+                                Color.Black
+                            } else {
+                                Color.White
+                            },
                         ),
                     ) {
                         if (applied) {
@@ -241,7 +268,7 @@ private fun LightPreview(effect: LightEffect, r: Int, g: Int, b: Int, modifier: 
 
     Canvas(modifier = modifier.clip(MaterialTheme.shapes.large)) {
         when (effect) {
-            LightEffect.OFF -> drawRect(Color(0xFF101418))
+            LightEffect.OFF -> drawRect(PreviewLedOff)
             LightEffect.COLORFUL -> {
                 // 彩虹流动渐变
                 val hues = FloatArray(8) { ((it / 8f) + hueShift) % 1f }
@@ -253,7 +280,7 @@ private fun LightPreview(effect: LightEffect, r: Int, g: Int, b: Int, modifier: 
                 drawRect(Brush.horizontalGradient(colors), alpha = breathAlpha)
             }
             LightEffect.BREATH_SINGLE -> {
-                drawRect(Color(0xFF101418))
+                drawRect(PreviewLedOff)
                 drawRect(color.copy(alpha = breathAlpha))
                 glow(color, breathAlpha)
             }
@@ -322,29 +349,45 @@ private fun effectLabel(e: LightEffect, s: io.github.wxmyyds.coldfront.ui.i18n.A
 
 // ───────────────────────── 颜色选择 ─────────────────────────
 
-private data class PresetColor(val label: String, val color: Color)
+private data class PresetColor(val labelZh: String, val labelEn: String, val color: Color)
 
 private val PRESETS = listOf(
-    PresetColor("白", Color(0xFFFFFFFF)),
-    PresetColor("红", Color(0xFFFF3B30)),
-    PresetColor("橙", Color(0xFFFF9500)),
-    PresetColor("黄", Color(0xFFFFD60A)),
-    PresetColor("绿", Color(0xFF30D158)),
-    PresetColor("青", Color(0xFF64D2FF)),
-    PresetColor("蓝", Color(0xFF0A84FF)),
-    PresetColor("紫", Color(0xFFBF5AF2)),
-    PresetColor("粉", Color(0xFFFF375F)),
+    PresetColor("白", "White", Color(0xFFFFFFFF)),
+    PresetColor("红", "Red", Color(0xFFFF3B30)),
+    PresetColor("橙", "Orange", Color(0xFFFF9500)),
+    PresetColor("黄", "Yellow", Color(0xFFFFD60A)),
+    PresetColor("绿", "Green", Color(0xFF30D158)),
+    PresetColor("青", "Cyan", Color(0xFF64D2FF)),
+    PresetColor("蓝", "Blue", Color(0xFF0A84FF)),
+    PresetColor("紫", "Purple", Color(0xFFBF5AF2)),
+    PresetColor("粉", "Pink", Color(0xFFFF375F)),
 )
 
+/** 预设色名跟灯效名同一套双语惯例（langIsZh），不硬编码中文 */
+private fun presetLabel(
+    p: PresetColor,
+    s: io.github.wxmyyds.coldfront.ui.i18n.AppStrings,
+): String = if (s.langIsZh) p.labelZh else p.labelEn
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PaletteRow(r: Int, g: Int, b: Int, onPick: (Int, Int, Int) -> Unit) {
+    val strings = LocalStrings.current
     val current = Color(r / 255f, g / 255f, b / 255f).toArgb()
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    // 9 个色块横排会超出手机宽度被挤扇（旧写法 9×38dp + 8×10dp = 422dp），改 FlowRow 自动折行；
+    // minimumInteractiveComponentSize() 把触控目标撑到 48dp（视觉仍 40dp），
+    // selectable 给出 Role.RadioButton 与选中态语义 + 状态层，替掉裸 clickable。
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         PRESETS.forEach { preset ->
             val selected = preset.color.toArgb() == current
+            val label = presetLabel(preset, strings)
             Box(
                 modifier = Modifier
-                    .size(38.dp)
+                    .minimumInteractiveComponentSize()
+                    .size(40.dp)
                     .clip(CircleShape)
                     .background(preset.color)
                     .border(
@@ -353,13 +396,18 @@ private fun PaletteRow(r: Int, g: Int, b: Int, onPick: (Int, Int, Int) -> Unit) 
                         else MaterialTheme.colorScheme.outlineVariant,
                         shape = CircleShape,
                     )
-                    .clickable {
-                        onPick(
-                            (preset.color.red * 255).toInt(),
-                            (preset.color.green * 255).toInt(),
-                            (preset.color.blue * 255).toInt(),
-                        )
-                    },
+                    .selectable(
+                        selected = selected,
+                        role = Role.RadioButton,
+                        onClick = {
+                            onPick(
+                                (preset.color.red * 255).toInt(),
+                                (preset.color.green * 255).toInt(),
+                                (preset.color.blue * 255).toInt(),
+                            )
+                        },
+                    )
+                    .semantics { contentDescription = label },
             )
         }
     }
@@ -394,9 +442,15 @@ private fun ColorSlider(label: String, value: Int, trackColor: Color, onChange: 
             },
             onValueChangeFinished = { dragging = false },
             colors = SliderDefaults.colors(
+                // 三条轨道就是 R/G/B 通道本色（领域内容）；未激活段不再用 copy(alpha)，
+                // 改为向容器色插值，深浅色下都保持可见且不产生非规范色。
                 activeTrackColor = trackColor,
                 thumbColor = trackColor,
-                inactiveTrackColor = trackColor.copy(alpha = 0.25f),
+                inactiveTrackColor = lerp(
+                    trackColor,
+                    MaterialTheme.colorScheme.surfaceContainerHighest,
+                    0.75f,
+                ),
             ),
         )
     }
