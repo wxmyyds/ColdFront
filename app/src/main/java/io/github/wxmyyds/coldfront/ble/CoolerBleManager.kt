@@ -44,6 +44,9 @@ private val CCC_DESCRIPTOR_UUID: UUID = UUID.fromString("00002902-0000-1000-8000
 
 /** 单个 GATT 操作等待回调的超时(ms) */
 private const val OP_TIMEOUT_MS = 2500L
+
+/** 读操作超时(冰环看门狗同为 1200ms:坏连接时避免一轮轮询拖太久) */
+private const val READ_TIMEOUT_MS = 1200L
 /** 两个 GATT 操作之间的最小间隔(ms),给固件喘息 */
 private const val OP_SPACING_MS = 60L
 
@@ -91,6 +94,10 @@ class CoolerBleManager(private val context: Context) {
 
     private var scanning = false
     private var pendingRgb: RGBConfig? = null
+
+    /** 最近一次成功解析出温度的时间戳(轮询自愈用) */
+    @Volatile
+    private var lastTempUpdateMs = 0L
 
     // —— GATT 串行队列 ——
     private val gattMutex = Mutex()
@@ -482,6 +489,10 @@ class CoolerBleManager(private val context: Context) {
                 val v = readIfReadable(g, ch)
                 if (v != null) handleData(ch.uuid, v)
             }
+            tempChar?.let { ch ->
+                val v = readIfReadable(g, ch)
+                if (v != null) handleData(ch.uuid, v)
+            }
             pendingRgb?.let {
                 applyRgbInternal(it)
                 pendingRgb = null
@@ -563,7 +574,10 @@ class CoolerBleManager(private val context: Context) {
         when (uuid) {
             CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID -> {
                 val temp = parseTemperature(value)
-                if (temp != null) _state.update { it.copy(temperatureC = temp) }
+                if (temp != null) {
+                    lastTempUpdateMs = System.currentTimeMillis()
+                    _state.update { it.copy(temperatureC = temp) }
+                }
             }
             CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID -> handleFanValue(value)
             CoolerBleConstants.LIGHT_CONTROL_UUID -> handleLightValue(value)
@@ -629,6 +643,10 @@ class CoolerBleManager(private val context: Context) {
     private suspend fun writeOnce(g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray): Boolean {
         @Suppress("DEPRECATION")
         ch.value = value
+        // 关键:先登记 waiter 再发起写——否则回调可能在 binder 线程抢先到达,
+        // waiter 永远等不到 → 白白超时(初始化被拖慢、订阅被误判失败)
+        val waiter = CompletableDeferred<Int>()
+        writeWaiter = waiter
         val accepted = try {
             @Suppress("DEPRECATION")
             g.writeCharacteristic(ch)
@@ -636,9 +654,10 @@ class CoolerBleManager(private val context: Context) {
             Log.e(TAG, "writeCharacteristic 异常: ${e.message}")
             false
         }
-        if (!accepted) return false
-        val waiter = CompletableDeferred<Int>()
-        writeWaiter = waiter
+        if (!accepted) {
+            writeWaiter = null
+            return false
+        }
         val status = withTimeoutOrNull(OP_TIMEOUT_MS) { waiter.await() }
         writeWaiter = null
         return status == BluetoothGatt.GATT_SUCCESS
@@ -661,34 +680,54 @@ class CoolerBleManager(private val context: Context) {
             ok
         }
 
-    /** 串行读:等待 onCharacteristicRead 携带数据返回 */
+    /** 串行读:等待 onCharacteristicRead 携带数据返回;失败/超时重试一次 */
     @SuppressLint("MissingPermission")
     private suspend fun enqueueRead(g: BluetoothGatt, ch: BluetoothGattCharacteristic): ByteArray? =
         gattMutex.withLock {
-            val waiter = CompletableDeferred<Pair<Int, ByteArray>>()
-            readWaiter = waiter
-            val accepted = try {
-                g.readCharacteristic(ch)
-            } catch (e: Exception) {
-                Log.e(TAG, "readCharacteristic 异常: ${e.message}")
-                false
+            var result = readOnce(g, ch)
+            if (result == null) {
+                delay(120)
+                result = readOnce(g, ch)
             }
-            if (!accepted) {
-                readWaiter = null
-                delay(OP_SPACING_MS)
-                return@withLock null
-            }
-            val (status, value) = withTimeoutOrNull(OP_TIMEOUT_MS) { waiter.await() }
-                ?: (BluetoothGatt.GATT_FAILURE to ByteArray(0))
-            readWaiter = null
+            if (result == null) Log.w(TAG, "读取失败(重试后) ${ch.uuid}")
             delay(OP_SPACING_MS)
-            if (status == BluetoothGatt.GATT_SUCCESS) value else null
+            result
         }
 
-    /** 串行订阅通知:本地开关 + CCC 描述符写(等 onDescriptorWrite 确认) */
+    private suspend fun readOnce(g: BluetoothGatt, ch: BluetoothGattCharacteristic): ByteArray? {
+        val waiter = CompletableDeferred<Pair<Int, ByteArray>>()
+        readWaiter = waiter
+        val accepted = try {
+            g.readCharacteristic(ch)
+        } catch (e: Exception) {
+            Log.e(TAG, "readCharacteristic 异常: ${e.message}")
+            false
+        }
+        if (!accepted) {
+            readWaiter = null
+            return null
+        }
+        val (status, value) = withTimeoutOrNull(READ_TIMEOUT_MS) { waiter.await() }
+            ?: (BluetoothGatt.GATT_FAILURE to ByteArray(0))
+        readWaiter = null
+        return if (status == BluetoothGatt.GATT_SUCCESS) value else null
+    }
+
+    /**
+     * 串行订阅通知:按特征属性决定 CCCD 值(实测可用方案:冰环对 NOTIFY 用
+     * 通知值、INDICATE 用指示值,无两者属性则跳过——乱写会被设备拒收)。
+     * 先登记 waiter 再写描述符(防回调竞态),失败/超时重试一次。
+     */
     @SuppressLint("MissingPermission")
     private suspend fun enableNotification(g: BluetoothGatt, ch: BluetoothGattCharacteristic): Boolean =
         gattMutex.withLock {
+            val props = ch.properties
+            val hasNotify = props and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0
+            val hasIndicate = props and BluetoothGattCharacteristic.PROPERTY_INDICATE != 0
+            if (!hasNotify && !hasIndicate) {
+                Log.d(TAG, "特征 ${ch.uuid} 无通知/指示属性,跳过订阅")
+                return@withLock true
+            }
             try {
                 g.setCharacteristicNotification(ch, true)
             } catch (e: Exception) {
@@ -697,31 +736,46 @@ class CoolerBleManager(private val context: Context) {
             val descriptor = ch.getDescriptor(CCC_DESCRIPTOR_UUID)
             if (descriptor == null) {
                 Log.w(TAG, "特征 ${ch.uuid} 无 CCC 描述符")
-                delay(OP_SPACING_MS)
                 return@withLock false
             }
-            @Suppress("DEPRECATION")
-            descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-            val accepted = try {
-                @Suppress("DEPRECATION")
-                g.writeDescriptor(descriptor)
-            } catch (e: Exception) {
-                Log.e(TAG, "writeDescriptor 异常: ${e.message}")
-                false
+            var ok = subscribeOnce(g, descriptor, hasIndicate)
+            if (!ok) {
+                delay(120)
+                ok = subscribeOnce(g, descriptor, hasIndicate)
             }
-            if (!accepted) {
-                delay(OP_SPACING_MS)
-                return@withLock false
-            }
-            val waiter = CompletableDeferred<Int>()
-            descWaiter = waiter
-            val status = withTimeoutOrNull(OP_TIMEOUT_MS) { waiter.await() }
-            descWaiter = null
             delay(OP_SPACING_MS)
-            val ok = status == BluetoothGatt.GATT_SUCCESS
-            if (!ok) Log.e(TAG, "订阅通知失败 ${ch.uuid} status=$status")
+            if (!ok) Log.e(TAG, "订阅通知失败(重试后) ${ch.uuid}")
             ok
         }
+
+    private suspend fun subscribeOnce(
+        g: BluetoothGatt,
+        descriptor: BluetoothGattDescriptor,
+        useIndication: Boolean,
+    ): Boolean {
+        @Suppress("DEPRECATION")
+        descriptor.value = if (useIndication) {
+            BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
+        } else {
+            BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+        }
+        val waiter = CompletableDeferred<Int>()
+        descWaiter = waiter
+        val accepted = try {
+            @Suppress("DEPRECATION")
+            g.writeDescriptor(descriptor)
+        } catch (e: Exception) {
+            Log.e(TAG, "writeDescriptor 异常: ${e.message}")
+            false
+        }
+        if (!accepted) {
+            descWaiter = null
+            return false
+        }
+        val status = withTimeoutOrNull(OP_TIMEOUT_MS) { waiter.await() }
+        descWaiter = null
+        return status == BluetoothGatt.GATT_SUCCESS
+    }
 
     // ──────────────────────────── 控制 ────────────────────────────
 
@@ -742,18 +796,38 @@ class CoolerBleManager(private val context: Context) {
     @SuppressLint("MissingPermission")
     private fun startPollLoop(g: BluetoothGatt) {
         pollJob?.cancel()
+        lastTempUpdateMs = System.currentTimeMillis() // 连接时重置,给自愈 6s 宽限期
         pollJob = scope.launch {
             while (isActive && gatt === g) {
-                val controlBusy = fanJob?.isActive == true ||
-                    lightJob?.isActive == true ||
-                    autoJob?.isActive == true
-                if (!controlBusy) {
-                    tempChar?.let { ch -> readIfReadable(g, ch)?.let { handleData(ch.uuid, it) } }
-                    statusChar?.let { ch -> readIfReadable(g, ch)?.let { handleData(ch.uuid, it) } }
-                    rpmChar?.let { ch -> readIfReadable(g, ch)?.let { handleData(ch.uuid, it) } }
-                    powerChar?.let { ch -> readIfReadable(g, ch)?.let { handleData(ch.uuid, it) } }
-                    fanChar?.let { ch -> readIfReadable(g, ch)?.let { handleData(ch.uuid, it) } }
-                    protectChar?.let { ch -> readIfReadable(g, ch)?.let { handleData(ch.uuid, it) } }
+                try {
+                    val controlBusy = fanJob?.isActive == true ||
+                        lightJob?.isActive == true ||
+                        autoJob?.isActive == true
+                    if (!controlBusy) {
+                        tempChar?.let { ch -> readIfReadable(g, ch)?.let { handleData(ch.uuid, it) } }
+                        statusChar?.let { ch -> readIfReadable(g, ch)?.let { handleData(ch.uuid, it) } }
+                        rpmChar?.let { ch -> readIfReadable(g, ch)?.let { handleData(ch.uuid, it) } }
+                        powerChar?.let { ch -> readIfReadable(g, ch)?.let { handleData(ch.uuid, it) } }
+                        fanChar?.let { ch -> readIfReadable(g, ch)?.let { handleData(ch.uuid, it) } }
+                        protectChar?.let { ch -> readIfReadable(g, ch)?.let { handleData(ch.uuid, it) } }
+
+                        // 自愈:温度断流超 6s(读不出+通知不来)→ 重订阅温度特征再补读。
+                        // 覆盖「订阅竞态失败后通知哑火」「读返回空」等场景。
+                        if (lastTempUpdateMs > 0 &&
+                            System.currentTimeMillis() - lastTempUpdateMs > 6000
+                        ) {
+                            Log.w(TAG, "温度断流超过 6s,尝试重订阅 + 补读")
+                            tempChar?.let { ch ->
+                                enableNotification(g, ch)
+                                readIfReadable(g, ch)?.let { handleData(ch.uuid, it) }
+                            }
+                            // 即便这次没读到也刷新宽限期,避免每轮都重订阅
+                            lastTempUpdateMs = System.currentTimeMillis() - 4000
+                        }
+                    }
+                } catch (e: Exception) {
+                    // 任何解析/IO 异常都不能杀死轮询循环
+                    Log.e(TAG, "轮询轮次异常: ${e.message}")
                 }
                 delay(500)
             }
@@ -891,19 +965,46 @@ class CoolerBleManager(private val context: Context) {
     }
 
     /**
-     * 解析 1014 温度:单字节有符号 °C;固件 8.4.7 为 [0x04, 温度] 多字节包。
-     * 无偏移(实测可用方案)。
+     * 解析 1014 温度(多格式兜底,对齐冰环实测方案):
+     * - 单字节:直接就是有符号 °C
+     * - [0x04, temp]:固件 8.4.7 状态包
+     * - [0x08, hi, lo] / 双字节:16 位大端——可能是开尔文也可能是补码 °C,
+     *   两种都试,落在物理合理区间者胜
+     * 最后统一应用官方 App 的显示校准:显示值 = raw − 6。
      */
     private fun parseTemperature(data: ByteArray): Float? {
+        val raw = parseTemperatureRaw(data) ?: return null
+        return raw - CoolerBleConstants.TEMPERATURE_OFFSET
+    }
+
+    private fun parseTemperatureRaw(data: ByteArray): Float? {
         if (data.isEmpty()) return null
-        val t = if (data.size >= 2 && (data[0].toInt() and 0xFF) == 0x04) {
-            data[1].toInt()
-        } else {
-            data[0].toInt()
+        // 单字节:有符号 °C
+        if (data.size == 1) {
+            return data[0].toFloat().takeIf { it in -40f..80f }
         }
-        if (t !in -40..80) return null
-        // 官方 App 显示校准:显示值 = raw − 6
-        return (t - CoolerBleConstants.TEMPERATURE_OFFSET).toFloat()
+        val b0 = data[0].toInt() and 0xFF
+        // [0x04, temp]:官方 8.4.7 状态温度包
+        if (b0 == 0x04) {
+            return data.getOrNull(1)?.toInt()?.toFloat()?.takeIf { it in -40f..80f }
+        }
+        // 16 位大端(tag 0x08 或裸双字节):开尔文 / 补码两种解释
+        if (data.size >= 2) {
+            val be16 = parseBigEndianShort(data)?.let { raw16 ->
+                when {
+                    // 开尔文合理区间 233..353K(−40..80°C)
+                    raw16 in 233..353 -> (raw16 - 273).toFloat()
+                    raw16 in 40..80 -> raw16.toFloat()
+                    else -> null
+                }
+            }
+            if (be16 != null) return be16
+            // 有符号 16 位补码
+            val signed = ((data[0].toInt() shl 8) or (data[1].toInt() and 0xFF)).toShort().toInt()
+            if (signed in -40..80) return signed.toFloat()
+        }
+        // 兜底:首字节按有符号处理
+        return data[0].toInt().toFloat().takeIf { it in -40..80 }
     }
 
     private fun BluetoothDevice.safeName(): String? =
