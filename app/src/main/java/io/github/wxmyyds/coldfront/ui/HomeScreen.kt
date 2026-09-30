@@ -101,6 +101,8 @@ private fun ConnectedContent(vm: CoolerViewModel, state: io.github.wxmyyds.coldf
                     io.github.wxmyyds.coldfront.R.drawable.img_cooler_dual
                 io.github.wxmyyds.coldfront.domain.CoolerDeviceType.JACKET_2 ->
                     io.github.wxmyyds.coldfront.R.drawable.img_cooler_turbo
+                io.github.wxmyyds.coldfront.domain.CoolerDeviceType.JACKET_5 ->
+                    io.github.wxmyyds.coldfront.R.drawable.img_cooler_5pro
                 else -> 0
             }
             if (deviceImage != 0) {
