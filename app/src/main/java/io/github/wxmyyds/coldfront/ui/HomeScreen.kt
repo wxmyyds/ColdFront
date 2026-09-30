@@ -23,6 +23,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Shield
@@ -41,6 +43,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.ToggleFloatingActionButton
@@ -318,7 +321,23 @@ private fun ControlItem(
             )
         },
         trailingContent = {
-            Switch(checked = checked, enabled = enabled, onCheckedChange = onChange)
+Switch(
+                checked = checked,
+                enabled = enabled,
+                onCheckedChange = onChange,
+                thumbContent = {
+                    Icon(
+                        imageVector = if (checked) Icons.Filled.Check else Icons.Filled.Close,
+                        contentDescription = null,
+                        modifier = Modifier.size(SwitchDefaults.IconSize),
+                        tint = if (checked) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onPrimary
+                        },
+                    )
+                },
+            )
         },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
     )

@@ -16,6 +16,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoMode
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Info
@@ -29,6 +31,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -89,9 +92,21 @@ fun SettingsScreen(vm: CoolerViewModel) {
                         title = strings.settingsDynamicColor,
                         desc = strings.settingsDynamicColorDesc,
                         trailing = {
-                            Switch(
+Switch(
                                 checked = dynamicColor,
                                 onCheckedChange = { vm.setDynamicColor(it) },
+                                thumbContent = {
+                                    Icon(
+                                        imageVector = if (dynamicColor) Icons.Filled.Check else Icons.Filled.Close,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(SwitchDefaults.IconSize),
+                                        tint = if (dynamicColor) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onPrimary
+                                        },
+                                    )
+                                },
                             )
                         },
                     )
