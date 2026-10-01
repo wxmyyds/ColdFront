@@ -60,6 +60,7 @@ import io.github.wxmyyds.coldfront.domain.CoolerLiveState
 import io.github.wxmyyds.coldfront.ui.component.RowIcon
 import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
 import io.github.wxmyyds.coldfront.ui.component.SegmentedSwitchRow
+import io.github.wxmyyds.coldfront.ui.component.staticStandaloneRowShapes
 import io.github.wxmyyds.coldfront.ui.i18n.AppStrings
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 import io.github.wxmyyds.coldfront.ui.theme.EmphasizedTypography
@@ -143,6 +144,7 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
         title = strings.homeCoolingSwitch,
         summary = strings.homeCoolingSwitchDesc,
         checked = state.coolingOn,
+        shapes = staticStandaloneRowShapes(),
         onCheckedChange = vm::setCooling,
         leadingContent = { RowIcon(Icons.Filled.AcUnit) },
     )

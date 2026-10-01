@@ -3,7 +3,7 @@
 package io.github.wxmyyds.coldfront.ui.component
 
 import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,14 +11,17 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuGroup
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -28,7 +31,6 @@ import androidx.compose.material3.ListItemShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.SegmentedListItem
-import androidx.compose.material3.SelectableDropdownMenuItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -43,10 +45,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 
@@ -129,6 +133,15 @@ fun standaloneRowShapes(): ListItemShapes = ListItemDefaults.shapes(
     selectedShape = MaterialTheme.shapes.large,
     pressedShape = MaterialTheme.shapes.extraLarge,
     focusedShape = MaterialTheme.shapes.extraLarge,
+    hoveredShape = MaterialTheme.shapes.large,
+)
+
+@Composable
+fun staticStandaloneRowShapes(): ListItemShapes = ListItemDefaults.shapes(
+    shape = MaterialTheme.shapes.large,
+    selectedShape = MaterialTheme.shapes.large,
+    pressedShape = MaterialTheme.shapes.large,
+    focusedShape = MaterialTheme.shapes.large,
     hoveredShape = MaterialTheme.shapes.large,
 )
 
@@ -381,10 +394,7 @@ fun SegmentedSwitchRow(
 /**
  * 下拉选择行：整行点击弹菜单，trailing 显示当前值 + 下拉箭头。
  *
- * 菜单用 M3E 表达性菜单（alpha09 加入、alpha19 转正，本项目 alpha28 可用）：
- * [DropdownMenuGroup] 给出外层分组形状，[SelectableDropdownMenuItem] 给出逐项的
- * 首/中/尾圆角（[MenuDefaults.itemShape]）与选中态——选中行首位自动预留勾选图标槽，
- * 未选行也占同样宽度，所以各项文字始终对齐。
+ * 菜单采用紧凑的常规菜单行，选中项用轻量容器色和勾选图标表示。
  */
 @Composable
 fun <T> SegmentedDropdownRow(
@@ -402,7 +412,6 @@ fun <T> SegmentedDropdownRow(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
-    val menuInteractionSource = remember { MutableInteractionSource() }
     val selectedLabel = options.firstOrNull { it == selected }?.let(optionLabel).orEmpty()
 
     Box(modifier = modifier) {
@@ -432,28 +441,45 @@ fun <T> SegmentedDropdownRow(
             expanded = expanded,
             onDismissRequest = { expanded = false },
         ) {
-            DropdownMenuGroup(
-                shapes = MenuDefaults.groupShape(index = 0, count = 1),
-                interactionSource = menuInteractionSource,
-            ) {
-                options.forEachIndexed { index, option ->
-                    SelectableDropdownMenuItem(
-                        selected = option == selected,
-                        onClick = {
-                            expanded = false
-                            haptic.performHapticFeedback(HapticFeedbackType.VirtualKey)
-                            onSelect(option)
-                        },
-                        text = { Text(optionLabel(option)) },
-                        shapes = MenuDefaults.itemShape(index = index, count = options.size),
-                        selectedLeadingIcon = {
-                            Icon(
-                                imageVector = Icons.Filled.Check,
-                                contentDescription = null,
-                                modifier = Modifier.size(MenuDefaults.LeadingIconSize),
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                options.forEach { option ->
+                    val isSelected = option == selected
+                    Row(
+                        modifier = Modifier
+                            .padding(horizontal = 4.dp)
+                            .fillMaxWidth()
+                            .widthIn(min = 240.dp)
+                            .heightIn(min = 64.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(
+                                if (isSelected) MaterialTheme.colorScheme.secondaryContainer
+                                else Color.Transparent,
                             )
-                        },
-                    )
+                            .selectable(
+                                selected = isSelected,
+                                role = Role.RadioButton,
+                                onClick = {
+                                    expanded = false
+                                    haptic.performHapticFeedback(HapticFeedbackType.VirtualKey)
+                                    onSelect(option)
+                                },
+                            )
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            modifier = Modifier.size(MenuDefaults.LeadingIconSize),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (isSelected) Icon(Icons.Filled.Check, contentDescription = null)
+                        }
+                        Text(
+                            text = optionLabel(option),
+                            modifier = Modifier.padding(start = 12.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer
+                            else MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
                 }
             }
         }
