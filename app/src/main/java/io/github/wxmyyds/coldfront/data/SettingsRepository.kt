@@ -42,8 +42,8 @@ class SettingsRepository(context: Context) {
 
     // —— 主题设置 ——
 
-    /** 动态取色开关(默认开,跟随壁纸) */
-    val dynamicColor: Flow<Boolean> = dataStore.data.map { it[KEY_DYNAMIC_COLOR] ?: true }
+    /** 动态取色默认关闭，使用应用自带的紫灰主题；用户可在设置中开启。 */
+    val dynamicColor: Flow<Boolean> = dataStore.data.map { it[KEY_DYNAMIC_COLOR] ?: false }
 
     /** 深色模式:system / light / dark */
     val darkMode: Flow<String> = dataStore.data.map { it[KEY_DARK_MODE] ?: "system" }

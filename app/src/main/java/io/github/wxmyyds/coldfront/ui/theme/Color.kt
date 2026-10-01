@@ -1,18 +1,129 @@
 package io.github.wxmyyds.coldfront.ui.theme
 
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
-import com.materialkolor.PaletteStyle
-import com.materialkolor.dynamicColorScheme
-import com.materialkolor.dynamiccolor.ColorSpec
 
-/** InstallerX Revived's default seed color, used when system dynamic color is unavailable or disabled. */
-val DefaultSeedColor = Color(0xFF6750A4)
+private val LightPrimary = Color(0xFF595A9E)
+private val LightOnPrimary = Color(0xFFFFFFFF)
+private val LightPrimaryContainer = Color(0xFFBDBDF4)
+private val LightOnPrimaryContainer = Color(0xFF242452)
+private val LightSecondary = Color(0xFF625F70)
+private val LightOnSecondary = Color(0xFFFFFFFF)
+private val LightSecondaryContainer = Color(0xFFE8E4F0)
+private val LightOnSecondaryContainer = Color(0xFF1E1B29)
+private val LightTertiary = Color(0xFF74566B)
+private val LightOnTertiary = Color(0xFFFFFFFF)
+private val LightTertiaryContainer = Color(0xFFF2DCEB)
+private val LightOnTertiaryContainer = Color(0xFF2B1526)
+private val LightBackground = Color(0xFFF1EEF5)
+private val LightOnBackground = Color(0xFF1C1B20)
+private val LightSurface = Color(0xFFFCF9FF)
+private val LightOnSurface = Color(0xFF1C1B20)
+private val LightSurfaceVariant = Color(0xFFE8E3ED)
+private val LightOnSurfaceVariant = Color(0xFF494650)
+private val LightOutline = Color(0xFF797681)
+private val LightOutlineVariant = Color(0xFFCAC5D1)
 
-/** Generate the same expressive 2025 palette style used by InstallerX Revived. */
-fun expressiveColorScheme(seedColor: Color, darkTheme: Boolean): ColorScheme = dynamicColorScheme(
-    seedColor = seedColor,
-    isDark = darkTheme,
-    style = PaletteStyle.Expressive,
-    specVersion = ColorSpec.SpecVersion.SPEC_2025,
+val LightColorScheme: ColorScheme = lightColorScheme(
+    primary = LightPrimary,
+    onPrimary = LightOnPrimary,
+    primaryContainer = LightPrimaryContainer,
+    onPrimaryContainer = LightOnPrimaryContainer,
+    inversePrimary = Color(0xFFC4C3FF),
+    secondary = LightSecondary,
+    onSecondary = LightOnSecondary,
+    secondaryContainer = LightSecondaryContainer,
+    onSecondaryContainer = LightOnSecondaryContainer,
+    tertiary = LightTertiary,
+    onTertiary = LightOnTertiary,
+    tertiaryContainer = LightTertiaryContainer,
+    onTertiaryContainer = LightOnTertiaryContainer,
+    background = LightBackground,
+    onBackground = LightOnBackground,
+    surface = LightSurface,
+    onSurface = LightOnSurface,
+    surfaceVariant = LightSurfaceVariant,
+    onSurfaceVariant = LightOnSurfaceVariant,
+    surfaceTint = LightPrimary,
+    inverseSurface = Color(0xFF313036),
+    inverseOnSurface = Color(0xFFF4F0F8),
+    error = Color(0xFFBA1A1A),
+    onError = Color(0xFFFFFFFF),
+    errorContainer = Color(0xFFFFDAD6),
+    onErrorContainer = Color(0xFF410002),
+    outline = LightOutline,
+    outlineVariant = LightOutlineVariant,
+    scrim = Color(0xFF000000),
+    surfaceBright = Color(0xFFFCF9FF),
+    surfaceContainer = Color(0xFFF0ECF6),
+    surfaceContainerHigh = Color(0xFFECE7F4),
+    surfaceContainerHighest = Color(0xFFE8E2F3),
+    surfaceContainerLow = Color(0xFFF7F3FB),
+    surfaceContainerLowest = Color(0xFFFFFFFF),
+    surfaceDim = Color(0xFFDED9E3),
+    primaryFixed = Color(0xFFE3E2FF),
+    primaryFixedDim = Color(0xFFC4C3FF),
+    onPrimaryFixed = Color(0xFF191943),
+    onPrimaryFixedVariant = Color(0xFF414276),
+    secondaryFixed = Color(0xFFE8E4F0),
+    secondaryFixedDim = Color(0xFFCBC7D4),
+    onSecondaryFixed = Color(0xFF1E1B29),
+    onSecondaryFixedVariant = Color(0xFF494653),
+    tertiaryFixed = Color(0xFFF2DCEB),
+    tertiaryFixedDim = Color(0xFFD5C0D0),
+    onTertiaryFixed = Color(0xFF2B1526),
+    onTertiaryFixedVariant = Color(0xFF593D52),
+)
+
+val DarkColorScheme: ColorScheme = darkColorScheme(
+    primary = Color(0xFFC4C3FF),
+    onPrimary = Color(0xFF2D2F68),
+    primaryContainer = Color(0xFF414276),
+    onPrimaryContainer = Color(0xFFE3E2FF),
+    inversePrimary = LightPrimary,
+    secondary = Color(0xFFCBC7D4),
+    onSecondary = Color(0xFF33313E),
+    secondaryContainer = Color(0xFF494653),
+    onSecondaryContainer = Color(0xFFE8E4F0),
+    tertiary = Color(0xFFD5C0D0),
+    onTertiary = Color(0xFF402A39),
+    tertiaryContainer = Color(0xFF593D52),
+    onTertiaryContainer = Color(0xFFF2DCEB),
+    background = Color(0xFF141318),
+    onBackground = Color(0xFFE6E1E9),
+    surface = Color(0xFF141318),
+    onSurface = Color(0xFFE6E1E9),
+    surfaceVariant = Color(0xFF494650),
+    onSurfaceVariant = Color(0xFFCAC5D1),
+    surfaceTint = Color(0xFFC7C2E0),
+    inverseSurface = Color(0xFFE6E1E9),
+    inverseOnSurface = Color(0xFF313036),
+    error = Color(0xFFFFB4AB),
+    onError = Color(0xFF690005),
+    errorContainer = Color(0xFF93000A),
+    onErrorContainer = Color(0xFFFFDAD6),
+    outline = Color(0xFF938F9A),
+    outlineVariant = Color(0xFF494650),
+    scrim = Color(0xFF000000),
+    surfaceBright = Color(0xFF39373E),
+    surfaceContainer = Color(0xFF201F25),
+    surfaceContainerHigh = Color(0xFF2A2930),
+    surfaceContainerHighest = Color(0xFF35343B),
+    surfaceContainerLow = Color(0xFF1C1B21),
+    surfaceContainerLowest = Color(0xFF0F0E13),
+    surfaceDim = Color(0xFF141318),
+    primaryFixed = Color(0xFFE3E2FF),
+    primaryFixedDim = Color(0xFFC4C3FF),
+    onPrimaryFixed = Color(0xFF191943),
+    onPrimaryFixedVariant = Color(0xFF414276),
+    secondaryFixed = Color(0xFFE8E4F0),
+    secondaryFixedDim = Color(0xFFCBC7D4),
+    onSecondaryFixed = Color(0xFF1E1B29),
+    onSecondaryFixedVariant = Color(0xFF494653),
+    tertiaryFixed = Color(0xFFF2DCEB),
+    tertiaryFixedDim = Color(0xFFD5C0D0),
+    onTertiaryFixed = Color(0xFF2B1526),
+    onTertiaryFixedVariant = Color(0xFF593D52),
 )

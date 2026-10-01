@@ -7,14 +7,15 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MotionScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 
 /**
  * MD3E 主题：[MaterialExpressiveTheme] + 弹簧动效 [MotionScheme.expressive]。
- * 动态取色(默认开,Android 12+ 跟随壁纸);深色模式可跟随系统/强制。
+ * 默认使用应用紫灰色板；开启动态取色后，Android 12+ 跟随系统壁纸，深色模式可跟随系统/强制。
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -23,13 +24,11 @@ fun RedmagicCoolerTheme(
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    val seedColor = if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        colorResource(android.R.color.system_accent1_500)
+    val context = LocalContext.current
+    val colorScheme = if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
     } else {
-        DefaultSeedColor
-    }
-    val colorScheme = remember(seedColor, darkTheme) {
-        expressiveColorScheme(seedColor, darkTheme)
+        if (darkTheme) DarkColorScheme else LightColorScheme
     }
     MaterialExpressiveTheme(
         // 切深浅/开关动态取色时整套角色色平滑过渡，而非瞬时跳变（MD3E 动效表达因果）
