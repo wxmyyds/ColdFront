@@ -25,6 +25,7 @@ fun rememberGlassHazeState(): HazeState = rememberHazeState()
 fun Modifier.glassSource(state: HazeState?): Modifier =
     if (state == null) this else hazeSource(state)
 
+@Composable
 fun Modifier.glassTopBarEffect(state: HazeState?, enabled: Boolean): Modifier =
     glassEffect(state, enabled).windowInsetsPadding(WindowInsets.statusBars)
 
