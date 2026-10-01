@@ -1,22 +1,17 @@
 package io.github.wxmyyds.coldfront.ui
 
 import android.app.Application
-import android.content.Intent
-import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.wxmyyds.coldfront.ble.BleManagerHolder
 import io.github.wxmyyds.coldfront.data.ProfileRepository
 import io.github.wxmyyds.coldfront.data.SettingsRepository
-import io.github.wxmyyds.coldfront.data.ThermalThresholds
+import io.github.wxmyyds.coldfront.ble.BleScanDiagnostic
 import io.github.wxmyyds.coldfront.domain.CoolerDevice
 import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
-import io.github.wxmyyds.coldfront.ble.BleScanDiagnostic
 import io.github.wxmyyds.coldfront.domain.CoolerProfile
 import io.github.wxmyyds.coldfront.domain.FanMode
 import io.github.wxmyyds.coldfront.domain.RGBConfig
-import io.github.wxmyyds.coldfront.service.CoolerService
-import io.github.wxmyyds.coldfront.thermal.ThermalMonitor
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -33,9 +28,6 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
     private val ble = BleManagerHolder.get(app)
     private val profileRepo = ProfileRepository(app)
     private val settingsRepo = SettingsRepository(app)
-    @Suppress("unused")
-    private val thermal = ThermalMonitor(app)
-
     val liveState: StateFlow<io.github.wxmyyds.coldfront.domain.CoolerLiveState> = ble.state
     val rgbWriteState = ble.rgbWriteState
 
@@ -49,9 +41,6 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
 
     val profiles: StateFlow<List<CoolerProfile>> =
         profileRepo.profiles.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
-
-    val thresholds: StateFlow<ThermalThresholds> =
-        settingsRepo.thresholds.stateIn(viewModelScope, SharingStarted.Eagerly, ThermalThresholds())
 
     // —— 主题设置 ——
     val dynamicColor: StateFlow<Boolean> =
@@ -111,42 +100,11 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
     fun setRGB(config: RGBConfig) = ble.setRGB(config)
 
     fun deleteProfile(id: String) = viewModelScope.launch { profileRepo.delete(id) }
-    fun setActiveProfile(id: String?) = viewModelScope.launch { profileRepo.setActive(id) }
-
-    fun saveProfile(profile: CoolerProfile) = viewModelScope.launch { profileRepo.upsert(profile) }
-
-    /** 启动智能温控常驻通知(共享连接,不断开) */
-    fun startAutoMode(profile: CoolerProfile) {
-        viewModelScope.launch { profileRepo.setActive(profile.id) }
-        val intent = Intent(getApplication(), CoolerService::class.java).apply {
-            action = CoolerService.ACTION_START_AUTO
-            putExtra(CoolerService.EXTRA_PROFILE_ID, profile.id)
-            putExtra(CoolerService.EXTRA_DEVICE_TYPE, profile.deviceType.name)
-            putExtra(CoolerService.EXTRA_DEVICE_MAC, profile.macAddress)
-            putExtra(CoolerService.EXTRA_DEVICE_NAME, profile.name)
-        }
-        val ctx = getApplication<Application>()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            ctx.startForegroundService(intent)
-        } else {
-            ctx.startService(intent)
-        }
-    }
-
-    fun stopAutoMode() {
-        val ctx = getApplication<Application>()
-        ctx.startService(Intent(ctx, CoolerService::class.java).apply {
-            action = CoolerService.ACTION_STOP
-        })
-    }
 
     /** 从已保存设备直连 */
     fun connectProfile(profile: CoolerProfile) {
         ble.connectByAddress(profile.macAddress, profile.deviceType)
     }
-
-    fun updateThresholds(thresholds: ThermalThresholds) =
-        viewModelScope.launch { settingsRepo.update(thresholds) }
 
     override fun onCleared() {
         ble.release()

@@ -175,25 +175,10 @@ interface AppStrings {
     // —— 自动模式/服务 ——
     val serviceChannelName: String
     val serviceChannelDesc: String
-    val serviceNotificationTitle: String
     val serviceAutoOn: String
-    val serviceAutoOff: String
     val serviceSwitchManual: String
     val serviceReconnect: String
     val serviceWaitingConfig: String
-    val serviceTempLow: String
-    val serviceTempMid: String
-    val serviceTempHigh: String
-
-    // —— 温控阈值 ——
-    val thresholdTitle: String
-    val thresholdLow: String
-    val thresholdLowSpeed: String
-    val thresholdMid: String
-    val thresholdMidSpeed: String
-    val thresholdHigh: String
-    val thresholdHighSpeed: String
-    val thresholdCondensationGuard: String
 
     // —— 权限 ——
     val permBluetoothTitle: String
@@ -357,25 +342,10 @@ object ZhStrings : AppStrings {
 
     override val serviceChannelName = "散热器服务"
     override val serviceChannelDesc = "散热器自动模式与状态通知"
-    override val serviceNotificationTitle = "散热器运行中"
     override val serviceAutoOn = "自动模式：开"
-    override val serviceAutoOff = "自动模式：关"
     override val serviceSwitchManual = "切回手动"
     override val serviceReconnect = "重新连接"
     override val serviceWaitingConfig = "等待配置…"
-    override val serviceTempLow = "低温"
-    override val serviceTempMid = "中温"
-    override val serviceTempHigh = "高温"
-
-    override val thresholdTitle = "温控阈值"
-    override val thresholdLow = "低温阈值"
-    override val thresholdLowSpeed = "低温转速"
-    override val thresholdMid = "中温阈值"
-    override val thresholdMidSpeed = "中温转速"
-    override val thresholdHigh = "高温阈值"
-    override val thresholdHighSpeed = "高温转速"
-    override val thresholdCondensationGuard = "防凝露保护（低于此温度降速）"
-
     override val permBluetoothTitle = "需要蓝牙权限"
     override val permBluetoothMsg = "控制红魔散热器需要蓝牙连接权限。"
     override val permLocationTitle = "需要位置权限"
@@ -537,25 +507,10 @@ object EnStrings : AppStrings {
 
     override val serviceChannelName = "Cooler service"
     override val serviceChannelDesc = "Cooler auto-mode and status notifications"
-    override val serviceNotificationTitle = "Cooler running"
     override val serviceAutoOn = "Auto mode: on"
-    override val serviceAutoOff = "Auto mode: off"
     override val serviceSwitchManual = "Switch to manual"
     override val serviceReconnect = "Reconnect"
     override val serviceWaitingConfig = "Waiting for config…"
-    override val serviceTempLow = "Low"
-    override val serviceTempMid = "Mid"
-    override val serviceTempHigh = "High"
-
-    override val thresholdTitle = "Thermal thresholds"
-    override val thresholdLow = "Low threshold"
-    override val thresholdLowSpeed = "Low speed"
-    override val thresholdMid = "Mid threshold"
-    override val thresholdMidSpeed = "Mid speed"
-    override val thresholdHigh = "High threshold"
-    override val thresholdHighSpeed = "High speed"
-    override val thresholdCondensationGuard = "Anti-condensation guard (slow down below)"
-
     override val permBluetoothTitle = "Bluetooth permission required"
     override val permBluetoothMsg = "Bluetooth access is needed to control the Redmagic cooler."
     override val permLocationTitle = "Location permission required"

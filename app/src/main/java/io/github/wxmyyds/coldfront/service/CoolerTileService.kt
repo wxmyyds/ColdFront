@@ -1,7 +1,6 @@
 package io.github.wxmyyds.coldfront.service
 
 import android.content.Intent
-import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.util.Log
@@ -53,18 +52,7 @@ class CoolerTileService : TileService() {
                         Log.w(TAG, "无激活档案，无法从磁贴启动")
                         return@launch
                     }
-                    val svc = Intent(applicationContext, CoolerService::class.java).apply {
-                        action = CoolerService.ACTION_START_AUTO
-                        putExtra(CoolerService.EXTRA_PROFILE_ID, profile.id)
-                        putExtra(CoolerService.EXTRA_DEVICE_TYPE, profile.deviceType.name)
-                        putExtra(CoolerService.EXTRA_DEVICE_MAC, profile.macAddress)
-                        putExtra(CoolerService.EXTRA_DEVICE_NAME, profile.name)
-                    }
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        startForegroundService(svc)
-                    } else {
-                        startService(svc)
-                    }
+                    CoolerService.startForProfile(applicationContext, profile)
                     qsTile?.state = Tile.STATE_ACTIVE
                     qsTile?.updateTile()
                 } catch (e: Exception) {

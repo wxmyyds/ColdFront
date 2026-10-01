@@ -38,7 +38,7 @@
 - **Kotlin 100%**（UI 全 Jetpack Compose；XML 仅剩 `AndroidManifest.xml` 与一个矢量启动图标）
 - **MD3E**：`MaterialExpressiveTheme` + `MotionScheme.expressive()` 弹簧动效 + Expressive 形状阶梯
   - 依赖 `androidx.compose.material3:material3:1.5.0-alpha28`（经 `compose-bom-alpha:2026.09.00` 托管）
-- **架构**：domain / ble / data / thermal / service / ui 分层，`StateFlow` 驱动 UI
+- **架构**：domain / ble / data / service / ui 分层，`StateFlow` 驱动 UI；Service 共享 BLE 管理器
 - **DataStore** 持久化（档案 + 温控阈值）
 - Android 12 以下走旧 BLE 权限/旧 GATT 回调重载，兼容 API 24–37
 

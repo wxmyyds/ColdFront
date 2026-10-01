@@ -3,7 +3,6 @@ package io.github.wxmyyds.coldfront.service
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.util.Log
 import io.github.wxmyyds.coldfront.data.ProfileRepository
 import kotlinx.coroutines.CoroutineScope
@@ -25,18 +24,7 @@ class BootReceiver : BroadcastReceiver() {
             try {
                 val profile = ProfileRepository(context).loadActiveProfile()
                 if (profile != null) {
-                    val svc = Intent(context, CoolerService::class.java).apply {
-                        action = CoolerService.ACTION_START_AUTO
-                        putExtra(CoolerService.EXTRA_PROFILE_ID, profile.id)
-                        putExtra(CoolerService.EXTRA_DEVICE_TYPE, profile.deviceType.name)
-                        putExtra(CoolerService.EXTRA_DEVICE_MAC, profile.macAddress)
-                        putExtra(CoolerService.EXTRA_DEVICE_NAME, profile.name)
-                    }
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        context.startForegroundService(svc)
-                    } else {
-                        context.startService(svc)
-                    }
+                    CoolerService.startForProfile(context, profile)
                     Log.i(TAG, "开机恢复自动模式：${profile.displayName}")
                 }
             } catch (e: Exception) {

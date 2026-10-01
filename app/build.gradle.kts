@@ -52,7 +52,6 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.datastore.preferences)
-    implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.navigation.compose)
 
     // Compose（版本由 alpha BOM 托管 → material3 1.5.0-alpha29）

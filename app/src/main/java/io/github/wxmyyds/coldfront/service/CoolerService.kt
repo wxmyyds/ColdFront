@@ -1,6 +1,5 @@
 package io.github.wxmyyds.coldfront.service
 
-import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -11,38 +10,29 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import io.github.wxmyyds.coldfront.ble.BleManagerHolder
 import io.github.wxmyyds.coldfront.ble.CoolerBleManager
-import io.github.wxmyyds.coldfront.data.ProfileRepository
-import io.github.wxmyyds.coldfront.data.SettingsRepository
-import io.github.wxmyyds.coldfront.data.ThermalThresholds
 import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
 import io.github.wxmyyds.coldfront.domain.ConnectionState
-import io.github.wxmyyds.coldfront.domain.FanMode
+import io.github.wxmyyds.coldfront.domain.CoolerProfile
 import io.github.wxmyyds.coldfront.domain.LightEffect
 import io.github.wxmyyds.coldfront.domain.RGBConfig
-import io.github.wxmyyds.coldfront.thermal.ThermalMonitor
 import io.github.wxmyyds.coldfront.ui.i18n.AppStrings
 import io.github.wxmyyds.coldfront.ui.i18n.stringsFor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.Locale
 
-private const val TAG = "CoolerService"
 private const val CHANNEL_ID = "cooler_service_channel"
 private const val NOTIFICATION_ID = 1001
 
 /**
- * 自动模式前台服务：持续连接散热器，依据温度自动调速，并保持状态通知。
+ * 智能温控前台服务：持续连接散热器，启用设备自主温控并保持状态通知。
  *
  * ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE 要求 manifest 声明
  * FOREGROUND_SERVICE_CONNECTED_DEVICE 权限（已声明）。
@@ -56,13 +46,9 @@ class CoolerService : Service() {
         const val ACTION_RECONNECT = "io.github.wxmyyds.coldfront.RECONNECT"
         const val ACTION_SET_RGB = "io.github.wxmyyds.coldfront.SET_RGB"
 
-        const val EXTRA_PROFILE_ID = "profile_id"
         const val EXTRA_DEVICE_TYPE = "device_type"
         const val EXTRA_DEVICE_MAC = "device_mac"
 
-        /** 自动调速周期 */
-        private const val ADJUST_INTERVAL_MS = 3000L
-        const val EXTRA_DEVICE_NAME = "device_name"
         const val EXTRA_RGB_EFFECT = "rgb_effect"
         const val EXTRA_RGB_R = "rgb_r"
         const val EXTRA_RGB_G = "rgb_g"
@@ -73,15 +59,23 @@ class CoolerService : Service() {
 
         /** 当前运行实例（供 UI 在自动模式下设置 RGB） */
         fun getInstance(): CoolerService? = instance
+
+        fun startForProfile(context: Context, profile: CoolerProfile) {
+            val intent = Intent(context, CoolerService::class.java).apply {
+                action = ACTION_START_AUTO
+                putExtra(EXTRA_DEVICE_TYPE, profile.deviceType.name)
+                putExtra(EXTRA_DEVICE_MAC, profile.macAddress)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private lateinit var bleManager: CoolerBleManager
-    private lateinit var thermal: ThermalMonitor
-    private lateinit var profiles: ProfileRepository
-    private lateinit var settings: SettingsRepository
-    private var monitorJob: Job? = null
-    private var thresholds = ThermalThresholds()
 
     /** 服务层通知文案也走双语表 */
     private val strings: AppStrings get() = stringsFor(Locale.getDefault())
@@ -91,9 +85,6 @@ class CoolerService : Service() {
         instance = this
         // 共享应用级单例:服务与 UI 同一连接,启动服务不再断开 UI 连接
         bleManager = BleManagerHolder.get(applicationContext)
-        thermal = ThermalMonitor(applicationContext)
-        profiles = ProfileRepository(applicationContext)
-        settings = SettingsRepository(applicationContext)
         createNotificationChannel()
         startForegroundCompat(buildNotification(strings.serviceWaitingConfig, 0))
         observeState()
@@ -106,7 +97,7 @@ class CoolerService : Service() {
                 val mac = intent.getStringExtra(EXTRA_DEVICE_MAC) ?: return START_STICKY
                 val type = runCatching { CoolerDeviceType.valueOf(typeName) }.getOrNull()
                     ?: return START_STICKY
-                startAuto(type, mac, intent.getStringExtra(EXTRA_DEVICE_NAME))
+                startAuto(type, mac)
             }
             ACTION_STOP -> stopSelfSafely()
             ACTION_SWITCH_TO_MANUAL -> {
@@ -134,10 +125,7 @@ class CoolerService : Service() {
         return START_STICKY
     }
 
-    private fun startAuto(type: CoolerDeviceType, mac: String, name: String?) {
-        scope.launch {
-            thresholds = settings.thresholds.first()
-        }
+    private fun startAuto(type: CoolerDeviceType, mac: String) {
         // 未连接时才连接(共享管理器:已连接则直接复用,绝不打断)
         if (!bleManager.state.value.isConnected) {
             bleManager.connectByAddress(mac, type)
@@ -147,7 +135,7 @@ class CoolerService : Service() {
         startForegroundCompat(buildNotification(strings.serviceAutoOn, 0))
     }
 
-    /** 监控散热器状态，断连时尝试重连 */
+    /** 监控散热器状态并同步服务通知 */
     private fun observeState() {
         scope.launch {
             bleManager.state.collect { st ->
@@ -164,14 +152,12 @@ class CoolerService : Service() {
     fun setRGB(config: RGBConfig) = bleManager.setRGB(config)
 
     private fun stopSelfSafely() {
-        monitorJob?.cancel()
         // 共享管理器:服务停止不断开连接(UI 可能仍在使用)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
     override fun onDestroy() {
-        monitorJob?.cancel()
         scope.cancel()
         instance = null
         super.onDestroy()
