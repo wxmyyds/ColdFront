@@ -47,6 +47,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -252,14 +253,14 @@ private fun TempHero(state: CoolerLiveState) {
                     color = onContainer,
                 )
             }
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                MetricPill(Icons.Filled.Speed, "${state.fanRpm ?: "--"} RPM", onContainer)
-                MetricPill(Icons.Filled.Bolt, "${state.powerW ?: "--"} W", onContainer)
+                MetricPill(Icons.Filled.Speed, "${state.fanRpm ?: "--"} RPM", onContainer, Modifier.weight(1f))
+                MetricPill(Icons.Filled.Bolt, "${state.powerW ?: "--"} W", onContainer, Modifier.weight(1f))
                 state.rssi?.let { rssi ->
-                    MetricPill(Icons.Filled.Bluetooth, "$rssi dBm", onContainer)
+                    MetricPill(Icons.Filled.Bluetooth, "$rssi dBm", onContainer, Modifier.weight(1f))
                 }
             }
         }
@@ -267,13 +268,17 @@ private fun TempHero(state: CoolerLiveState) {
 }
 
 @Composable
-private fun MetricPill(icon: ImageVector, text: String, content: Color) {
+private fun MetricPill(icon: ImageVector, text: String, content: Color, modifier: Modifier = Modifier) {
     // 胶囊底是对 content 的装饰性淡色叠加：英雄卡容器会在 primaryContainer 与
     // surfaceContainerHighest 之间过渡，没有单一角色色能同时适配，故保留 alpha 写法。
     // 但文字与图标不再做 alpha（那直接影响对比度），一律用全强度 content。
-    Surface(shape = CircleShape, color = content.copy(alpha = 0.12f)) {
+    Surface(
+        modifier = modifier,
+        shape = CircleShape,
+        color = content.copy(alpha = 0.12f),
+    ) {
         Row(
-            modifier = Modifier.padding(start = 10.dp, end = 14.dp, top = 6.dp, bottom = 6.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 7.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
@@ -287,6 +292,8 @@ private fun MetricPill(icon: ImageVector, text: String, content: Color) {
                 text,
                 style = MaterialTheme.typography.labelMedium,
                 color = content,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }

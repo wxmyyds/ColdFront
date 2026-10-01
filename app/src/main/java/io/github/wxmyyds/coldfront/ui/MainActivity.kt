@@ -299,12 +299,14 @@ private fun AppNav(vm: CoolerViewModel) {
                         },
                         popEnterTransition = {
                             if (predictiveBack) {
-                                slideInHorizontally(initialOffsetX = { -it / 8 }) + fadeIn()
+                                val forward = routeOrder(targetState.destination.route) >= routeOrder(initialState.destination.route)
+                                slideInHorizontally(initialOffsetX = { if (forward) it / 8 else -it / 8 }) + fadeIn()
                             } else EnterTransition.None
                         },
                         popExitTransition = {
                             if (predictiveBack) {
-                                slideOutHorizontally(targetOffsetX = { it / 8 }) + fadeOut()
+                                val forward = routeOrder(targetState.destination.route) >= routeOrder(initialState.destination.route)
+                                slideOutHorizontally(targetOffsetX = { if (forward) -it / 8 else it / 8 }) + fadeOut()
                             } else ExitTransition.None
                         },
                         // Constrain the child, not the weighted slot: retain centering on wide windows.
