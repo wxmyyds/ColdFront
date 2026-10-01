@@ -73,7 +73,6 @@ import io.github.wxmyyds.coldfront.domain.RGBConfig
 import io.github.wxmyyds.coldfront.domain.RgbWriteStatus
 import io.github.wxmyyds.coldfront.ui.component.RowIcon
 import io.github.wxmyyds.coldfront.ui.component.PageScaffold
-import io.github.wxmyyds.coldfront.ui.component.LocalGlassHazeState
 import io.github.wxmyyds.coldfront.ui.component.glassSource
 import io.github.wxmyyds.coldfront.ui.component.SegmentedContainer
 import io.github.wxmyyds.coldfront.ui.component.SegmentedDropdownRow
@@ -137,7 +136,6 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
                 .fillMaxSize()
                 .padding(inner)
                 .verticalScroll(contentScrollState)
-                .glassSource(LocalGlassHazeState.current)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {

@@ -50,7 +50,6 @@ import io.github.wxmyyds.coldfront.domain.CoolerLiveState
 import io.github.wxmyyds.coldfront.domain.CoolerProfile
 import io.github.wxmyyds.coldfront.ui.component.PageScaffold
 import io.github.wxmyyds.coldfront.ui.component.SegmentedRowGap
-import io.github.wxmyyds.coldfront.ui.component.LocalGlassHazeState
 import io.github.wxmyyds.coldfront.ui.component.glassSource
 import io.github.wxmyyds.coldfront.ui.component.segmentedRowShapes
 import io.github.wxmyyds.coldfront.ui.i18n.AppStrings
@@ -86,15 +85,14 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
         if (profiles.isEmpty()) {
             EmptyState(
                 strings,
-                Modifier.padding(inner).glassSource(LocalGlassHazeState.current),
+                Modifier.padding(inner),
             )
         } else {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(inner)
-                    .padding(horizontal = 16.dp)
-                    .glassSource(LocalGlassHazeState.current),
+                    .padding(horizontal = 16.dp),
                 state = listState,
                 verticalArrangement = Arrangement.spacedBy(SegmentedRowGap),
                 contentPadding = PaddingValues(

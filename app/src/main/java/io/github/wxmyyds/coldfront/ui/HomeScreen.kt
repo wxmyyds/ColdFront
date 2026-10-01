@@ -56,7 +56,6 @@ import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.domain.CoolerLiveState
 import io.github.wxmyyds.coldfront.ui.component.RowIcon
 import io.github.wxmyyds.coldfront.ui.component.PageScaffold
-import io.github.wxmyyds.coldfront.ui.component.LocalGlassHazeState
 import io.github.wxmyyds.coldfront.ui.component.glassSource
 import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
 import io.github.wxmyyds.coldfront.ui.component.SegmentedSwitchRow
@@ -90,7 +89,6 @@ fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
                     .fillMaxSize()
                     .padding(inner)
                     .verticalScroll(contentScrollState)
-                    .glassSource(LocalGlassHazeState.current)
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
@@ -104,7 +102,6 @@ fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
                     .padding(inner)
                     .padding(horizontal = 24.dp)
                     .verticalScroll(contentScrollState)
-                    .glassSource(LocalGlassHazeState.current)
                     .padding(vertical = 24.dp),
                 contentAlignment = Alignment.Center,
             ) {

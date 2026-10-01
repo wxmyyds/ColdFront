@@ -1,18 +1,16 @@
 package io.github.wxmyyds.coldfront.ui.component
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.semantics.heading
@@ -31,11 +29,7 @@ fun PageScaffold(
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val blurEnabled = LocalInterfaceBlur.current
-    val blurTopBar by remember(scrollBehavior, blurEnabled) {
-        derivedStateOf {
-            blurEnabled && scrollBehavior.state.collapsedFraction > 0f
-        }
-    }
+    val blurTopBar = blurEnabled
     val background = MaterialTheme.colorScheme.background
 
     Scaffold(
@@ -44,7 +38,7 @@ fun PageScaffold(
             .nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = background,
         topBar = {
-            LargeTopAppBar(
+            LargeFlexibleTopAppBar(
                 title = {
                     androidx.compose.material3.Text(
                         title,
@@ -54,7 +48,6 @@ fun PageScaffold(
                 modifier = Modifier.glassTopBarEffect(LocalGlassHazeState.current, blurTopBar),
                 navigationIcon = navigationIcon,
                 actions = actions,
-                windowInsets = WindowInsets(0, 0, 0, 0),
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = background.copy(alpha = if (blurTopBar) 0f else 1f),
                     scrolledContainerColor = background.copy(alpha = if (blurTopBar) 0f else 1f),
@@ -64,6 +57,12 @@ fun PageScaffold(
         },
         floatingActionButton = floatingActionButton,
     ) { innerPadding ->
-        content(innerPadding)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .glassSource(LocalGlassHazeState.current),
+        ) {
+            content(innerPadding)
+        }
     }
 }

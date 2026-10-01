@@ -32,7 +32,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.painterResource
 import io.github.wxmyyds.coldfront.BuildConfig
 import io.github.wxmyyds.coldfront.R
-import io.github.wxmyyds.coldfront.ui.component.LocalGlassHazeState
 import io.github.wxmyyds.coldfront.ui.component.PageScaffold
 import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
 import io.github.wxmyyds.coldfront.ui.component.SegmentedRow
@@ -56,8 +55,7 @@ fun AboutScreen(onBack: () -> Unit) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(inner)
-                .verticalScroll(contentScrollState)
-                .glassSource(LocalGlassHazeState.current),
+                .verticalScroll(contentScrollState),
         ) {
             Column(
                 modifier = Modifier

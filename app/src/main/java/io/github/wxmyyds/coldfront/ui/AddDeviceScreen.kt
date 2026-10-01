@@ -64,7 +64,6 @@ import io.github.wxmyyds.coldfront.ble.BleScanDiagnostic
 import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.domain.CoolerDevice
 import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
-import io.github.wxmyyds.coldfront.ui.component.LocalGlassHazeState
 import io.github.wxmyyds.coldfront.ui.component.glassSource
 import io.github.wxmyyds.coldfront.ui.component.PageScaffold
 import io.github.wxmyyds.coldfront.ui.component.SegmentedRow
@@ -173,8 +172,7 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(inner)
-                .glassSource(LocalGlassHazeState.current),
+                .padding(inner),
             state = listState,
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
