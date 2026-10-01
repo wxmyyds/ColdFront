@@ -115,23 +115,33 @@ fun segmentedRowColors(): ListItemColors {
     )
 }
 
-/** 独立单行：四角 16dp（segmentedShapes(0,1) 的基形是 4dp，单独一行会显得方）。 */
+/**
+ * 独立单行：静止态四角 16dp（比 segmentedShapes 基形的 4dp 更“成块”，单独一行不显方）。
+ *
+ * 按下/聚焦形状取 extraLarge(28dp)：官方 token 的跳档幅度是 4dp → CornerLarge 16dp（+12dp），
+ * 独立行静止态已经是 16dp，按同样 +12dp 幅度取 28dp，才能保留 M3E 的按压形变；
+ * 若 pressed 也取 16dp 就等于没有形变。hovered 维持静止形状（触屏上几乎不出现，
+ * 且 token 的 CornerMedium 12dp 比本行静止态更小，放大再缩小反而别扭）。
+ */
 @Composable
 fun standaloneRowShapes(): ListItemShapes = ListItemDefaults.shapes(
     shape = MaterialTheme.shapes.large,
     selectedShape = MaterialTheme.shapes.large,
-    pressedShape = MaterialTheme.shapes.large,
-    focusedShape = MaterialTheme.shapes.large,
+    pressedShape = MaterialTheme.shapes.extraLarge,
+    focusedShape = MaterialTheme.shapes.extraLarge,
     hoveredShape = MaterialTheme.shapes.large,
 )
 
 /**
  * 分组中第 [index] 行（共 [count] 行）：外角 16dp、内角 4dp。
  *
- * selected / pressed / focused / hovered 形状全部压回基准形状：默认 token 会让这些状态
- * 四角变成 16dp（ItemSelected/PressedContainerExpressiveShape = CornerLarge），在紧凑分组里
- * 会把整组“撑散”、与相邻行的 4dp 内角对不上。选中态改由行内控件表达，
- * 按下反馈交给涟漪/状态层（它们仍会被裁到基准形状）。
+ * pressed / focused / hovered 保留官方表达性形状（CornerLarge 16dp / CornerLarge 16dp /
+ * CornerMedium 12dp）—— [SegmentedListItem] 会用主题 motionScheme 的 FastSpatial 弹簧动画
+ * 在这些形状间补间，按下时内角 4dp 弹到 16dp，就是 M3E 列表的按压形变。
+ *
+ * 只把 selected 压回基准形状：本项目的选中/开启态由行内 Switch、下拉勾选表达，
+ * 容器在静止态不再额外形变，否则“开着的开关”那一行会长期顶着 16dp 圆角与邻行的
+ * 4dp 内角错位。
  */
 @Composable
 fun segmentedRowShapes(index: Int, count: Int): ListItemShapes {
@@ -140,9 +150,9 @@ fun segmentedRowShapes(index: Int, count: Int): ListItemShapes {
     return ListItemDefaults.shapes(
         shape = base.shape,
         selectedShape = base.shape,
-        pressedShape = base.shape,
-        focusedShape = base.shape,
-        hoveredShape = base.shape,
+        pressedShape = MaterialTheme.shapes.large,
+        focusedShape = MaterialTheme.shapes.large,
+        hoveredShape = MaterialTheme.shapes.medium,
     )
 }
 
