@@ -9,8 +9,15 @@ import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
+import com.materialkolor.dynamiccolor.MaterialDynamicColors
+import com.materialkolor.hct.Hct
+import com.materialkolor.scheme.DynamicScheme
+import com.materialkolor.scheme.SchemeNeutral
+import com.materialkolor.scheme.SchemeTonalSpot
+import com.materialkolor.scheme.SchemeVibrant
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 
 /**
@@ -21,15 +28,21 @@ import androidx.compose.ui.platform.LocalContext
 @Composable
 fun RedmagicCoolerTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false,
+    palette: String = "tonal_spot",
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
-    val baseColorScheme = if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-    } else {
-        if (darkTheme) DarkColorScheme else LightColorScheme
+    val seed = if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val systemScheme = if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        systemScheme.primary.toArgb()
+    } else 0xFF595A9E.toInt()
+    val scheme = when (palette) {
+        "neutral" -> SchemeNeutral(Hct.fromInt(seed), darkTheme, 0.0)
+        "vibrant" -> SchemeVibrant(Hct.fromInt(seed), darkTheme, 0.0)
+        else -> SchemeTonalSpot(Hct.fromInt(seed), darkTheme, 0.0)
     }
+    val baseColorScheme = paletteColorScheme(scheme, if (darkTheme) DarkColorScheme else LightColorScheme)
     val pageColor = if (darkTheme) PageBackgroundDark else PageBackgroundLight
     val optionColor = if (darkTheme) OptionSurfaceDark else OptionSurfaceLight
     val colorScheme = baseColorScheme.copy(
@@ -59,6 +72,28 @@ fun RedmagicCoolerTheme(
  * 让整界面颜色渐变而不是瞬间替换。只动画颜色值，不改变角色语义。
  */
 @Composable
+private fun paletteColorScheme(scheme: DynamicScheme, base: ColorScheme): ColorScheme {
+    val roles = MaterialDynamicColors()
+    fun color(role: com.materialkolor.dynamiccolor.DynamicColor): Color =
+        Color(role.getArgb(scheme))
+    return base.copy(
+        primary = color(roles.primary()),
+        onPrimary = color(roles.onPrimary()),
+        primaryContainer = color(roles.primaryContainer()),
+        onPrimaryContainer = color(roles.onPrimaryContainer()),
+        inversePrimary = color(roles.primary()),
+        secondary = color(roles.secondary()),
+        onSecondary = color(roles.onSecondary()),
+        secondaryContainer = color(roles.secondaryContainer()),
+        onSecondaryContainer = color(roles.onSecondaryContainer()),
+        tertiary = color(roles.tertiary()),
+        onTertiary = color(roles.onTertiary()),
+        tertiaryContainer = color(roles.tertiaryContainer()),
+        onTertiaryContainer = color(roles.onTertiaryContainer()),
+        surfaceTint = color(roles.primary()),
+    )
+}
+
 private fun animateColorScheme(target: ColorScheme): ColorScheme {
     val spec = tween<Color>(durationMillis = 400)
 

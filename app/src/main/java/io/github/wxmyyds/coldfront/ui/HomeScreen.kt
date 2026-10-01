@@ -58,6 +58,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.domain.CoolerLiveState
 import io.github.wxmyyds.coldfront.ui.component.RowIcon
+import io.github.wxmyyds.coldfront.ui.component.LocalGlassHazeState
+import io.github.wxmyyds.coldfront.ui.component.LocalInterfaceBlur
+import io.github.wxmyyds.coldfront.ui.component.glassEffect
+import io.github.wxmyyds.coldfront.ui.component.glassSource
 import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
 import io.github.wxmyyds.coldfront.ui.component.SegmentedSwitchRow
 import io.github.wxmyyds.coldfront.ui.component.staticStandaloneRowShapes
@@ -90,10 +94,11 @@ fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
             // MD3E 小顶栏:标题用组件默认的 TitleLarge(旧写法 headlineSmall 24sp 超出小顶栏规格),
             // 容器色不再强制透明——规范要求滚动后容器变为 surfaceContainer。
             TopAppBar(
+                modifier = Modifier.glassEffect(LocalGlassHazeState.current, LocalInterfaceBlur.current),
                 title = { Text(strings.homeTitle) },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    scrolledContainerColor = MaterialTheme.colorScheme.background,
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (LocalInterfaceBlur.current) 0.62f else 1f),
+                    scrolledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (LocalInterfaceBlur.current) 0.62f else 1f),
                 ),
                 scrollBehavior = scrollBehavior,
             )
@@ -105,6 +110,7 @@ fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
                     .fillMaxSize()
                     .padding(inner)
                     .verticalScroll(rememberScrollState())
+                    .glassSource(LocalGlassHazeState.current)
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
@@ -118,6 +124,7 @@ fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
                     .padding(inner)
                     .padding(horizontal = 24.dp)
                     .verticalScroll(rememberScrollState())
+                    .glassSource(LocalGlassHazeState.current)
                     .padding(vertical = 24.dp),
                 contentAlignment = Alignment.Center,
             ) {
@@ -249,12 +256,9 @@ private fun TempHero(state: CoolerLiveState) {
             ) {
                 MetricPill(Icons.Filled.Speed, "${state.fanRpm ?: "--"} RPM", onContainer)
                 MetricPill(Icons.Filled.Bolt, "${state.powerW ?: "--"} W", onContainer)
-                // RSSI 是连接时的读数（非持续刷新），0 表示未取得。
-                MetricPill(
-                    Icons.Filled.Bluetooth,
-                    "${if (state.rssi != 0) state.rssi.toString() else "--"} dBm",
-                    onContainer,
-                )
+                state.rssi?.let { rssi ->
+                    MetricPill(Icons.Filled.Bluetooth, "$rssi dBm", onContainer)
+                }
             }
         }
     }

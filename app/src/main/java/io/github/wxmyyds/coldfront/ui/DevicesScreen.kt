@@ -52,6 +52,10 @@ import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.domain.CoolerLiveState
 import io.github.wxmyyds.coldfront.domain.CoolerProfile
 import io.github.wxmyyds.coldfront.ui.component.SegmentedRowGap
+import io.github.wxmyyds.coldfront.ui.component.LocalGlassHazeState
+import io.github.wxmyyds.coldfront.ui.component.LocalInterfaceBlur
+import io.github.wxmyyds.coldfront.ui.component.glassEffect
+import io.github.wxmyyds.coldfront.ui.component.glassSource
 import io.github.wxmyyds.coldfront.ui.component.segmentedRowShapes
 import io.github.wxmyyds.coldfront.ui.i18n.AppStrings
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
@@ -80,10 +84,11 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
+                modifier = Modifier.glassEffect(LocalGlassHazeState.current, LocalInterfaceBlur.current),
                 title = { Text(strings.devicesTitle) },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    scrolledContainerColor = MaterialTheme.colorScheme.background,
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (LocalInterfaceBlur.current) 0.62f else 1f),
+                    scrolledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (LocalInterfaceBlur.current) 0.62f else 1f),
                 ),
                 scrollBehavior = scrollBehavior,
             )
@@ -103,7 +108,8 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(inner)
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = 16.dp)
+                    .glassSource(LocalGlassHazeState.current),
                 verticalArrangement = Arrangement.spacedBy(SegmentedRowGap),
                 contentPadding = PaddingValues(
                     top = 8.dp,

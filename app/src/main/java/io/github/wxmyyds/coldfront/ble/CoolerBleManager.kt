@@ -113,6 +113,7 @@ class CoolerBleManager(private val context: Context) {
     private var writeWaiter: CompletableDeferred<Int>? = null
     private var readWaiter: CompletableDeferred<Pair<Int, ByteArray>>? = null
     private var descWaiter: CompletableDeferred<Int>? = null
+    private var rssiWaiter: CompletableDeferred<Pair<Int, Int>>? = null
 
     // —— 防抖任务 ——
     private var fanJob: Job? = null
@@ -121,6 +122,7 @@ class CoolerBleManager(private val context: Context) {
 
     // —— 状态轮询循环(8 Pro 温度/转速/功率靠主动读,不靠推送) ——
     private var pollJob: Job? = null
+    private var rssiJob: Job? = null
 
     private val _state = MutableStateFlow(CoolerLiveState(connection = ConnectionState.DISCONNECTED))
     val state: StateFlow<CoolerLiveState> = _state.asStateFlow()
@@ -351,7 +353,7 @@ class CoolerBleManager(private val context: Context) {
             deviceType = device.deviceType,
             deviceName = device.displayName,
             deviceAddress = device.address,
-            rssi = device.rssi,
+            rssi = null,
         )
         val bluetoothDevice = runCatching {
             bluetoothAdapter?.getRemoteDevice(device.address)
@@ -413,12 +415,15 @@ class CoolerBleManager(private val context: Context) {
         writeWaiter = null
         readWaiter?.complete(BluetoothGatt.GATT_FAILURE to ByteArray(0))
         readWaiter = null
+        rssiWaiter?.complete(BluetoothGatt.GATT_FAILURE to 0)
+        rssiWaiter = null
         descWaiter?.complete(BluetoothGatt.GATT_FAILURE)
         descWaiter = null
         fanJob?.cancel()
         lightJob?.cancel()
         autoJob?.cancel()
         pollJob?.cancel()
+        rssiJob?.cancel()
         pendingRgb = null
         pendingRgbRequestId = null
         _rgbWriteState.value = null
@@ -547,6 +552,15 @@ class CoolerBleManager(private val context: Context) {
                 pendingRgbRequestId = null
             }
             startPollLoop(g)
+        }
+
+        override fun onReadRemoteRssi(g: BluetoothGatt, rssi: Int, status: Int) {
+            if (gatt !== g) return
+            rssiWaiter?.complete(status to rssi)
+            rssiWaiter = null
+            _state.update {
+                it.copy(rssi = if (status == BluetoothGatt.GATT_SUCCESS) rssi else null)
+            }
         }
 
         override fun onCharacteristicWrite(
@@ -897,8 +911,30 @@ class CoolerBleManager(private val context: Context) {
                 delay(500)
             }
         }
+        rssiJob?.cancel()
+        rssiJob = scope.launch {
+            while (isActive && gatt === g) {
+                if (readRemoteRssi(g) == null) _state.update { it.copy(rssi = null) }
+                delay(2000)
+            }
+        }
     }
 
+    @SuppressLint("MissingPermission")
+    private suspend fun readRemoteRssi(g: BluetoothGatt): Int? = gattMutex.withLock {
+        if (gatt !== g) return@withLock null
+        val waiter = CompletableDeferred<Pair<Int, Int>>()
+        rssiWaiter = waiter
+        val accepted = runCatching { g.readRemoteRssi() }.getOrDefault(false)
+        if (!accepted) {
+            rssiWaiter = null
+            return@withLock null
+        }
+        val (status, rssi) = withTimeoutOrNull(READ_TIMEOUT_MS) { waiter.await() }
+            ?: (BluetoothGatt.GATT_FAILURE to 0)
+        rssiWaiter = null
+        if (status == BluetoothGatt.GATT_SUCCESS) rssi else null
+    }
 
     /**
      * 制冷档位百分比(0–100),按型号 raw 范围换算(8 Pro: 40–80)。防抖 150ms。

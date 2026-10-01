@@ -53,6 +53,8 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.navigation.compose)
+    implementation(libs.haze)
+    implementation(libs.material.color.utilities)
 
     // Compose（版本由 alpha BOM 托管 → material3 1.5.0-alpha29）
     implementation(platform(libs.androidx.compose.bom))

@@ -19,8 +19,8 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.Bluetooth
@@ -40,6 +40,12 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -58,6 +64,11 @@ import io.github.wxmyyds.coldfront.ble.BlePermissionManager
 import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 import io.github.wxmyyds.coldfront.ui.i18n.rememberStrings
+import io.github.wxmyyds.coldfront.ui.component.LocalGlassHazeState
+import io.github.wxmyyds.coldfront.ui.component.LocalInterfaceBlur
+import io.github.wxmyyds.coldfront.ui.component.glassEffect
+import io.github.wxmyyds.coldfront.ui.component.glassSource
+import io.github.wxmyyds.coldfront.ui.component.rememberGlassHazeState
 import io.github.wxmyyds.coldfront.ui.theme.RedmagicCoolerTheme
 
 class MainActivity : ComponentActivity() {
@@ -81,6 +92,9 @@ class MainActivity : ComponentActivity() {
         val dynamicColor by vm.dynamicColor.collectAsStateWithLifecycle()
         val darkMode by vm.darkMode.collectAsStateWithLifecycle()
         val appLanguage by vm.appLanguage.collectAsStateWithLifecycle()
+        val interfaceBlur by vm.interfaceBlur.collectAsStateWithLifecycle()
+        val palette by vm.palette.collectAsStateWithLifecycle()
+        val hazeState = rememberGlassHazeState()
         // 语言覆盖必须在取文案之前生效
         val strings = rememberStrings(override = appLanguage)
         val dark = when (darkMode) {
@@ -88,8 +102,12 @@ class MainActivity : ComponentActivity() {
             "dark" -> true
             else -> androidx.compose.foundation.isSystemInDarkTheme()
         }
-        CompositionLocalProvider(LocalStrings provides strings) {
-            RedmagicCoolerTheme(darkTheme = dark, dynamicColor = dynamicColor) {
+        CompositionLocalProvider(
+            LocalStrings provides strings,
+            LocalGlassHazeState provides hazeState,
+            LocalInterfaceBlur provides interfaceBlur,
+        ) {
+            RedmagicCoolerTheme(darkTheme = dark, dynamicColor = dynamicColor, palette = palette) {
                 SystemBarAppearance(dark)
                 PermissionAndBluetoothEffects(vm)
                 AppNav(vm)
@@ -151,6 +169,14 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private fun routeOrder(route: String?): Int = when (route) {
+    Routes.HOME -> 0
+    Routes.DEVICES -> 1
+    Routes.RGB -> 2
+    Routes.SETTINGS -> 3
+    else -> 4
+}
+
 private object Routes {
     const val HOME = "home"
     const val DEVICES = "devices"
@@ -168,6 +194,7 @@ private fun AppNav(vm: CoolerViewModel) {
 
     // 连接成功后自动离开扫描页,回主页看状态(避免连上后停在列表里像「没反应」)
     val liveState by vm.liveState.collectAsStateWithLifecycle()
+    val predictiveBack by vm.predictiveBack.collectAsStateWithLifecycle()
     LaunchedEffect(liveState.connection) {
         if (liveState.connection == ConnectionState.CONNECTED &&
             current?.hierarchy?.any { it.route == Routes.SCAN } == true
@@ -199,12 +226,17 @@ private fun AppNav(vm: CoolerViewModel) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val useRail = maxWidth >= 600.dp
         Scaffold(
+            modifier = Modifier.glassSource(LocalGlassHazeState.current),
             containerColor = MaterialTheme.colorScheme.background,
             bottomBar = {
                 if (!useRail) {
                     NavigationBar(
-                        modifier = Modifier.semantics { isTraversalGroup = true },
-                        containerColor = MaterialTheme.colorScheme.background,
+                        modifier = Modifier
+                            .semantics { isTraversalGroup = true }
+                            .glassEffect(LocalGlassHazeState.current, LocalInterfaceBlur.current),
+                        containerColor = MaterialTheme.colorScheme.surface.copy(
+                            alpha = if (LocalInterfaceBlur.current) 0.62f else 1f,
+                        ),
                         windowInsets = WindowInsets(
                             left = 0.dp,
                             top = 0.dp,
@@ -257,6 +289,24 @@ private fun AppNav(vm: CoolerViewModel) {
                     NavHost(
                         navController = nav,
                         startDestination = Routes.HOME,
+                        enterTransition = {
+                            val forward = routeOrder(targetState.destination.route) >= routeOrder(initialState.destination.route)
+                            slideInHorizontally(initialOffsetX = { if (forward) it / 8 else -it / 8 }) + fadeIn()
+                        },
+                        exitTransition = {
+                            val forward = routeOrder(targetState.destination.route) >= routeOrder(initialState.destination.route)
+                            slideOutHorizontally(targetOffsetX = { if (forward) -it / 8 else it / 8 }) + fadeOut()
+                        },
+                        popEnterTransition = {
+                            if (predictiveBack) {
+                                slideInHorizontally(initialOffsetX = { -it / 8 }) + fadeIn()
+                            } else EnterTransition.None
+                        },
+                        popExitTransition = {
+                            if (predictiveBack) {
+                                slideOutHorizontally(targetOffsetX = { it / 8 }) + fadeOut()
+                            } else ExitTransition.None
+                        },
                         // Constrain the child, not the weighted slot: retain centering on wide windows.
                         modifier = Modifier
                             .widthIn(max = 840.dp)

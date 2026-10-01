@@ -19,13 +19,18 @@ import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -35,6 +40,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.wxmyyds.coldfront.BuildConfig
 import io.github.wxmyyds.coldfront.ui.component.RowIcon
+import io.github.wxmyyds.coldfront.ui.component.LocalGlassHazeState
+import io.github.wxmyyds.coldfront.ui.component.LocalInterfaceBlur
+import io.github.wxmyyds.coldfront.ui.component.glassEffect
+import io.github.wxmyyds.coldfront.ui.component.glassSource
 import io.github.wxmyyds.coldfront.ui.component.SegmentedDropdownRow
 import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
 import io.github.wxmyyds.coldfront.ui.component.SegmentedRow
@@ -55,6 +64,10 @@ fun SettingsScreen(vm: CoolerViewModel) {
     val dynamicColor by vm.dynamicColor.collectAsStateWithLifecycle()
     val darkMode by vm.darkMode.collectAsStateWithLifecycle()
     val appLanguage by vm.appLanguage.collectAsStateWithLifecycle()
+    val interfaceBlur by vm.interfaceBlur.collectAsStateWithLifecycle()
+    val palette by vm.palette.collectAsStateWithLifecycle()
+    val predictiveBack by vm.predictiveBack.collectAsStateWithLifecycle()
+    var showAbout by remember { mutableStateOf(false) }
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     val supportsDynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
@@ -80,10 +93,11 @@ fun SettingsScreen(vm: CoolerViewModel) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
+                modifier = Modifier.glassEffect(LocalGlassHazeState.current, LocalInterfaceBlur.current),
                 title = { Text(strings.settingsTitle, modifier = Modifier.semantics { heading() }) },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    scrolledContainerColor = MaterialTheme.colorScheme.background,
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (LocalInterfaceBlur.current) 0.62f else 1f),
+                    scrolledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (LocalInterfaceBlur.current) 0.62f else 1f),
                 ),
                 scrollBehavior = scrollBehavior,
             )
@@ -95,6 +109,7 @@ fun SettingsScreen(vm: CoolerViewModel) {
                 .padding(inner)
                 .consumeWindowInsets(inner)
                 .verticalScroll(rememberScrollState())
+                .glassSource(LocalGlassHazeState.current)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
@@ -115,6 +130,20 @@ fun SettingsScreen(vm: CoolerViewModel) {
                         leadingContent = { RowIcon(Icons.Filled.Palette) },
                     )
                 }
+                item(key = "palette") {
+                    SegmentedDropdownRow(
+                        title = strings.settingsPalette,
+                        options = listOf("tonal_spot", "neutral", "vibrant"),
+                        selected = palette,
+                        onSelect = vm::setPalette,
+                        optionLabel = { value -> when (value) {
+                            "neutral" -> strings.settingsPaletteNeutral
+                            "vibrant" -> strings.settingsPaletteVibrant
+                            else -> strings.settingsPaletteTonalSpot
+                        } },
+                        leadingContent = { RowIcon(Icons.Filled.Palette) },
+                    )
+                }
                 item(key = "themeMode") {
                     SegmentedDropdownRow(
                         title = strings.settingsThemeMode,
@@ -125,6 +154,27 @@ fun SettingsScreen(vm: CoolerViewModel) {
                             themeOptions.firstOrNull { it.first == value }?.second ?: value
                         },
                         leadingContent = { RowIcon(themeModeIcon(themeMode)) },
+                    )
+                }
+            }
+
+            SegmentedGroup(title = strings.settingsInterface) {
+                item(key = "interfaceBlur") {
+                    SegmentedSwitchRow(
+                        title = strings.settingsInterfaceBlur,
+                        summary = strings.settingsInterfaceBlurDesc,
+                        checked = interfaceBlur,
+                        onCheckedChange = vm::setInterfaceBlur,
+                        leadingContent = { RowIcon(Icons.Filled.BlurOn) },
+                    )
+                }
+                item(key = "predictiveBack") {
+                    SegmentedSwitchRow(
+                        title = strings.settingsPredictiveBack,
+                        summary = strings.settingsPredictiveBackDesc,
+                        checked = predictiveBack,
+                        onCheckedChange = vm::setPredictiveBack,
+                        leadingContent = { RowIcon(Icons.Filled.Swipe) },
                     )
                 }
             }
@@ -147,11 +197,24 @@ fun SettingsScreen(vm: CoolerViewModel) {
                         title = strings.settingsAbout,
                         summary = "${strings.settingsAboutDesc} · v${BuildConfig.VERSION_NAME}",
                         leadingContent = { RowIcon(Icons.Filled.Info) },
+                        onClick = { showAbout = true },
                     )
                 }
             }
             Spacer(Modifier.height(8.dp))
         }
+    }
+
+    if (showAbout) {
+        AlertDialog(
+            onDismissRequest = { showAbout = false },
+            icon = { RowIcon(Icons.Filled.Info) },
+            title = { Text(strings.settingsAbout) },
+            text = { Text("${strings.settingsAboutDesc}\n${BuildConfig.VERSION_NAME}") },
+            confirmButton = {
+                TextButton(onClick = { showAbout = false }) { Text(strings.ok) }
+            },
+        )
     }
 }
 

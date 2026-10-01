@@ -64,6 +64,15 @@ interface AppStrings {
     val settingsDynamicColor: String
     val settingsDynamicColorDesc: String
     val settingsThemeMode: String
+    val settingsPalette: String
+    val settingsPaletteTonalSpot: String
+    val settingsPaletteNeutral: String
+    val settingsPaletteVibrant: String
+    val settingsInterface: String
+    val settingsInterfaceBlur: String
+    val settingsInterfaceBlurDesc: String
+    val settingsPredictiveBack: String
+    val settingsPredictiveBackDesc: String
     val settingsFollowSystem: String
     val settingsDarkModeLight: String
     val settingsDarkModeDark: String
@@ -238,6 +247,15 @@ object ZhStrings : AppStrings {
     override val settingsDynamicColor = "动态取色"
     override val settingsDynamicColorDesc = "跟随系统壁纸配色"
     override val settingsThemeMode = "主题模式"
+    override val settingsPalette = "调色板"
+    override val settingsPaletteTonalSpot = "Tonal Spot"
+    override val settingsPaletteNeutral = "Neutral"
+    override val settingsPaletteVibrant = "Vibrant"
+    override val settingsInterface = "界面"
+    override val settingsInterfaceBlur = "界面模糊"
+    override val settingsInterfaceBlurDesc = "模糊顶部标题栏和底部导航栏"
+    override val settingsPredictiveBack = "预测性返回"
+    override val settingsPredictiveBackDesc = "启用导航页面的系统返回过渡"
     override val settingsFollowSystem = "跟随系统"
     override val settingsDarkModeLight = "浅色"
     override val settingsDarkModeDark = "深色"
@@ -403,6 +421,15 @@ object EnStrings : AppStrings {
     override val settingsDynamicColor = "Dynamic color"
     override val settingsDynamicColorDesc = "Follow system wallpaper"
     override val settingsThemeMode = "Theme mode"
+    override val settingsPalette = "Palette"
+    override val settingsPaletteTonalSpot = "Tonal Spot"
+    override val settingsPaletteNeutral = "Neutral"
+    override val settingsPaletteVibrant = "Vibrant"
+    override val settingsInterface = "Interface"
+    override val settingsInterfaceBlur = "Interface blur"
+    override val settingsInterfaceBlurDesc = "Blur top app bars and bottom navigation"
+    override val settingsPredictiveBack = "Predictive back"
+    override val settingsPredictiveBackDesc = "Enable system back transitions for app navigation"
     override val settingsFollowSystem = "Follow system"
     override val settingsDarkModeLight = "Light"
     override val settingsDarkModeDark = "Dark"

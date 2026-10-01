@@ -44,9 +44,15 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
 
     // —— 主题设置 ——
     val dynamicColor: StateFlow<Boolean> =
-        settingsRepo.dynamicColor.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+        settingsRepo.dynamicColor.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val darkMode: StateFlow<String> =
         settingsRepo.darkMode.stateIn(viewModelScope, SharingStarted.Eagerly, "system")
+    val interfaceBlur: StateFlow<Boolean> =
+        settingsRepo.interfaceBlur.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val palette: StateFlow<String> =
+        settingsRepo.palette.stateIn(viewModelScope, SharingStarted.Eagerly, "tonal_spot")
+    val predictiveBack: StateFlow<Boolean> =
+        settingsRepo.predictiveBack.stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
     /** 界面语言：system / zh / en */
     val appLanguage: StateFlow<String> =
@@ -57,6 +63,15 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setDarkMode(mode: String) =
         viewModelScope.launch { settingsRepo.setDarkMode(mode) }
+
+    fun setInterfaceBlur(enabled: Boolean) =
+        viewModelScope.launch { settingsRepo.setInterfaceBlur(enabled) }
+
+    fun setPalette(palette: String) =
+        viewModelScope.launch { settingsRepo.setPalette(palette) }
+
+    fun setPredictiveBack(enabled: Boolean) =
+        viewModelScope.launch { settingsRepo.setPredictiveBack(enabled) }
 
     fun setAppLanguage(language: String) =
         viewModelScope.launch { settingsRepo.setAppLanguage(language) }

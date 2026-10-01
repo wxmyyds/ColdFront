@@ -117,7 +117,7 @@ data class CoolerLiveState(
     val deviceType: CoolerDeviceType? = null,
     val deviceName: String? = null,
     val deviceAddress: String? = null,
-    val rssi: Int = 0,
+    val rssi: Int? = null,
     /** 风扇转速(101C/1015上报, RPM) */
     val fanRpm: Int? = null,
     /** 功率(101D/1015上报, W) */
