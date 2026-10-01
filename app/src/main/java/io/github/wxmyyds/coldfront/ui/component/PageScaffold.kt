@@ -1,8 +1,6 @@
 package io.github.wxmyyds.coldfront.ui.component
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -28,7 +26,6 @@ fun PageScaffold(
     content: @Composable (PaddingValues) -> Unit,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    val blurTopBar = LocalInterfaceBlur.current && LocalGlassHazeState.current != null
     val background = MaterialTheme.colorScheme.background
 
     Scaffold(
@@ -44,24 +41,17 @@ fun PageScaffold(
                         modifier = Modifier.semantics { heading() },
                     )
                 },
-                modifier = Modifier.glassTopBarEffect(LocalGlassHazeState.current, blurTopBar),
                 navigationIcon = navigationIcon,
                 actions = actions,
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = background.copy(alpha = if (blurTopBar) 0f else 1f),
-                    scrolledContainerColor = background.copy(alpha = if (blurTopBar) 0f else 1f),
+                    containerColor = background,
+                    scrolledContainerColor = background,
                 ),
                 scrollBehavior = scrollBehavior,
             )
         },
         floatingActionButton = floatingActionButton,
     ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .glassSource(LocalGlassHazeState.current),
-        ) {
-            content(innerPadding)
-        }
+        content(innerPadding)
     }
 }

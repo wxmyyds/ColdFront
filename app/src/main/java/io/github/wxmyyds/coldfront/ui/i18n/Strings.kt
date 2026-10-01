@@ -69,8 +69,6 @@ interface AppStrings {
     val settingsPaletteNeutral: String
     val settingsPaletteVibrant: String
     val settingsInterface: String
-    val settingsInterfaceBlur: String
-    val settingsInterfaceBlurDesc: String
     val settingsPredictiveBack: String
     val settingsPredictiveBackDesc: String
     val settingsFollowSystem: String
@@ -254,8 +252,6 @@ object ZhStrings : AppStrings {
     override val settingsPaletteNeutral = "Neutral"
     override val settingsPaletteVibrant = "Vibrant"
     override val settingsInterface = "界面"
-    override val settingsInterfaceBlur = "界面模糊"
-    override val settingsInterfaceBlurDesc = "模糊顶部标题栏和底部导航栏"
     override val settingsPredictiveBack = "预测性返回"
     override val settingsPredictiveBackDesc = "启用导航页面的系统返回过渡"
     override val settingsFollowSystem = "跟随系统"
@@ -430,8 +426,6 @@ object EnStrings : AppStrings {
     override val settingsPaletteNeutral = "Neutral"
     override val settingsPaletteVibrant = "Vibrant"
     override val settingsInterface = "Interface"
-    override val settingsInterfaceBlur = "Interface blur"
-    override val settingsInterfaceBlurDesc = "Blur top app bars and bottom navigation"
     override val settingsPredictiveBack = "Predictive back"
     override val settingsPredictiveBackDesc = "Enable system back transitions for app navigation"
     override val settingsFollowSystem = "Follow system"

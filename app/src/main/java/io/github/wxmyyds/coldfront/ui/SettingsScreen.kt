@@ -32,7 +32,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.wxmyyds.coldfront.BuildConfig
 import io.github.wxmyyds.coldfront.ui.component.RowIcon
 import io.github.wxmyyds.coldfront.ui.component.PageScaffold
-import io.github.wxmyyds.coldfront.ui.component.glassSource
 import io.github.wxmyyds.coldfront.ui.component.SegmentedDropdownRow
 import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
 import io.github.wxmyyds.coldfront.ui.component.SegmentedRow
@@ -53,7 +52,6 @@ fun SettingsScreen(vm: CoolerViewModel, onAbout: () -> Unit) {
     val dynamicColor by vm.dynamicColor.collectAsStateWithLifecycle()
     val darkMode by vm.darkMode.collectAsStateWithLifecycle()
     val appLanguage by vm.appLanguage.collectAsStateWithLifecycle()
-    val interfaceBlur by vm.interfaceBlur.collectAsStateWithLifecycle()
     val palette by vm.palette.collectAsStateWithLifecycle()
     val predictiveBack by vm.predictiveBack.collectAsStateWithLifecycle()
     val contentScrollState = rememberScrollState()
@@ -132,15 +130,6 @@ fun SettingsScreen(vm: CoolerViewModel, onAbout: () -> Unit) {
             }
 
             SegmentedGroup(title = strings.settingsInterface) {
-                item(key = "interfaceBlur") {
-                    SegmentedSwitchRow(
-                        title = strings.settingsInterfaceBlur,
-                        summary = strings.settingsInterfaceBlurDesc,
-                        checked = interfaceBlur,
-                        onCheckedChange = vm::setInterfaceBlur,
-                        leadingContent = { RowIcon(Icons.Filled.Palette) },
-                    )
-                }
                 item(key = "predictiveBack") {
                     SegmentedSwitchRow(
                         title = strings.settingsPredictiveBack,

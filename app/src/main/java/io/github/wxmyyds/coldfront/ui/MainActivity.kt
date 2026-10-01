@@ -67,11 +67,6 @@ import io.github.wxmyyds.coldfront.ble.BlePermissionManager
 import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 import io.github.wxmyyds.coldfront.ui.i18n.rememberStrings
-import io.github.wxmyyds.coldfront.ui.component.LocalGlassHazeState
-import io.github.wxmyyds.coldfront.ui.component.LocalInterfaceBlur
-import io.github.wxmyyds.coldfront.ui.component.glassEffect
-import io.github.wxmyyds.coldfront.ui.component.glassSource
-import io.github.wxmyyds.coldfront.ui.component.rememberGlassHazeState
 import io.github.wxmyyds.coldfront.ui.theme.RedmagicCoolerTheme
 
 class MainActivity : ComponentActivity() {
@@ -95,9 +90,7 @@ class MainActivity : ComponentActivity() {
         val dynamicColor by vm.dynamicColor.collectAsStateWithLifecycle()
         val darkMode by vm.darkMode.collectAsStateWithLifecycle()
         val appLanguage by vm.appLanguage.collectAsStateWithLifecycle()
-        val interfaceBlur by vm.interfaceBlur.collectAsStateWithLifecycle()
         val palette by vm.palette.collectAsStateWithLifecycle()
-        val hazeState = rememberGlassHazeState()
         // 语言覆盖必须在取文案之前生效
         val strings = rememberStrings(override = appLanguage)
         val dark = when (darkMode) {
@@ -107,8 +100,6 @@ class MainActivity : ComponentActivity() {
         }
         CompositionLocalProvider(
             LocalStrings provides strings,
-            LocalGlassHazeState provides hazeState,
-            LocalInterfaceBlur provides interfaceBlur,
         ) {
             RedmagicCoolerTheme(darkTheme = dark, dynamicColor = dynamicColor, palette = palette) {
                 SystemBarAppearance(dark)
@@ -240,11 +231,8 @@ private fun AppNav(vm: CoolerViewModel) {
                 if (!useRail && current?.route != Routes.ABOUT) {
                     NavigationBar(
                         modifier = Modifier
-                            .semantics { isTraversalGroup = true }
-                            .glassEffect(LocalGlassHazeState.current, LocalInterfaceBlur.current),
-                        containerColor = MaterialTheme.colorScheme.background.copy(
-                            alpha = if (LocalInterfaceBlur.current && LocalGlassHazeState.current != null) 0f else 1f,
-                        ),
+                            .semantics { isTraversalGroup = true },
+                        containerColor = MaterialTheme.colorScheme.background,
                         tonalElevation = 0.dp,
                         windowInsets = WindowInsets(
                             left = 0.dp,

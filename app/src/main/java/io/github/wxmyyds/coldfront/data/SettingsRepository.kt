@@ -48,7 +48,6 @@ class SettingsRepository(context: Context) {
     /** 深色模式:system / light / dark */
     val darkMode: Flow<String> = dataStore.data.map { it[KEY_DARK_MODE] ?: "system" }
 
-    val interfaceBlur: Flow<Boolean> = dataStore.data.map { it[KEY_INTERFACE_BLUR] ?: false }
     val palette: Flow<String> = dataStore.data.map { it[KEY_PALETTE] ?: "tonal_spot" }
     val predictiveBack: Flow<Boolean> = dataStore.data.map { it[KEY_PREDICTIVE_BACK] ?: true }
 
@@ -61,10 +60,6 @@ class SettingsRepository(context: Context) {
 
     suspend fun setDarkMode(mode: String) {
         dataStore.edit { it[KEY_DARK_MODE] = mode }
-    }
-
-    suspend fun setInterfaceBlur(enabled: Boolean) {
-        dataStore.edit { it[KEY_INTERFACE_BLUR] = enabled }
     }
 
     suspend fun setPalette(palette: String) {
@@ -108,7 +103,6 @@ class SettingsRepository(context: Context) {
     companion object {
         private val KEY_DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         private val KEY_DARK_MODE = stringPreferencesKey("dark_mode")
-        private val KEY_INTERFACE_BLUR = booleanPreferencesKey("interface_blur")
         private val KEY_PALETTE = stringPreferencesKey("palette")
         private val KEY_PREDICTIVE_BACK = booleanPreferencesKey("predictive_back")
         private val KEY_APP_LANGUAGE = stringPreferencesKey("app_language")

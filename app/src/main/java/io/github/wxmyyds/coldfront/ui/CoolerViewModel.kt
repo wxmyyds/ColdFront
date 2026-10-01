@@ -47,8 +47,6 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
         settingsRepo.dynamicColor.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val darkMode: StateFlow<String> =
         settingsRepo.darkMode.stateIn(viewModelScope, SharingStarted.Eagerly, "system")
-    val interfaceBlur: StateFlow<Boolean> =
-        settingsRepo.interfaceBlur.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val palette: StateFlow<String> =
         settingsRepo.palette.stateIn(viewModelScope, SharingStarted.Eagerly, "tonal_spot")
     val predictiveBack: StateFlow<Boolean> =
@@ -63,9 +61,6 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setDarkMode(mode: String) =
         viewModelScope.launch { settingsRepo.setDarkMode(mode) }
-
-    fun setInterfaceBlur(enabled: Boolean) =
-        viewModelScope.launch { settingsRepo.setInterfaceBlur(enabled) }
 
     fun setPalette(palette: String) =
         viewModelScope.launch { settingsRepo.setPalette(palette) }
