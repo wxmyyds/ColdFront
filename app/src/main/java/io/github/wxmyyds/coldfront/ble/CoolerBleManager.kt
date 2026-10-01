@@ -305,7 +305,7 @@ class CoolerBleManager(private val context: Context) {
      * connectGatt(…, TRANSPORT_LE) 以显式指定 LE 传输，避免双模设备走 BR/EDR 导致连接失败。
      */
     @SuppressLint("MissingPermission")
-    private fun openGatt(device: BluetoothDevice): BluetoothGatt {
+    private fun openGatt(device: BluetoothDevice): BluetoothGatt? {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.CINNAMON_BUN) {
             openGattWithSettings(device)
         } else {
@@ -315,7 +315,7 @@ class CoolerBleManager(private val context: Context) {
     }
 
     @RequiresApi(Build.VERSION_CODES.CINNAMON_BUN)
-    private fun openGattWithSettings(device: BluetoothDevice): BluetoothGatt {
+    private fun openGattWithSettings(device: BluetoothDevice): BluetoothGatt? {
         val settings = BluetoothGattConnectionSettings.Builder()
             .setTransport(BluetoothDevice.TRANSPORT_LE)
             .setAutoConnectEnabled(false)
