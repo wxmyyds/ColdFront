@@ -136,7 +136,8 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
     }
 
     val contentScrollState = rememberScrollState()
-    val blurTopBar = LocalInterfaceBlur.current && contentScrollState.value > 0
+    val blurTopBar = LocalInterfaceBlur.current &&
+        (contentScrollState.value > 0 || contentScrollState.isScrollInProgress)
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
     Scaffold(
@@ -148,8 +149,8 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 title = { Text(strings.rgbTitle) },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (blurTopBar) 0f else 1f),
-                    scrolledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (blurTopBar) 0f else 1f),
+                    containerColor = MaterialTheme.colorScheme.background.copy(alpha = if (blurTopBar) 0f else 1f),
+                    scrolledContainerColor = MaterialTheme.colorScheme.background.copy(alpha = if (blurTopBar) 0f else 1f),
                 ),
                 scrollBehavior = scrollBehavior,
             )

@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -71,6 +69,10 @@ import io.github.wxmyyds.coldfront.ble.BleScanDiagnostic
 import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.domain.CoolerDevice
 import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
+import io.github.wxmyyds.coldfront.ui.component.LocalGlassHazeState
+import io.github.wxmyyds.coldfront.ui.component.LocalInterfaceBlur
+import io.github.wxmyyds.coldfront.ui.component.glassSource
+import io.github.wxmyyds.coldfront.ui.component.glassTopBarEffect
 import io.github.wxmyyds.coldfront.ui.component.SegmentedRow
 import io.github.wxmyyds.coldfront.ui.component.SegmentedSwitchRow
 import io.github.wxmyyds.coldfront.ui.component.segmentedRowShapes
@@ -93,6 +95,10 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
     var resumed by remember(vm) { mutableStateOf(false) }
     var scanRequested by rememberSaveable { mutableStateOf(true) }
     val listState = rememberLazyListState()
+    val blurTopBar = LocalInterfaceBlur.current &&
+        (listState.firstVisibleItemIndex > 0 ||
+            listState.firstVisibleItemScrollOffset > 0 ||
+            listState.isScrollInProgress)
     val context = LocalContext.current
     val locationRequired = Build.VERSION.SDK_INT <= Build.VERSION_CODES.R
     val locationReady = !locationRequired || scanState.locationServiceEnabled
@@ -175,11 +181,15 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
             // MD3E 小顶栏 + 返回导航:标题走默认 TitleLarge,滚动后容器转 surfaceContainer
             TopAppBar(
                 windowInsets = WindowInsets(0, 0, 0, 0),
-                modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
+                modifier = Modifier.glassTopBarEffect(LocalGlassHazeState.current, blurTopBar),
                 title = { Text(strings.scanTitle) },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    scrolledContainerColor = MaterialTheme.colorScheme.background,
+                    containerColor = MaterialTheme.colorScheme.background.copy(
+                        alpha = if (blurTopBar) 0f else 1f,
+                    ),
+                    scrolledContainerColor = MaterialTheme.colorScheme.background.copy(
+                        alpha = if (blurTopBar) 0f else 1f,
+                    ),
                 ),
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
@@ -191,7 +201,10 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
         },
     ) { inner ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(inner),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(inner)
+                .glassSource(LocalGlassHazeState.current),
             state = listState,
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),

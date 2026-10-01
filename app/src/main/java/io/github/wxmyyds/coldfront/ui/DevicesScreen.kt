@@ -80,7 +80,9 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
     var profileToDelete by remember { mutableStateOf<CoolerProfile?>(null) }
     val listState = rememberLazyListState()
     val blurTopBar = LocalInterfaceBlur.current && profiles.isNotEmpty() &&
-        (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0)
+        (listState.firstVisibleItemIndex > 0 ||
+            listState.firstVisibleItemScrollOffset > 0 ||
+            listState.isScrollInProgress)
 
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
@@ -93,8 +95,8 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 title = { Text(strings.devicesTitle) },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (blurTopBar) 0f else 1f),
-                    scrolledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (blurTopBar) 0f else 1f),
+                    containerColor = MaterialTheme.colorScheme.background.copy(alpha = if (blurTopBar) 0f else 1f),
+                    scrolledContainerColor = MaterialTheme.colorScheme.background.copy(alpha = if (blurTopBar) 0f else 1f),
                 ),
                 scrollBehavior = scrollBehavior,
             )

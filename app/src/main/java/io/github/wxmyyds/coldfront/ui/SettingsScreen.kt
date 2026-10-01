@@ -51,7 +51,7 @@ import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 /**
  * 设置页(MD3E 分段选项列表):
  * - 外观组 = 动态取色开关行 + 「主题模式」下拉行；
- * - 通用组 = 「语言」下拉行 + 关于行。
+ * - 通用设置与关于入口分别成组。
  * 三档主题、三档语言都收成一行 + 下拉菜单：选项本身没有需要常驻展示的信息，
  * 铺成多行只是把页面拉长。
  */
@@ -66,7 +66,8 @@ fun SettingsScreen(vm: CoolerViewModel, onAbout: () -> Unit) {
     val palette by vm.palette.collectAsStateWithLifecycle()
     val predictiveBack by vm.predictiveBack.collectAsStateWithLifecycle()
     val contentScrollState = rememberScrollState()
-    val blurTopBar = LocalInterfaceBlur.current && contentScrollState.value > 0
+    val blurTopBar = LocalInterfaceBlur.current &&
+        (contentScrollState.value > 0 || contentScrollState.isScrollInProgress)
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     val supportsDynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
@@ -96,8 +97,8 @@ fun SettingsScreen(vm: CoolerViewModel, onAbout: () -> Unit) {
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 title = { Text(strings.settingsTitle, modifier = Modifier.semantics { heading() }) },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (blurTopBar) 0f else 1f),
-                    scrolledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (blurTopBar) 0f else 1f),
+                    containerColor = MaterialTheme.colorScheme.background.copy(alpha = if (blurTopBar) 0f else 1f),
+                    scrolledContainerColor = MaterialTheme.colorScheme.background.copy(alpha = if (blurTopBar) 0f else 1f),
                 ),
                 scrollBehavior = scrollBehavior,
             )
@@ -192,6 +193,9 @@ fun SettingsScreen(vm: CoolerViewModel, onAbout: () -> Unit) {
                         leadingContent = { RowIcon(Icons.Filled.Language) },
                     )
                 }
+            }
+
+            SegmentedGroup {
                 item(key = "about") {
                     SegmentedRow(
                         title = strings.settingsAbout,

@@ -51,7 +51,8 @@ fun AboutScreen(onBack: () -> Unit) {
     val strings = LocalStrings.current
     val context = LocalContext.current
     val contentScrollState = rememberScrollState()
-    val blurTopBar = LocalInterfaceBlur.current && contentScrollState.value > 0
+    val blurTopBar = LocalInterfaceBlur.current &&
+        (contentScrollState.value > 0 || contentScrollState.isScrollInProgress)
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -68,10 +69,10 @@ fun AboutScreen(onBack: () -> Unit) {
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(
+                    containerColor = MaterialTheme.colorScheme.background.copy(
                         alpha = if (blurTopBar) 0f else 1f,
                     ),
-                    scrolledContainerColor = MaterialTheme.colorScheme.surface.copy(
+                    scrolledContainerColor = MaterialTheme.colorScheme.background.copy(
                         alpha = if (blurTopBar) 0f else 1f,
                     ),
                 ),

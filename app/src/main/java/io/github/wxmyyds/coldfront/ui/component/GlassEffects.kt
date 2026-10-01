@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.MaterialTheme
 import dev.chrisbanes.haze.HazeState
@@ -28,7 +27,7 @@ fun Modifier.glassSource(state: HazeState?): Modifier =
 
 @Composable
 fun Modifier.glassTopBarEffect(state: HazeState?, enabled: Boolean): Modifier {
-    val surface = MaterialTheme.colorScheme.surface
+    val surface = MaterialTheme.colorScheme.background
     val backdrop = if (enabled) {
         glassEffect(state, enabled = true)
     } else {
@@ -40,7 +39,7 @@ fun Modifier.glassTopBarEffect(state: HazeState?, enabled: Boolean): Modifier {
 @Composable
 fun Modifier.glassEffect(state: HazeState?, enabled: Boolean): Modifier {
     if (!enabled || state == null) return this
-    val surface = MaterialTheme.colorScheme.surface
+    val surface = MaterialTheme.colorScheme.background
     val tint = surface.copy(alpha = 0.58f)
     return hazeEffect(
         state = state,

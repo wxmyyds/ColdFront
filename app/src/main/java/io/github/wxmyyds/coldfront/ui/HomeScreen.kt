@@ -89,21 +89,22 @@ fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
     val connected = state.connection == ConnectionState.CONNECTED
     val contentScrollState = rememberScrollState()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
-    val blurTopBar = LocalInterfaceBlur.current && contentScrollState.value > 0
+    val blurTopBar = LocalInterfaceBlur.current &&
+        (contentScrollState.value > 0 || contentScrollState.isScrollInProgress)
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             // MD3E 小顶栏:标题用组件默认的 TitleLarge(旧写法 headlineSmall 24sp 超出小顶栏规格),
-            // 容器色不再强制透明——规范要求滚动后容器变为 surfaceContainer。
+            // 滚动时透明，让统一的 Haze 效果覆盖状态栏与标题栏。
             TopAppBar(
                 modifier = Modifier.glassTopBarEffect(LocalGlassHazeState.current, blurTopBar),
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 title = { Text(strings.homeTitle) },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (blurTopBar) 0f else 1f),
-                    scrolledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (blurTopBar) 0f else 1f),
+                    containerColor = MaterialTheme.colorScheme.background.copy(alpha = if (blurTopBar) 0f else 1f),
+                    scrolledContainerColor = MaterialTheme.colorScheme.background.copy(alpha = if (blurTopBar) 0f else 1f),
                 ),
                 scrollBehavior = scrollBehavior,
             )
