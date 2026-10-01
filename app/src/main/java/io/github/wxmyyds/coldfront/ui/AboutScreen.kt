@@ -15,7 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.foundation.Image
@@ -50,13 +50,15 @@ import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 fun AboutScreen(onBack: () -> Unit) {
     val strings = LocalStrings.current
     val context = LocalContext.current
+    val contentScrollState = rememberScrollState()
+    val blurTopBar = LocalInterfaceBlur.current && contentScrollState.value > 0
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 modifier = Modifier.glassTopBarEffect(
                     LocalGlassHazeState.current,
-                    LocalInterfaceBlur.current,
+                    blurTopBar,
                 ),
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 title = {},
@@ -67,10 +69,10 @@ fun AboutScreen(onBack: () -> Unit) {
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface.copy(
-                        alpha = if (LocalInterfaceBlur.current) 0f else 1f,
+                        alpha = if (blurTopBar) 0f else 1f,
                     ),
                     scrolledContainerColor = MaterialTheme.colorScheme.surface.copy(
-                        alpha = if (LocalInterfaceBlur.current) 0f else 1f,
+                        alpha = if (blurTopBar) 0f else 1f,
                     ),
                 ),
             )
@@ -80,7 +82,7 @@ fun AboutScreen(onBack: () -> Unit) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(inner)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(contentScrollState)
                 .glassSource(LocalGlassHazeState.current),
         ) {
             Column(
@@ -107,7 +109,7 @@ fun AboutScreen(onBack: () -> Unit) {
                         Image(
                             painter = painterResource(R.drawable.ic_launcher),
                             contentDescription = null,
-                            modifier = Modifier.size(80.dp),
+                            modifier = Modifier.size(56.dp),
                         )
                     }
                 }
@@ -131,7 +133,7 @@ fun AboutScreen(onBack: () -> Unit) {
                             title = strings.settingsAboutReport,
                             leadingContent = { Icon(Icons.Filled.BugReport, contentDescription = null) },
                             trailingContent = {
-                                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
+                                Icon(Icons.Filled.ChevronRight, contentDescription = null)
                             },
                             onClick = {
                                 context.startActivity(
@@ -148,7 +150,7 @@ fun AboutScreen(onBack: () -> Unit) {
                             title = strings.settingsAboutProject,
                             leadingContent = { Icon(Icons.Filled.Public, contentDescription = null) },
                             trailingContent = {
-                                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
+                                Icon(Icons.Filled.ChevronRight, contentDescription = null)
                             },
                             onClick = {
                                 context.startActivity(

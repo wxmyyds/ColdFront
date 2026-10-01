@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
@@ -64,6 +65,8 @@ fun SettingsScreen(vm: CoolerViewModel, onAbout: () -> Unit) {
     val interfaceBlur by vm.interfaceBlur.collectAsStateWithLifecycle()
     val palette by vm.palette.collectAsStateWithLifecycle()
     val predictiveBack by vm.predictiveBack.collectAsStateWithLifecycle()
+    val contentScrollState = rememberScrollState()
+    val blurTopBar = LocalInterfaceBlur.current && contentScrollState.value > 0
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     val supportsDynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
@@ -89,12 +92,12 @@ fun SettingsScreen(vm: CoolerViewModel, onAbout: () -> Unit) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                modifier = Modifier.glassTopBarEffect(LocalGlassHazeState.current, LocalInterfaceBlur.current),
+                modifier = Modifier.glassTopBarEffect(LocalGlassHazeState.current, blurTopBar),
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 title = { Text(strings.settingsTitle, modifier = Modifier.semantics { heading() }) },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (LocalInterfaceBlur.current) 0f else 1f),
-                    scrolledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (LocalInterfaceBlur.current) 0f else 1f),
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (blurTopBar) 0f else 1f),
+                    scrolledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (blurTopBar) 0f else 1f),
                 ),
                 scrollBehavior = scrollBehavior,
             )
@@ -105,7 +108,7 @@ fun SettingsScreen(vm: CoolerViewModel, onAbout: () -> Unit) {
                 .fillMaxSize()
                 .padding(inner)
                 .consumeWindowInsets(inner)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(contentScrollState)
                 .glassSource(LocalGlassHazeState.current)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -192,8 +195,13 @@ fun SettingsScreen(vm: CoolerViewModel, onAbout: () -> Unit) {
                 item(key = "about") {
                     SegmentedRow(
                         title = strings.settingsAbout,
-                        summary = "${strings.settingsAboutDesc} · v${BuildConfig.VERSION_NAME}",
                         leadingContent = { RowIcon(Icons.Filled.Info) },
+                        trailingContent = {
+                            androidx.compose.material3.Icon(
+                                Icons.Filled.ChevronRight,
+                                contentDescription = null,
+                            )
+                        },
                         onClick = onAbout,
                     )
                 }

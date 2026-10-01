@@ -1,5 +1,6 @@
 package io.github.wxmyyds.coldfront.ui.component
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -26,8 +27,15 @@ fun Modifier.glassSource(state: HazeState?): Modifier =
     if (state == null) this else hazeSource(state)
 
 @Composable
-fun Modifier.glassTopBarEffect(state: HazeState?, enabled: Boolean): Modifier =
-    glassEffect(state, enabled).windowInsetsPadding(WindowInsets.statusBars)
+fun Modifier.glassTopBarEffect(state: HazeState?, enabled: Boolean): Modifier {
+    val surface = MaterialTheme.colorScheme.surface
+    val backdrop = if (enabled) {
+        glassEffect(state, enabled = true)
+    } else {
+        background(surface)
+    }
+    return backdrop.windowInsetsPadding(WindowInsets.statusBars)
+}
 
 @Composable
 fun Modifier.glassEffect(state: HazeState?, enabled: Boolean): Modifier {

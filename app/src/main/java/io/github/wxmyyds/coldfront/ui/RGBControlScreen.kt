@@ -135,6 +135,8 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
         }
     }
 
+    val contentScrollState = rememberScrollState()
+    val blurTopBar = LocalInterfaceBlur.current && contentScrollState.value > 0
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
     Scaffold(
@@ -142,12 +144,12 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                modifier = Modifier.glassTopBarEffect(LocalGlassHazeState.current, LocalInterfaceBlur.current),
+                modifier = Modifier.glassTopBarEffect(LocalGlassHazeState.current, blurTopBar),
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 title = { Text(strings.rgbTitle) },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (LocalInterfaceBlur.current) 0f else 1f),
-                    scrolledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (LocalInterfaceBlur.current) 0f else 1f),
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (blurTopBar) 0f else 1f),
+                    scrolledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (blurTopBar) 0f else 1f),
                 ),
                 scrollBehavior = scrollBehavior,
             )
@@ -157,7 +159,7 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(inner)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(contentScrollState)
                 .glassSource(LocalGlassHazeState.current)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),

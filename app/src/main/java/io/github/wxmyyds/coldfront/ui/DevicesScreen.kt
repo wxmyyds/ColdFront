@@ -77,6 +77,9 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
     val profiles by vm.profiles.collectAsStateWithLifecycle()
     val state by vm.liveState.collectAsStateWithLifecycle()
     var profileToDelete by remember { mutableStateOf<CoolerProfile?>(null) }
+    val listState = rememberLazyListState()
+    val blurTopBar = LocalInterfaceBlur.current && profiles.isNotEmpty() &&
+        (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0)
 
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
@@ -85,12 +88,12 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                modifier = Modifier.glassTopBarEffect(LocalGlassHazeState.current, LocalInterfaceBlur.current),
+                modifier = Modifier.glassTopBarEffect(LocalGlassHazeState.current, blurTopBar),
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 title = { Text(strings.devicesTitle) },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (LocalInterfaceBlur.current) 0f else 1f),
-                    scrolledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (LocalInterfaceBlur.current) 0f else 1f),
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (blurTopBar) 0f else 1f),
+                    scrolledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (blurTopBar) 0f else 1f),
                 ),
                 scrollBehavior = scrollBehavior,
             )
@@ -115,6 +118,7 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
                     .padding(inner)
                     .padding(horizontal = 16.dp)
                     .glassSource(LocalGlassHazeState.current),
+                state = listState,
                 verticalArrangement = Arrangement.spacedBy(SegmentedRowGap),
                 contentPadding = PaddingValues(
                     top = 8.dp,

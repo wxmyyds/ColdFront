@@ -87,7 +87,9 @@ fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
     val strings = LocalStrings.current
     val state by vm.liveState.collectAsStateWithLifecycle()
     val connected = state.connection == ConnectionState.CONNECTED
+    val contentScrollState = rememberScrollState()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+    val blurTopBar = LocalInterfaceBlur.current && contentScrollState.value > 0
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -96,12 +98,12 @@ fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
             // MD3E 小顶栏:标题用组件默认的 TitleLarge(旧写法 headlineSmall 24sp 超出小顶栏规格),
             // 容器色不再强制透明——规范要求滚动后容器变为 surfaceContainer。
             TopAppBar(
-                modifier = Modifier.glassTopBarEffect(LocalGlassHazeState.current, LocalInterfaceBlur.current),
+                modifier = Modifier.glassTopBarEffect(LocalGlassHazeState.current, blurTopBar),
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 title = { Text(strings.homeTitle) },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (LocalInterfaceBlur.current) 0f else 1f),
-                    scrolledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (LocalInterfaceBlur.current) 0f else 1f),
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (blurTopBar) 0f else 1f),
+                    scrolledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (blurTopBar) 0f else 1f),
                 ),
                 scrollBehavior = scrollBehavior,
             )
@@ -112,7 +114,7 @@ fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(inner)
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(contentScrollState)
                     .glassSource(LocalGlassHazeState.current)
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -126,7 +128,7 @@ fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
                     .fillMaxSize()
                     .padding(inner)
                     .padding(horizontal = 24.dp)
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(contentScrollState)
                     .glassSource(LocalGlassHazeState.current)
                     .padding(vertical = 24.dp),
                 contentAlignment = Alignment.Center,
