@@ -440,7 +440,9 @@ private fun DiagnosticCard(
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(
             containerColor = if (isCooler) {
-                MaterialTheme.colorScheme.secondaryContainer
+                // 已识别的散热器是扫描结果的「重点目标」，用对比强调角色；
+                // secondaryContainer 语义是次要/低强调，与此意图相反。
+                MaterialTheme.colorScheme.tertiaryContainer
             } else {
                 MaterialTheme.colorScheme.surfaceContainerLowest
             },

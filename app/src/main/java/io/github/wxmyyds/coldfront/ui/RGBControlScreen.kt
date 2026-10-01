@@ -82,8 +82,8 @@ import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 
 /**
- * 预览和通道色标保留设备灯光的真实色；滑条使用主题角色色，
- * 确保操作轨道和滑块在深浅主题下均可辨识。
+ * 预览和通道色标保留设备灯光的真实色；RGB 滑条的轨道/滑块同样取通道色，
+ * 用颜色本身传达「这条轨道调的是哪个通道」——属数据可视化语义，不是主题角色色。
  */
 private val PreviewStage = Color.Black
 private val PreviewStageContent = Color.White
@@ -481,7 +481,11 @@ private fun ColorSlider(label: String, value: Int, trackColor: Color, onChange: 
                 onChange(it.toInt())
             },
             onValueChangeFinished = { dragging = false },
-            colors = SliderDefaults.colors(),
+            // 轨道与滑块取通道色：颜色即语义（红轨调红、绿轨调绿）
+            colors = SliderDefaults.colors(
+                thumbColor = trackColor,
+                activeTrackColor = trackColor,
+            ),
         )
     }
 }
