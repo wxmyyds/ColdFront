@@ -41,13 +41,15 @@ fun Modifier.glassTopBarEffect(state: HazeState?, enabled: Boolean): Modifier {
 fun Modifier.glassEffect(state: HazeState?, enabled: Boolean): Modifier {
     if (!enabled || state == null) return this
     val surface = MaterialTheme.colorScheme.background
-    val tint = surface.copy(alpha = 0.8f)
+    // 与 InstallerX 的 25px 小半径 + 同色高透明度 blend 同量级：内容从栏下滑过时,
+    // 栏体仍基本呈现页面背景色（#EFECF6 / #191920），不会因强模糊把彩色内容"泛"进栏体产生色差。
+    val tint = surface.copy(alpha = 0.92f)
     return this.hazeEffect(
         state = state,
         style = HazeStyle(
             backgroundColor = surface,
             tints = listOf(HazeTint(tint)),
-            blurRadius = 32.dp,
+            blurRadius = 10.dp,
             fallbackTint = HazeTint(surface),
         ),
     )
