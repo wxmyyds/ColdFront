@@ -226,7 +226,6 @@ private fun AppNav(vm: CoolerViewModel) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val useRail = maxWidth >= 600.dp
         Scaffold(
-            modifier = Modifier.glassSource(LocalGlassHazeState.current),
             containerColor = MaterialTheme.colorScheme.background,
             bottomBar = {
                 if (!useRail) {

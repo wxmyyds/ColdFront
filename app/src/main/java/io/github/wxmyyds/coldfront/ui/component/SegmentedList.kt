@@ -52,6 +52,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 
 /**
@@ -440,6 +441,11 @@ fun <T> SegmentedDropdownRow(
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
+            offset = DpOffset(0.dp, 4.dp),
+            shape = MaterialTheme.shapes.large,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 0.dp,
+            shadowElevation = 8.dp,
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 options.forEach { option ->

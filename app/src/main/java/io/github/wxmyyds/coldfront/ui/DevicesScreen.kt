@@ -102,7 +102,10 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
         },
     ) { inner ->
         if (profiles.isEmpty()) {
-            EmptyState(strings, Modifier.padding(inner))
+            EmptyState(
+                strings,
+                Modifier.padding(inner).glassSource(LocalGlassHazeState.current),
+            )
         } else {
             LazyColumn(
                 modifier = Modifier
