@@ -1,22 +1,28 @@
 package io.github.wxmyyds.coldfront.ui
 
-import android.Manifest
 import android.content.Intent
+import android.os.Build
 import android.provider.Settings
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bluetooth
@@ -41,26 +47,27 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.wxmyyds.coldfront.ble.BlePermissionManager
 import io.github.wxmyyds.coldfront.ble.BleScanDiagnostic
+import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.domain.CoolerDevice
 import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
-import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
 import io.github.wxmyyds.coldfront.ui.component.SegmentedRow
-import io.github.wxmyyds.coldfront.ui.component.SegmentedRowGap
 import io.github.wxmyyds.coldfront.ui.component.SegmentedSwitchRow
 import io.github.wxmyyds.coldfront.ui.component.segmentedRowShapes
 import io.github.wxmyyds.coldfront.ui.i18n.AppStrings
@@ -76,20 +83,84 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
     val rawDevices by vm.rawDevices.collectAsStateWithLifecycle()
     val scanState by vm.scanState.collectAsStateWithLifecycle()
     val state by vm.liveState.collectAsStateWithLifecycle()
-    var diagMode by remember { mutableStateOf(false) }
+    var diagMode by rememberSaveable { mutableStateOf(false) }
     var connectTarget by remember { mutableStateOf<BleScanDiagnostic?>(null) }
+    var connectionRequest by remember(vm) { mutableStateOf<ScanConnectionRequest?>(null) }
+    var resumed by remember(vm) { mutableStateOf(false) }
+    var scanRequested by rememberSaveable { mutableStateOf(true) }
+    val listState = rememberLazyListState()
     val context = LocalContext.current
+    val locationRequired = Build.VERSION.SDK_INT <= Build.VERSION_CODES.R
+    val locationReady = !locationRequired || scanState.locationServiceEnabled
+    val scanReady = scanState.permissionGranted && btEnabled && scanState.bluetoothOn && locationReady
+    val connecting = state.connection == ConnectionState.CONNECTING ||
+        state.connection == ConnectionState.DISCOVERING
+    val canConnect = resumed && scanReady && !connecting
+
+    fun connect(request: ScanConnectionRequest) {
+        // Check the source too: a second tap can arrive before the StateFlow recomposes this screen.
+        val current = vm.liveState.value.connection
+        val conditions = vm.scanState.value
+        if (!resumed || !conditions.permissionGranted || !vm.bluetoothEnabled.value ||
+            !conditions.bluetoothOn || (locationRequired && !conditions.locationServiceEnabled) ||
+            current == ConnectionState.CONNECTING || current == ConnectionState.DISCOVERING
+        ) return
+        connectionRequest = request
+        scanRequested = false
+        connectTarget = null
+        vm.stopScan()
+        request.connect()
+    }
+
+    fun rescan() {
+        vm.refreshBluetoothState()
+        val conditions = vm.scanState.value
+        val current = vm.liveState.value.connection
+        if (resumed && conditions.permissionGranted && vm.bluetoothEnabled.value &&
+            conditions.bluetoothOn && (!locationRequired || conditions.locationServiceEnabled) &&
+            current != ConnectionState.CONNECTING && current != ConnectionState.DISCOVERING
+        ) {
+            scanRequested = true
+            vm.stopScan()
+            vm.startScan()
+        }
+    }
+
+    LaunchedEffect(connectionRequest) {
+        if (connectionRequest != null) listState.animateScrollToItem(0)
+    }
 
     // 重新授权启动器（授权后刷新条件，扫描由下方 LaunchedEffect 重启）
     val permLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
     ) { vm.refreshBluetoothState() }
 
-    // 进入即扫描；权限/蓝牙状态变化时也重启（修复授权后扫描不启动的问题）
-    LaunchedEffect(btEnabled, scanState.permissionGranted) {
-        if (btEnabled && scanState.permissionGranted) vm.startScan()
+    // Settings/permission screens can pause us without removing this composition.
+    LifecycleResumeEffect(vm) {
+        vm.refreshBluetoothState()
+        resumed = true
+        onPauseOrDispose {
+            resumed = false
+            vm.stopScan()
+        }
     }
-    DisposableEffect(Unit) { onDispose { vm.stopScan() } }
+    LaunchedEffect(
+        vm, resumed, btEnabled, scanState.bluetoothOn, scanState.permissionGranted,
+        scanState.locationServiceEnabled, connecting, scanRequested,
+    ) {
+        // Re-read after refresh: lifecycle-collected UI values may still be one frame behind.
+        val conditions = vm.scanState.value
+        val current = vm.liveState.value.connection
+        if (resumed && scanRequested && scanReady && conditions.permissionGranted &&
+            vm.bluetoothEnabled.value && conditions.bluetoothOn &&
+            (!locationRequired || conditions.locationServiceEnabled) &&
+            current != ConnectionState.CONNECTING && current != ConnectionState.DISCOVERING
+        ) {
+            vm.startScan()
+        } else {
+            vm.stopScan()
+        }
+    }
 
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
@@ -103,31 +174,30 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = strings.back)
                     }
                 },
             )
         },
     ) { inner ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(inner)
-                .padding(16.dp),
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(inner),
+            state = listState,
+            contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-
-            when {
-                !btEnabled -> BluetoothOffState(strings)
-                diagMode -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // Recovery is always first, including permission denial with Bluetooth also off.
+            if (diagMode || !scanReady || scanState.errorCode != null) {
+                item(key = "scanStatus") {
                     ScanStatusCard(
                         strings = strings,
                         scanState = scanState,
+                        locationRequired = locationRequired,
                         onGrant = { permLauncher.launch(BlePermissionManager.scanPermissionsToRequest()) },
                         onAppSettings = {
                             context.startActivity(
                                 Intent(
-                                    android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                                     android.net.Uri.parse("package:${context.packageName}"),
                                 )
                             )
@@ -136,42 +206,84 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
                             context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
                         },
                     )
-                    DiagnosticList(
+                }
+            }
+            if (connectionRequest != null || connecting || state.connection == ConnectionState.FAILED) {
+                item(key = "connectionStatus") {
+                    ConnectionStatusCard(
                         strings = strings,
-                        rawDevices = rawDevices,
-                        onSelect = { entry ->
-                            val known = entry.coolerType
-                            if (known != null) {
-                                // MSD 命中已知型号 → 直接连接
-                                vm.connectRaw(entry, known)
-                                vm.stopScan()
-                            } else {
-                                connectTarget = entry
-                            }
-                        },
+                        connection = state.connection,
+                        deviceName = connectionRequest?.name ?: state.deviceName,
+                        retryEnabled = canConnect && connectionRequest != null,
+                        onRetry = { connectionRequest?.let { connect(it) } },
                     )
                 }
-                devices.isEmpty() -> ScanningEmptyState(strings, scanning = scanState.scanning) {
-                    vm.startScan()
-                }
-                else -> DeviceList(strings, devices) { vm.connect(it); vm.stopScan() }
             }
-
-            if (btEnabled) {
-                // 诊断模式是「显示设置」而不是集合筛选 → 用开关行，不用 FilterChip
-                SegmentedGroup {
-                    item(key = "diagMode") {
-                        SegmentedSwitchRow(
-                            title = strings.diagToggle,
-                            summary = if (diagMode) strings.diagHint else null,
-                            checked = diagMode,
-                            onCheckedChange = { diagMode = it },
-                        )
+            when {
+                !scanState.permissionGranted -> Unit // The status card owns permission recovery.
+                !btEnabled || !scanState.bluetoothOn -> item(key = "bluetoothOff") {
+                    BluetoothOffState(strings)
+                }
+                !locationReady -> Unit // Android <= 30 must enable location before scanning.
+                diagMode -> {
+                    if (rawDevices.isEmpty()) {
+                        item(key = "diagnosticEmpty") {
+                            DiagnosticEmptyState(strings, scanning = scanState.scanning)
+                        }
+                    } else {
+                        item(key = "diagnosticCount") {
+                            Text(
+                                strings.diagRawCount.format(rawDevices.size),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                        items(rawDevices, key = { "raw:${it.address}" }) { entry ->
+                            DiagnosticCard(strings, entry, enabled = canConnect) {
+                                val known = entry.coolerType
+                                if (known != null) {
+                                    connect(ScanConnectionRequest(entry.name ?: entry.address) {
+                                        vm.connectRaw(entry, known)
+                                    })
+                                } else if (canConnect) {
+                                    connectTarget = entry
+                                }
+                            }
+                        }
+                    }
+                }
+                devices.isEmpty() -> item(key = "scanEmpty") {
+                    ScanningEmptyState(strings, scanning = scanState.scanning)
+                }
+                else -> itemsIndexed(devices, key = { _, device -> "device:${device.address}" }) { index, device ->
+                    DeviceRow(strings, device, index, devices.size, enabled = canConnect) {
+                        connect(ScanConnectionRequest(device.displayName) { vm.connect(device) })
                     }
                 }
             }
+            if (scanReady) {
+                item(key = "rescan") {
+                    OutlinedButton(
+                        onClick = { rescan() },
+                        enabled = resumed && !connecting,
+                        shapes = ButtonDefaults.shapes(),
+                    ) {
+                        Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(strings.scanRescan)
+                    }
+                }
+            }
+            item(key = "diagMode") {
+                SegmentedSwitchRow(
+                    title = strings.diagToggle,
+                    summary = if (diagMode) strings.diagHint else null,
+                    checked = diagMode,
+                    onCheckedChange = { diagMode = it },
+                    shapes = segmentedRowShapes(index = 0, count = 1),
+                )
+            }
         }
-
     }
 
     // 手动选型号连接对话框
@@ -179,25 +291,62 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
         ConnectAsDialog(
             strings = strings,
             onDismiss = { connectTarget = null },
+            enabled = canConnect,
             onConfirm = { type ->
-                vm.connectRaw(entry, type)
-                vm.stopScan()
-                connectTarget = null
+                connect(ScanConnectionRequest(entry.name ?: entry.address) { vm.connectRaw(entry, type) })
             },
         )
     }
 }
 
+private class ScanConnectionRequest(val name: String, val connect: () -> Unit)
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun ConnectionStatusCard(
+    strings: AppStrings,
+    connection: ConnectionState,
+    deviceName: String?,
+    retryEnabled: Boolean,
+    onRetry: () -> Unit,
+) {
+    val connecting = connection == ConnectionState.CONNECTING || connection == ConnectionState.DISCOVERING
+    val failed = !connecting && connection != ConnectionState.CONNECTED
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            deviceName?.let { Text(it, style = MaterialTheme.typography.titleMedium) }
+            if (connecting) LoadingIndicator(Modifier.size(32.dp))
+            Text(
+                when {
+                    connecting -> strings.homeConnecting
+                    failed -> strings.homeConnectionFailed
+                    else -> strings.homeConnected
+                },
+                style = EmphasizedTypography.titleSmall,
+                color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            )
+            if (failed) {
+                Text(strings.homeRetryHint, style = MaterialTheme.typography.bodyMedium)
+                OutlinedButton(onClick = onRetry, enabled = retryEnabled, shapes = ButtonDefaults.shapes()) {
+                    Text(strings.retry)
+                }
+            }
+        }
+    }
+}
+
 /** 扫描条件状态卡：权限/扫描器/定位/蓝牙，一项异常给对应修复按钮 */
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ScanStatusCard(
     strings: AppStrings,
     scanState: io.github.wxmyyds.coldfront.ble.ScanState,
+    locationRequired: Boolean,
     onGrant: () -> Unit,
     onAppSettings: () -> Unit,
     onLocation: () -> Unit,
 ) {
-    val context = LocalContext.current
+    val locationBlocked = locationRequired && !scanState.locationServiceEnabled
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
@@ -214,7 +363,11 @@ private fun ScanStatusCard(
                 else MaterialTheme.colorScheme.error,
             )
             if (!scanState.permissionGranted) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     OutlinedButton(onClick = onGrant, shapes = ButtonDefaults.shapes()) { Text(strings.diagGrantAgain) }
                     OutlinedButton(onClick = onAppSettings, shapes = ButtonDefaults.shapes()) { Text(strings.diagOpenAppSettings) }
                 }
@@ -231,15 +384,15 @@ private fun ScanStatusCard(
                 strings.diagStatusLocation + ": " +
                     if (scanState.locationServiceEnabled) strings.diagServiceOn
                     else strings.diagServiceOff,
-                style = if (scanState.locationServiceEnabled) {
+                style = if (!locationBlocked) {
                     MaterialTheme.typography.bodySmall
                 } else {
                     EmphasizedTypography.bodySmall
                 },
-                color = if (scanState.locationServiceEnabled) MaterialTheme.colorScheme.onSurface
+                color = if (!locationBlocked) MaterialTheme.colorScheme.onSurface
                 else MaterialTheme.colorScheme.error,
             )
-            if (!scanState.locationServiceEnabled) {
+            if (locationBlocked) {
                 OutlinedButton(onClick = onLocation, shapes = ButtonDefaults.shapes()) { Text(strings.diagOpenLocation) }
             }
             Text(
@@ -253,37 +406,20 @@ private fun ScanStatusCard(
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun DiagnosticList(
-    strings: AppStrings,
-    rawDevices: List<BleScanDiagnostic>,
-    onSelect: (BleScanDiagnostic) -> Unit,
-) {
-    if (rawDevices.isEmpty()) {
-        Column(
-            Modifier.fillMaxSize().padding(top = 32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            LoadingIndicator(Modifier.size(40.dp))
-            Text(strings.diagNoSignal, style = MaterialTheme.typography.titleMedium)
-            Text(
-                strings.diagNoSignalHint,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 24.dp),
-            )
-        }
-        return
-    }
-    Text(
-        strings.diagRawCount.format(rawDevices.size),
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-    )
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(rawDevices, key = { it.address }) { entry ->
-            DiagnosticCard(strings, entry, onSelect)
-        }
+private fun DiagnosticEmptyState(strings: AppStrings, scanning: Boolean) {
+    Column(
+        Modifier.fillMaxWidth().padding(vertical = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (scanning) LoadingIndicator(Modifier.size(40.dp))
+        Text(strings.diagNoSignal, style = MaterialTheme.typography.titleMedium)
+        Text(
+            strings.diagNoSignalHint,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 24.dp),
+        )
     }
 }
 
@@ -291,6 +427,7 @@ private fun DiagnosticList(
 private fun DiagnosticCard(
     strings: AppStrings,
     entry: BleScanDiagnostic,
+    enabled: Boolean,
     onSelect: (BleScanDiagnostic) -> Unit,
 ) {
     val coolerType = entry.coolerType
@@ -298,6 +435,7 @@ private fun DiagnosticCard(
     Card(
         // Card 官方 onClick 重载：整卡涟漪 + 按钮语义 + 状态层，不再 Modifier.clickable 手工拼
         onClick = { onSelect(entry) },
+        enabled = enabled,
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(
@@ -383,9 +521,11 @@ private fun DetailLine(label: String, value: String) {
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ConnectAsDialog(
     strings: AppStrings,
+    enabled: Boolean,
     onDismiss: () -> Unit,
     onConfirm: (CoolerDeviceType) -> Unit,
 ) {
@@ -394,15 +534,23 @@ private fun ConnectAsDialog(
         onDismissRequest = onDismiss,
         title = { Text(strings.diagConnectAs) },
         text = {
-            LazyColumn {
+            LazyColumn(Modifier.selectableGroup()) {
                 items(CoolerDeviceType.entries) { type ->
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { selected = type },
+                            .selectable(
+                                selected = selected == type,
+                                enabled = enabled,
+                                role = Role.RadioButton,
+                                onClick = { selected = type },
+                            )
+                            .sizeIn(minHeight = 48.dp)
+                            .padding(vertical = 8.dp),
                     ) {
-                        RadioButton(selected = selected == type, onClick = { selected = type })
+                        RadioButton(selected = selected == type, onClick = null, enabled = enabled)
+                        Spacer(Modifier.width(12.dp))
                         Column {
                             Text(type.deviceName, style = MaterialTheme.typography.bodyMedium)
                             Text(
@@ -419,7 +567,7 @@ private fun ConnectAsDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { onConfirm(selected) }, shapes = ButtonDefaults.shapes()) { Text(strings.scanSelect) }
+            Button(onClick = { onConfirm(selected) }, enabled = enabled, shapes = ButtonDefaults.shapes()) { Text(strings.scanSelect) }
         },
         dismissButton = {
             OutlinedButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text(strings.diagCancel) }
@@ -427,10 +575,11 @@ private fun ConnectAsDialog(
     )
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun BluetoothOffState(strings: AppStrings) {
     val context = LocalContext.current
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Icon(
                 Icons.Filled.BluetoothDisabled,
@@ -454,8 +603,8 @@ private fun BluetoothOffState(strings: AppStrings) {
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun ScanningEmptyState(strings: AppStrings, scanning: Boolean, onRescan: () -> Unit) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+private fun ScanningEmptyState(strings: AppStrings, scanning: Boolean) {
+    Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (scanning) {
                 LoadingIndicator(Modifier.size(48.dp))
@@ -474,46 +623,39 @@ private fun ScanningEmptyState(strings: AppStrings, scanning: Boolean, onRescan:
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            OutlinedButton(onClick = onRescan, shapes = ButtonDefaults.shapes()) {
-                Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(strings.scanRescan)
-            }
         }
     }
 }
 
 @Composable
-private fun DeviceList(
+private fun DeviceRow(
     strings: AppStrings,
-    devices: List<CoolerDevice>,
-    onConnect: (CoolerDevice) -> Unit,
+    device: CoolerDevice,
+    index: Int,
+    count: Int,
+    enabled: Boolean,
+    onConnect: () -> Unit,
 ) {
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(SegmentedRowGap)) {
-        itemsIndexed(devices, key = { _, device -> device.address }) { index, device ->
-            // 分段选项行:整行可点(自带状态层/涟漪/语义 + 触感),
-            // 分组外角 16dp / 内角 4dp 由 segmentedRowShapes(index, count) 给出。
-            SegmentedRow(
-                title = device.displayName,
-                summary = device.deviceType.deviceName + " · ${device.rssi} dBm",
-                overline = if (device.matchedByName) strings.scanMatchedByName else null,
-                onClick = { onConnect(device) },
-                shapes = segmentedRowShapes(index = index, count = devices.size),
-                leadingContent = {
-                    CoolerArt(
-                        device.deviceType,
-                        modifier = Modifier.size(40.dp),
-                        iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                },
-                trailingContent = {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                },
+    SegmentedRow(
+        title = device.displayName,
+        summary = device.deviceType.deviceName + " · ${device.rssi} dBm",
+        overline = if (device.matchedByName) strings.scanMatchedByName else null,
+        enabled = enabled,
+        onClick = onConnect,
+        shapes = segmentedRowShapes(index = index, count = count),
+        leadingContent = {
+            CoolerArt(
+                device.deviceType,
+                modifier = Modifier.size(40.dp),
+                iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-        }
-    }
+        },
+        trailingContent = {
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+    )
 }

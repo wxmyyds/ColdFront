@@ -25,6 +25,8 @@ import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.domain.FanMode
 import io.github.wxmyyds.coldfront.domain.LightEffect
 import io.github.wxmyyds.coldfront.domain.RGBConfig
+import io.github.wxmyyds.coldfront.domain.RgbWriteState
+import io.github.wxmyyds.coldfront.domain.RgbWriteStatus
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +43,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 
 private const val TAG = "CoolerBleManager"
 private val CCC_DESCRIPTOR_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
@@ -97,6 +100,9 @@ class CoolerBleManager(private val context: Context) {
 
     private var scanning = false
     private var pendingRgb: RGBConfig? = null
+    private var pendingRgbRequestId: Long? = null
+    private val nextRgbRequestId = AtomicLong()
+    private val nextConnectionSessionId = AtomicLong(android.os.SystemClock.elapsedRealtimeNanos())
 
     /** 最近一次成功解析出温度的时间戳(轮询自愈用) */
     @Volatile
@@ -118,6 +124,9 @@ class CoolerBleManager(private val context: Context) {
 
     private val _state = MutableStateFlow(CoolerLiveState(connection = ConnectionState.DISCONNECTED))
     val state: StateFlow<CoolerLiveState> = _state.asStateFlow()
+
+    private val _rgbWriteState = MutableStateFlow<RgbWriteState?>(null)
+    val rgbWriteState: StateFlow<RgbWriteState?> = _rgbWriteState.asStateFlow()
 
     private val _discoveredDevices = MutableStateFlow<List<CoolerDevice>>(emptyList())
     val discoveredDevices: StateFlow<List<CoolerDevice>> = _discoveredDevices.asStateFlow()
@@ -147,20 +156,21 @@ class CoolerBleManager(private val context: Context) {
         }
     }
 
-    val isBluetoothEnabled: Boolean get() = bluetoothAdapter?.isEnabled == true
+    val isBluetoothEnabled: Boolean
+        get() = runCatching { bluetoothAdapter?.isEnabled == true }.getOrDefault(false)
 
     // ──────────────────────────── 扫描 ────────────────────────────
 
     @SuppressLint("MissingPermission")
     fun startScan() {
         refreshScanConditions()
-        val sc = scanner
-        if (sc == null || scanning) return
+        if (scanning) return
         if (!BlePermissionManager.hasScanPermission(context)) {
             Log.w(TAG, "无扫描权限，跳过 startScan")
             _scanState.update { it.copy(scanning = false, permissionGranted = false) }
             return
         }
+        val sc = runCatching { scanner }.getOrNull() ?: return
         _discoveredDevices.value = emptyList()
         _rawDevices.value = emptyList()
         scanning = true
@@ -186,7 +196,7 @@ class CoolerBleManager(private val context: Context) {
         if (!scanning) return
         scanning = false
         _scanState.update { it.copy(scanning = false) }
-        val sc = scanner ?: return
+        val sc = runCatching { scanner }.getOrNull() ?: return
         try {
             sc.stopScan(scanCallback)
         } catch (e: Exception) {
@@ -334,15 +344,14 @@ class CoolerBleManager(private val context: Context) {
         }
         stopScan()
         disconnectInternal()
-        _state.update {
-            it.copy(
-                connection = ConnectionState.CONNECTING,
-                deviceType = device.deviceType,
-                deviceName = device.displayName,
-                deviceAddress = device.address,
-                rssi = device.rssi,
-            )
-        }
+        _state.value = CoolerLiveState(
+            connection = ConnectionState.CONNECTING,
+            connectionSessionId = nextConnectionSessionId.incrementAndGet(),
+            deviceType = device.deviceType,
+            deviceName = device.displayName,
+            deviceAddress = device.address,
+            rssi = device.rssi,
+        )
         // TRANSPORT_LE 显式指定:避免双模手机走 BR/EDR 导致连接失败
         gatt = openGatt(device.bluetoothDevice)
     }
@@ -372,13 +381,13 @@ class CoolerBleManager(private val context: Context) {
         }
         stopScan()
         disconnectInternal()
-        _state.update {
-            it.copy(
-                connection = ConnectionState.CONNECTING,
-                deviceType = type,
-                deviceAddress = macAddress,
-            )
-        }
+        _state.value = CoolerLiveState(
+            connection = ConnectionState.CONNECTING,
+            connectionSessionId = nextConnectionSessionId.incrementAndGet(),
+            deviceType = type,
+            deviceName = device.safeName() ?: type.deviceName,
+            deviceAddress = macAddress,
+        )
         gatt = openGatt(device)
     }
 
@@ -401,6 +410,9 @@ class CoolerBleManager(private val context: Context) {
         lightJob?.cancel()
         autoJob?.cancel()
         pollJob?.cancel()
+        pendingRgb = null
+        pendingRgbRequestId = null
+        _rgbWriteState.value = null
         gatt?.let {
             try {
                 it.disconnect()
@@ -425,6 +437,7 @@ class CoolerBleManager(private val context: Context) {
     private val gattCallback = object : BluetoothGattCallback() {
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
+            if (gatt !== g) return
             Log.d(TAG, "onConnectionStateChange status=$status newState=$newState")
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
@@ -453,6 +466,7 @@ class CoolerBleManager(private val context: Context) {
 
         @SuppressLint("MissingPermission")
         override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
+            if (gatt !== g) return
             Log.d(TAG, "onServicesDiscovered status=$status")
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 _state.update { it.copy(connection = ConnectionState.FAILED) }
@@ -519,8 +533,9 @@ class CoolerBleManager(private val context: Context) {
                 if (v != null) handleData(ch.uuid, v)
             }
             pendingRgb?.let {
-                applyRgbInternal(it)
+                applyRgbInternal(it, pendingRgbRequestId)
                 pendingRgb = null
+                pendingRgbRequestId = null
             }
             startPollLoop(g)
         }
@@ -530,12 +545,14 @@ class CoolerBleManager(private val context: Context) {
             characteristic: BluetoothGattCharacteristic,
             status: Int,
         ) {
+            if (gatt !== g) return
             Log.d(TAG, "onCharacteristicWrite ${characteristic.uuid} status=$status")
             writeWaiter?.complete(status)
             writeWaiter = null
         }
 
         override fun onDescriptorWrite(g: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
+            if (gatt !== g) return
             Log.d(TAG, "onDescriptorWrite status=$status")
             descWaiter?.complete(status)
             descWaiter = null
@@ -547,6 +564,7 @@ class CoolerBleManager(private val context: Context) {
             value: ByteArray,
             status: Int,
         ) {
+            if (gatt !== g) return
             readWaiter?.complete(status to value)
             readWaiter = null
             if (status == BluetoothGatt.GATT_SUCCESS) handleRead(characteristic.uuid, value)
@@ -560,6 +578,7 @@ class CoolerBleManager(private val context: Context) {
             characteristic: BluetoothGattCharacteristic,
             status: Int,
         ) {
+            if (gatt !== g) return
             readWaiter?.complete(status to (characteristic.value ?: ByteArray(0)))
             readWaiter = null
             if (status == BluetoothGatt.GATT_SUCCESS) {
@@ -572,6 +591,7 @@ class CoolerBleManager(private val context: Context) {
             characteristic: BluetoothGattCharacteristic,
             value: ByteArray,
         ) {
+            if (gatt !== g) return
             handleChanged(characteristic.uuid, value)
         }
 
@@ -582,6 +602,7 @@ class CoolerBleManager(private val context: Context) {
             g: BluetoothGatt,
             characteristic: BluetoothGattCharacteristic,
         ) {
+            if (gatt !== g) return
             handleChanged(characteristic.uuid, characteristic.value ?: ByteArray(0))
         }
 
@@ -663,11 +684,8 @@ class CoolerBleManager(private val context: Context) {
 
     /** 灯光状态上报:byte0 = 当前灯效模式 */
     private fun handleLightValue(value: ByteArray) {
-        if (value.isEmpty()) return
-        val code = value[0].toInt()
-        val effect = LightEffect.entries.firstOrNull { it.code.toInt() == code } ?: return
-        _state.update {
-            it.copy(rgb = (it.rgb ?: RGBConfig(effect)).copy(effect = effect))
+        _state.update { state ->
+            RGBConfig.fromNotification(value, state.rgb)?.let { state.copy(rgb = it) } ?: state
         }
     }
 
@@ -703,6 +721,7 @@ class CoolerBleManager(private val context: Context) {
     @SuppressLint("MissingPermission")
     private suspend fun enqueueWrite(g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray): Boolean =
         gattMutex.withLock {
+            if (gatt !== g) return@withLock false
             var ok = writeOnce(g, ch, value)
             if (!ok) {
                 delay(120)
@@ -974,22 +993,53 @@ class CoolerBleManager(private val context: Context) {
     /** 设置 RGB 灯效(命令格式见 [RGBConfig.toCommand]),防抖 200ms */
     @SuppressLint("MissingPermission")
     fun setRGB(config: RGBConfig) {
-        _state.update { it.copy(rgb = config) }
-        val g = gatt ?: run { pendingRgb = config; return }
-        val ch = lightChar ?: run { pendingRgb = config; return }
-        applyRgbInternal(config)
+        val requestId = nextRgbRequestId.incrementAndGet()
+        _rgbWriteState.value = RgbWriteState(requestId, config, RgbWriteStatus.WRITING)
+        when (_state.value.connection) {
+            ConnectionState.CONNECTING, ConnectionState.DISCOVERING -> {
+                pendingRgb = config
+                pendingRgbRequestId = requestId
+            }
+            ConnectionState.CONNECTED -> {
+                if (gatt != null && lightChar != null) {
+                    applyRgbInternal(config, requestId)
+                } else {
+                    _rgbWriteState.update { it?.completed(requestId, success = false) }
+                }
+            }
+            else -> _rgbWriteState.update { it?.completed(requestId, success = false) }
+        }
     }
 
     @SuppressLint("MissingPermission")
-    private fun applyRgbInternal(config: RGBConfig) {
-        val g = gatt ?: return
-        val ch = lightChar ?: return
-        lightJob?.cancel()
+    private fun applyRgbInternal(config: RGBConfig, requestId: Long?) {
+        if (requestId == null) return
+        val g = gatt
+        val ch = lightChar
+        if (g == null || ch == null) {
+            _rgbWriteState.update { it?.completed(requestId, success = false) }
+            return
+        }
+        val sessionId = _state.value.connectionSessionId
+        // Superseded debounce jobs exit by request id. Do not cancel an in-flight GATT
+        // write: its late callback could otherwise acknowledge the next queued write.
         lightJob = scope.launch {
             delay(200)
+            if (gatt !== g || _rgbWriteState.value?.requestId != requestId) return@launch
             val cmd = config.toCommand()
             val ok = enqueueWrite(g, ch, cmd)
-            if (ok) Log.d(TAG, "灯效已写入 ${cmd.toHex()}")
+            // A delayed completion must not overwrite a newer draft/connection's result.
+            if (!isActive || gatt !== g || _rgbWriteState.value?.requestId != requestId) return@launch
+            if (ok) {
+                _state.update {
+                    if (it.isConnected && it.connectionSessionId == sessionId) it.copy(rgb = config)
+                    else it
+                }
+                Log.d(TAG, "灯效已写入 ${cmd.toHex()}")
+            } else {
+                Log.w(TAG, "灯效写入失败 ${cmd.toHex()}")
+            }
+            _rgbWriteState.update { it?.completed(requestId, success = ok) }
         }
     }
 
