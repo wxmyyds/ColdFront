@@ -81,6 +81,10 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
         topBar = {
             TopAppBar(
                 title = { Text(strings.devicesTitle) },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background,
+                ),
                 scrollBehavior = scrollBehavior,
             )
         },

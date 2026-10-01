@@ -90,6 +90,10 @@ fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
             // 容器色不再强制透明——规范要求滚动后容器变为 surfaceContainer。
             TopAppBar(
                 title = { Text(strings.homeTitle) },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background,
+                ),
                 scrollBehavior = scrollBehavior,
             )
         },

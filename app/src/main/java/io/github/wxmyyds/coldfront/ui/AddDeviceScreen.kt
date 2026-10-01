@@ -172,6 +172,10 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
             // MD3E 小顶栏 + 返回导航:标题走默认 TitleLarge,滚动后容器转 surfaceContainer
             TopAppBar(
                 title = { Text(strings.scanTitle) },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background,
+                ),
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     IconButton(onClick = onBack) {

@@ -81,6 +81,10 @@ fun SettingsScreen(vm: CoolerViewModel) {
         topBar = {
             TopAppBar(
                 title = { Text(strings.settingsTitle, modifier = Modifier.semantics { heading() }) },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background,
+                ),
                 scrollBehavior = scrollBehavior,
             )
         },

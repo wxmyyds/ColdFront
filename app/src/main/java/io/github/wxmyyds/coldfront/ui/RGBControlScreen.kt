@@ -138,6 +138,10 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
         topBar = {
             TopAppBar(
                 title = { Text(strings.rgbTitle) },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background,
+                ),
                 scrollBehavior = scrollBehavior,
             )
         },

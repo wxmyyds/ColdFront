@@ -203,7 +203,7 @@ private fun AppNav(vm: CoolerViewModel) {
                 if (!useRail) {
                     NavigationBar(
                         modifier = Modifier.semantics { isTraversalGroup = true },
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        containerColor = MaterialTheme.colorScheme.background,
                     ) {
                         items.forEach { (route, icon, label) ->
                             NavigationBarItem(
@@ -231,7 +231,7 @@ private fun AppNav(vm: CoolerViewModel) {
                         modifier = Modifier
                             .fillMaxHeight()
                             .semantics { isTraversalGroup = true },
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        containerColor = MaterialTheme.colorScheme.background,
                     ) {
                         items.forEach { (route, icon, label) ->
                             NavigationRailItem(
