@@ -13,6 +13,7 @@ import androidx.activity.compose.setContent
 import androidx.core.view.WindowCompat
 import androidx.activity.viewModels
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AcUnit
@@ -154,12 +155,10 @@ private fun AppNav(vm: CoolerViewModel) {
         // 之前整页铺 surfaceContainer,和 NavigationBar 默认容器色撞成一片、没有分界。
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            // 动态取色下默认容器 surfaceContainer 与页面 background 色差太小、且默认
-            // tonalElevation=0(Level0, token 其实是 Level2/3dp)，tab 栏整条发白无分层。
-            // 显式用高一档容器色 + 3dp elevation 恢复视觉边界。
+            // 动态取色下默认容器 surfaceContainer 与页面 background 色差太小，
+            // 显式用高一档容器色保持 tab 栏与内容的分层边界。
             NavigationBar(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                tonalElevation = 3.dp,
             ) {
                 items.forEach { (route, icon, label) ->
                     val selected = current?.hierarchy?.any { it.route == route } == true
@@ -182,7 +181,11 @@ private fun AppNav(vm: CoolerViewModel) {
         NavHost(
             navController = nav,
             startDestination = Routes.HOME,
-            modifier = Modifier.padding(inner),
+            // 外层 Scaffold 已用 innerPadding 垫掉系统栏(状态栏+导航栏)；但 padding 不消费
+            // insets，嵌套的页面 Scaffold/TopAppBar 会再次消费同样的 insets：
+            // 底部→页面内容被再抬一个手势条高度，白色背景露出成一条白带盖住内容底部；
+            // 顶部→标题再降一个状态栏高度。consumeWindowInsets 把子层可见 insets 清零。
+            modifier = Modifier.padding(inner).consumeWindowInsets(inner),
         ) {
             composable(Routes.HOME) { HomeScreen(vm, onAddDevice = { nav.navigate(Routes.SCAN) }) }
             composable(Routes.DEVICES) { DevicesScreen(vm, onAddDevice = { nav.navigate(Routes.SCAN) }) }
