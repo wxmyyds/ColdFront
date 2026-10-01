@@ -59,7 +59,7 @@ import androidx.compose.ui.unit.dp
  * - 分组外角 16dp、内角 4dp，由 segmentedShapes(index, count) 生成；选中/按下不做圆角形变
  *   （在紧凑分组里会把整组撑散），反馈交给状态层与涟漪；
  * - 行间留分段缝隙；
- * - 行容器用 surfaceBright，页面用 background —— 靠明度分层，不靠阴影；
+ * - 行容器用 surfaceContainerHighest，页面用 background —— 靠明度分层，不靠阴影；
  * - 组标题 titleSmall + primary；
  * - 整行可点，勾选/选中带 VirtualKey 触感；
  * - 尾随 Switch 只做视觉指示（onCheckedChange = null），图标色由组件按 SwitchTokens 注入。
@@ -89,25 +89,24 @@ val SegmentedRowGap = 2.dp
 val LocalSegmentedShapes = compositionLocalOf<ListItemShapes?> { null }
 
 /**
- * 行配色：容器 surfaceBright，正文 onSurface，其余槽位 onSurfaceVariant；
- * 禁用态保持容器色，只压内容。
+ * 行配色：容器 surfaceContainerHighest，正文 onSurface，其余槽位 onSurfaceVariant。
  *
- * selected* 一律等于常态值：分段组里选中/开启已由行内控件（trailing 的 Switch、
- * 下拉菜单里的勾）与涟漪表达，再叠一层 selectedContainerColor 会让该行从组里
- * “跳出来”，破坏分组的整体感。
+ * 容器色不用 surfaceBright：动态取色(Material You)下 surfaceBright 与页面 background 几乎
+ * 同色，整组行会“隐形”。surfaceContainerHighest 在动态/自建色板下都稳定比背景深一档，
+ * 靠明度分层。选中/开启态仍由行内控件（Switch、下拉勾）表达，故 selected* 保持常态值。
  */
 @Composable
 fun segmentedRowColors(): ListItemColors {
     val scheme = MaterialTheme.colorScheme
     return ListItemDefaults.segmentedColors(
-        containerColor = scheme.surfaceBright,
+        containerColor = scheme.surfaceContainerHighest,
         contentColor = scheme.onSurface,
         leadingContentColor = scheme.onSurfaceVariant,
         trailingContentColor = scheme.onSurfaceVariant,
         overlineContentColor = scheme.onSurfaceVariant,
         supportingContentColor = scheme.onSurfaceVariant,
-        disabledContainerColor = scheme.surfaceBright,
-        selectedContainerColor = scheme.surfaceBright,
+        disabledContainerColor = scheme.surfaceContainerHighest,
+        selectedContainerColor = scheme.surfaceContainerHighest,
         selectedContentColor = scheme.onSurface,
         selectedLeadingContentColor = scheme.onSurfaceVariant,
         selectedTrailingContentColor = scheme.onSurfaceVariant,
@@ -235,7 +234,7 @@ fun SegmentedGroup(
 fun SegmentedContainer(
     modifier: Modifier = Modifier,
     shapes: ListItemShapes? = null,
-    containerColor: Color = MaterialTheme.colorScheme.surfaceBright,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
     contentPadding: PaddingValues = PaddingValues(16.dp),
     content: @Composable ColumnScope.() -> Unit,
 ) {

@@ -154,7 +154,13 @@ private fun AppNav(vm: CoolerViewModel) {
         // 之前整页铺 surfaceContainer,和 NavigationBar 默认容器色撞成一片、没有分界。
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            NavigationBar {
+            // 动态取色下默认容器 surfaceContainer 与页面 background 色差太小、且默认
+            // tonalElevation=0(Level0, token 其实是 Level2/3dp)，tab 栏整条发白无分层。
+            // 显式用高一档容器色 + 3dp elevation 恢复视觉边界。
+            NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                tonalElevation = 3.dp,
+            ) {
                 items.forEach { (route, icon, label) ->
                     val selected = current?.hierarchy?.any { it.route == route } == true
                     NavigationBarItem(
