@@ -94,6 +94,7 @@ private fun paletteColorScheme(scheme: DynamicScheme, base: ColorScheme): ColorS
     )
 }
 
+@Composable
 private fun animateColorScheme(target: ColorScheme): ColorScheme {
     val spec = tween<Color>(durationMillis = 400)
 

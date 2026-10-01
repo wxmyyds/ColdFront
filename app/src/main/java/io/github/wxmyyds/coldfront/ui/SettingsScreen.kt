@@ -13,6 +13,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.LightMode
@@ -165,7 +166,7 @@ fun SettingsScreen(vm: CoolerViewModel) {
                         summary = strings.settingsInterfaceBlurDesc,
                         checked = interfaceBlur,
                         onCheckedChange = vm::setInterfaceBlur,
-                        leadingContent = { RowIcon(Icons.Filled.BlurOn) },
+                        leadingContent = { RowIcon(Icons.Filled.Palette) },
                     )
                 }
                 item(key = "predictiveBack") {
@@ -174,7 +175,7 @@ fun SettingsScreen(vm: CoolerViewModel) {
                         summary = strings.settingsPredictiveBackDesc,
                         checked = predictiveBack,
                         onCheckedChange = vm::setPredictiveBack,
-                        leadingContent = { RowIcon(Icons.Filled.Swipe) },
+                        leadingContent = { RowIcon(Icons.Filled.AutoMode) },
                     )
                 }
             }
