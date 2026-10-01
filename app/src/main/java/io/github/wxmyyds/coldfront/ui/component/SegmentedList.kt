@@ -283,6 +283,9 @@ fun SegmentedRow(
             trailingContent = trailingContent,
             overlineContent = overlineSlot,
             supportingContent = supporting,
+            // 默认 verticalAlignment 在行高超过断点时改顶对齐——长文案(如英文)折行后
+            // 行首图标/尾随开关会贴顶；列表规格要求它们始终整行居中，显式覆盖。
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(title)
         }
@@ -300,6 +303,7 @@ fun SegmentedRow(
             trailingContent = trailingContent,
             overlineContent = overlineSlot,
             supportingContent = supporting,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(title)
         }
@@ -342,6 +346,8 @@ fun SegmentedSwitchRow(
         colors = colors,
         leadingContent = leadingContent,
         supportingContent = supporting,
+        // 长文案折行使行高超过断点时，默认对齐会把开关贴到标题线；始终居中
+        verticalAlignment = Alignment.CenterVertically,
         trailingContent = {
             Switch(
                 checked = checked,
