@@ -9,9 +9,8 @@ enum class LightEffect(val code: Byte, val labelZh: String, val labelEn: String)
     /** UI 上叫「呼吸」。协议里是不带颜色字节的全彩呼吸。 */
     BREATH_FULLCOLOR(0x02, "呼吸", "Breathing"),
     /**
-     * 官方协议的单色呼吸。UI 已将它合并进 [BREATH_FULLCOLOR]（两者都叫「呼吸」），
-     * 保留枚举项只为解析设备回报的 0x03 与旧档案里按名字存的 "BREATH_SINGLE"——
-     * 删掉会让这两种来源静默回退成常亮。呈现时统一走 [uiEffect]。
+     * 官方协议的单色呼吸。主菜单通过 [uiEffect] 合并到「呼吸」，
+     * 子菜单、草稿、预览和命令必须保留此真实变体，不能归一成全彩。
      */
     BREATH_SINGLE(0x03, "单色呼吸", "Breathing (Single)"),
     ALWAYS_BRIGHT(0x04, "常亮", "Always On"),
@@ -25,7 +24,7 @@ enum class LightEffect(val code: Byte, val labelZh: String, val labelEn: String)
     companion object {
         fun fromCode(code: Byte): LightEffect? = entries.firstOrNull { it.code == code }
 
-        /** UI 可选项：[BREATH_SINGLE] 已并入 [BREATH_FULLCOLOR]，不单独出现 */
+        /** 主菜单项；单色/全彩在呼吸子菜单中选择。 */
         val selectable: List<LightEffect> =
             listOf(ALWAYS_BRIGHT, BREATH_FULLCOLOR, COLORFUL, OFF)
     }
@@ -48,6 +47,19 @@ data class RGBConfig(
         require(blue in 0..255) { "blue 越界：$blue" }
     }
 
+    companion object {
+        /** Parse complete RGB bytes only; mode-only replies preserve the last known color. */
+        fun fromNotification(value: ByteArray, previous: RGBConfig?): RGBConfig? {
+            val effect = value.firstOrNull()?.let(LightEffect::fromCode) ?: return null
+            val base = previous ?: RGBConfig(effect)
+            return if (value.size >= 4 &&
+                (effect == LightEffect.ALWAYS_BRIGHT || effect == LightEffect.BREATH_SINGLE)
+            ) {
+                RGBConfig(effect, value[1].toInt() and 0xFF, value[2].toInt() and 0xFF, value[3].toInt() and 0xFF)
+            } else base.copy(effect = effect)
+        }
+    }
+
     /** 序列化为 [effect][R][G][B] 4 字节命令;炫彩/全彩呼吸不带颜色字节(实测 App 同样置零) */
     fun toCommand(): ByteArray = when (effect) {
         LightEffect.COLORFUL, LightEffect.BREATH_FULLCOLOR, LightEffect.OFF ->
@@ -55,6 +67,25 @@ data class RGBConfig(
         else ->
             byteArrayOf(effect.code, red.toByte(), green.toByte(), blue.toByte())
     }
+}
+
+/** RGB 命令的 GATT 写入状态。SENT 仅表示写入回调成功，不代表设备再次回读。 */
+enum class RgbWriteStatus {
+    WRITING,
+    SENT,
+    FAILED,
+}
+
+data class RgbWriteState(
+    val requestId: Long,
+    val config: RGBConfig,
+    val status: RgbWriteStatus,
+) {
+    /** Ignore obsolete completions after a newer request has superseded this one. */
+    fun completed(completedRequestId: Long, success: Boolean): RgbWriteState =
+        if (completedRequestId == requestId && status == RgbWriteStatus.WRITING) {
+            copy(status = if (success) RgbWriteStatus.SENT else RgbWriteStatus.FAILED)
+        } else this
 }
 
 /** 风扇模式 */
@@ -99,6 +130,8 @@ data class CoolerLiveState(
     val boostOn: Boolean = false,
     /** 过冷/冷凝保护(101F bit2) */
     val overcoldOn: Boolean = false,
+    /** Distinguish reconnects even when lifecycle collection skips intermediate states. */
+    val connectionSessionId: Long = 0L,
 ) {
     val isConnected: Boolean get() = connection == ConnectionState.CONNECTED
     val temperatureText: String get() = temperatureC?.let { "%.1f°C".format(it) } ?: "--"

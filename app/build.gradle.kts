@@ -34,6 +34,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     // 纯 Compose 工程，资源里只保留矢量图标，无 XML 布局/主题/字符串
@@ -54,7 +55,7 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.navigation.compose)
 
-    // Compose（版本由 alpha BOM 托管 → material3 1.5.0-alpha28）
+    // Compose（版本由 alpha BOM 托管 → material3 1.5.0-alpha29）
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)

@@ -156,7 +156,6 @@ fun RowIcon(icon: ImageVector, modifier: Modifier = Modifier) {
     Icon(
         imageVector = icon,
         contentDescription = null,
-        tint = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier.size(24.dp),
     )
 }
@@ -393,21 +392,24 @@ fun <T> SegmentedDropdownRow(
     Box(modifier = modifier) {
         SegmentedRow(
             title = title,
-            summary = summary,
             enabled = enabled,
             onClick = { expanded = true },
             shapes = shapes,
             colors = colors,
             leadingContent = leadingContent,
-            trailingContent = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(selectedLabel, style = MaterialTheme.typography.labelLarge)
-                    Icon(
-                        imageVector = Icons.Filled.ArrowDropDown,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+            // Let the selected value wrap below the title; a long trailing label can leave
+            // the headline with zero width at large font scales or in translated layouts.
+            supportingContent = {
+                Column {
+                    Text(selectedLabel)
+                    summary?.let { Text(it) }
                 }
+            },
+            trailingContent = {
+                Icon(
+                    imageVector = Icons.Filled.ArrowDropDown,
+                    contentDescription = null,
+                )
             },
         )
         DropdownMenu(

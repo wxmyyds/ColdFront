@@ -39,7 +39,8 @@ val LightColorScheme: ColorScheme = lightColorScheme(
     outline = Color(0xFF72777F),
     outlineVariant = Color(0xFFC2C6CF),
     scrim = Color(0xFF000000),
-    surfaceBright = Color(0xFFDFE2EB),
+    // Brightest light-scheme surface should remain lighter than surface/background.
+    surfaceBright = Color(0xFFFFFFFF),
     surfaceContainer = Color(0xFFECEEF3),
     surfaceContainerHigh = Color(0xFFE6E8EE),
     surfaceContainerHighest = Color(0xFFE0E3E9),

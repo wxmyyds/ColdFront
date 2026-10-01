@@ -1,8 +1,10 @@
 package io.github.wxmyyds.coldfront.ui
 
+import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -27,8 +29,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.wxmyyds.coldfront.BuildConfig
 import io.github.wxmyyds.coldfront.ui.component.RowIcon
 import io.github.wxmyyds.coldfront.ui.component.SegmentedDropdownRow
 import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
@@ -51,6 +56,7 @@ fun SettingsScreen(vm: CoolerViewModel) {
     val darkMode by vm.darkMode.collectAsStateWithLifecycle()
     val appLanguage by vm.appLanguage.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+    val supportsDynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
     // (存储值, 展示文案)；MainActivity 按同一套 "system"/"light"/"dark" 解析
     val themeOptions = listOf(
@@ -74,7 +80,7 @@ fun SettingsScreen(vm: CoolerViewModel) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text(strings.settingsTitle) },
+                title = { Text(strings.settingsTitle, modifier = Modifier.semantics { heading() }) },
                 scrollBehavior = scrollBehavior,
             )
         },
@@ -83,6 +89,7 @@ fun SettingsScreen(vm: CoolerViewModel) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(inner)
+                .consumeWindowInsets(inner)
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -91,9 +98,16 @@ fun SettingsScreen(vm: CoolerViewModel) {
                 item(key = "dynamicColor") {
                     SegmentedSwitchRow(
                         title = strings.settingsDynamicColor,
-                        summary = strings.settingsDynamicColorDesc,
-                        checked = dynamicColor,
-                        onCheckedChange = { vm.setDynamicColor(it) },
+                        summary = if (supportsDynamicColor) {
+                            strings.settingsDynamicColorDesc
+                        } else if (strings.langIsZh) {
+                            "需要 Android 12 或更高版本"
+                        } else {
+                            "Requires Android 12 or later"
+                        },
+                        checked = supportsDynamicColor && dynamicColor,
+                        enabled = supportsDynamicColor,
+                        onCheckedChange = { if (supportsDynamicColor) vm.setDynamicColor(it) },
                         leadingContent = { RowIcon(Icons.Filled.Palette) },
                     )
                 }
@@ -127,7 +141,7 @@ fun SettingsScreen(vm: CoolerViewModel) {
                 item(key = "about") {
                     SegmentedRow(
                         title = strings.settingsAbout,
-                        summary = strings.settingsAboutDesc,
+                        summary = "${strings.settingsAboutDesc} · v${BuildConfig.VERSION_NAME}",
                         leadingContent = { RowIcon(Icons.Filled.Info) },
                     )
                 }

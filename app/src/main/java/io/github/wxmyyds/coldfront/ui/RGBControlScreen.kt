@@ -19,11 +19,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -51,9 +53,10 @@ import androidx.compose.material3.rememberSliderState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,8 +64,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -71,9 +72,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
 import io.github.wxmyyds.coldfront.domain.LightEffect
 import io.github.wxmyyds.coldfront.domain.RGBConfig
+import io.github.wxmyyds.coldfront.domain.RgbWriteStatus
 import io.github.wxmyyds.coldfront.ui.component.RowIcon
 import io.github.wxmyyds.coldfront.ui.component.SegmentedContainer
 import io.github.wxmyyds.coldfront.ui.component.SegmentedDropdownRow
@@ -81,9 +82,8 @@ import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 
 /**
- * 灯效预览与 R/G/B 轨道用的是“设备真实发出的光”，属内容而非 UI 表面：
- * 跟着主题走会让光晕在浅色底下完全看不见，因此这里刻意不走 colorScheme。
- * 除此之外页面不得出现硬编码颜色。
+ * 预览和通道色标保留设备灯光的真实色；滑条使用主题角色色，
+ * 确保操作轨道和滑块在深浅主题下均可辨识。
  */
 private val PreviewStage = Color.Black
 private val PreviewStageContent = Color.White
@@ -100,25 +100,33 @@ private val PreviewLedOff = Color(0xFF101418)
 fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
     val strings = LocalStrings.current
     val state by vm.liveState.collectAsStateWithLifecycle()
+    val writeState by vm.rgbWriteState.collectAsStateWithLifecycle()
 
-    var effect by remember { mutableStateOf(LightEffect.ALWAYS_BRIGHT) }
-    var r by remember { mutableIntStateOf(0) }
-    var g by remember { mutableIntStateOf(80) }
-    var b by remember { mutableIntStateOf(200) }
-    var applied by remember { mutableStateOf(false) }
+    // Save the draft across rotation/tab restoration, but validate the connection identity
+    // before rendering so a restored draft can never leak to another device/session.
+    var savedEditor by rememberSaveable(stateSaver = RgbEditorSaver) {
+        mutableStateOf(RgbEditorState.fromDevice(state))
+    }
+    val editor = savedEditor.receive(state, writeState)
+    val draftConfig = editor.config
+    val effect = draftConfig.effect
+    val r = draftConfig.red
+    val g = draftConfig.green
+    val b = draftConfig.blue
+    val currentWrite = editor.currentWrite(writeState)
+    val currentWriteStatus = currentWrite?.status
+    val applied = currentWriteStatus == RgbWriteStatus.SENT &&
+        currentWrite?.requestId == editor.explicitApplyRequestId
 
-    // 首次收到设备灯效回读时同步本地选择。
-    // uiEffect：设备可能回报 0x03（单色呼吸），UI 已并入「呼吸」，不归一会选不中任何项。
-    var initialized by remember { mutableStateOf(false) }
-    LaunchedEffect(state.rgb) {
-        if (!initialized) {
-            state.rgb?.let { cfg ->
-                effect = cfg.effect.uiEffect
-                r = cfg.red
-                g = cfg.green
-                b = cfg.blue
-                initialized = true
-            }
+    LaunchedEffect(state, writeState) {
+        savedEditor = savedEditor.receive(state, writeState)
+    }
+    val sendConfig: (RGBConfig, Boolean) -> Unit = { config, explicitApply ->
+        savedEditor = editor.edit(config)
+        vm.setRGB(config)
+        // setRGB publishes WRITING synchronously; success still requires its GATT completion.
+        vm.rgbWriteState.value?.takeIf { it.config == config }?.let {
+            savedEditor = savedEditor.submit(it, explicitApply)
         }
     }
 
@@ -155,25 +163,25 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
                         shape = MaterialTheme.shapes.extraLarge,
                         colors = CardDefaults.cardColors(containerColor = PreviewStage),
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().height(160.dp).padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            LightPreview(effect, r, g, b, Modifier.weight(1f).fillMaxSize())
-                            Spacer(Modifier.width(16.dp))
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 CoolerArt(
                                     state.deviceType,
-                                    modifier = Modifier.size(96.dp),
-                                    iconTint = MaterialTheme.colorScheme.outline,
+                                    modifier = Modifier.size(64.dp),
+                                    iconTint = PreviewStageContent,
                                 )
-                                Spacer(Modifier.height(8.dp))
+                                Spacer(Modifier.width(16.dp))
                                 Text(
                                     effectLabel(effect, strings),
+                                    modifier = Modifier.weight(1f),
                                     style = MaterialTheme.typography.labelLarge,
                                     color = PreviewStageContent,
                                 )
                             }
+                            LightPreview(effect, r, g, b, Modifier.fillMaxWidth().height(112.dp))
                         }
                     }
 
@@ -183,9 +191,7 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
                         if (effect == LightEffect.BREATH_SINGLE) LightEffect.BREATH_SINGLE
                         else LightEffect.BREATH_FULLCOLOR
                     val applyEffect: (LightEffect) -> Unit = { e ->
-                        effect = e
-                        vm.setRGB(RGBConfig(e, r, g, b))
-                        applied = true
+                        sendConfig(draftConfig.copy(effect = e), false)
                     }
                     SegmentedGroup {
                         item(key = "effect") {
@@ -223,16 +229,13 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
                             )
                         }
                     }
-
                     // ── 颜色(单色呼吸与常亮才带颜色字节；全彩呼吸/炫彩/关闭按协议置零) ──
                     if (effect == LightEffect.BREATH_SINGLE || effect == LightEffect.ALWAYS_BRIGHT) {
-                        val applyColor = Color(r / 255f, g / 255f, b / 255f)
-
                         SegmentedGroup(title = strings.rgbPalette) {
                             item(key = "palette") {
                                 SegmentedContainer {
                                     PaletteRow(r, g, b) { pr, pg, pb ->
-                                        r = pr; g = pg; b = pb
+                                        savedEditor = editor.edit(draftConfig.copy(red = pr, green = pg, blue = pb))
                                     }
                                 }
                             }
@@ -242,40 +245,39 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
                             item(key = "sliders") {
                                 SegmentedContainer {
                                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        ColorSlider(strings.rgbRed, r, Color.Red) { r = it }
-                                        ColorSlider(strings.rgbGreen, g, Color.Green) { g = it }
-                                        ColorSlider(strings.rgbBlue, b, Color.Blue) { b = it }
+                                        ColorSlider(strings.rgbRed, r, Color.Red) {
+                                            savedEditor = editor.edit(draftConfig.copy(red = it))
+                                        }
+                                        ColorSlider(strings.rgbGreen, g, Color.Green) {
+                                            savedEditor = editor.edit(draftConfig.copy(green = it))
+                                        }
+                                        ColorSlider(strings.rgbBlue, b, Color.Blue) {
+                                            savedEditor = editor.edit(draftConfig.copy(blue = it))
+                                        }
                                     }
                                 }
                             }
                         }
+                    }
 
-                        Button(
-                            onClick = {
-                                vm.setRGB(RGBConfig(effect, r, g, b))
-                                applied = true
-                            },
-                            shapes = ButtonDefaults.shapes(),
-                            modifier = Modifier.fillMaxWidth().height(56.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = applyColor,
-                                // 底色是用户选的实际 RGB，contentColor 必须按亮度算：
-                                // 默认 onPrimary 近白，选白/黄预设时会白字压白底。
-                                // 0.179 是黑/白文字对比度相等的相对亮度分界点。
-                                contentColor = if (applyColor.luminance() > 0.179f) {
-                                    Color.Black
-                                } else {
-                                    Color.White
-                                },
-                            ),
-                        ) {
-                            if (applied) {
-                                Icon(Icons.Filled.Check, contentDescription = null)
-                                Spacer(Modifier.width(8.dp))
-                                Text(strings.rgbSynced)
-                            } else {
-                                Text(strings.rgbApply)
+                    // 即使当前灯效没有颜色面板，也保留写入失败的重试入口。
+                    Button(
+                        onClick = { sendConfig(draftConfig, true) },
+                        enabled = currentWriteStatus != RgbWriteStatus.WRITING,
+                        shapes = ButtonDefaults.shapes(),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                    ) {
+                        when (currentWriteStatus) {
+                            RgbWriteStatus.WRITING -> Text(strings.rgbWriting)
+                            RgbWriteStatus.SENT -> {
+                                if (applied) {
+                                    Icon(Icons.Filled.Check, contentDescription = null)
+                                    Spacer(Modifier.width(8.dp))
+                                }
+                                Text(strings.rgbSent)
                             }
+                            RgbWriteStatus.FAILED -> Text(strings.rgbWriteFailed)
+                            null -> Text(strings.rgbApply)
                         }
                     }
                 }
@@ -283,6 +285,27 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
         }
     }
 }
+
+private val RgbEditorSaver = listSaver<RgbEditorState, Any>(
+    save = {
+        listOf(
+            it.address.orEmpty(), it.sessionId, it.connected, it.config.effect.name,
+            it.config.red, it.config.green, it.config.blue, it.dirty,
+            it.submittedRequestId ?: -1L, it.explicitApplyRequestId ?: -1L,
+        )
+    },
+    restore = {
+        RgbEditorState(
+            address = (it[0] as String).ifEmpty { null },
+            sessionId = it[1] as Long,
+            connected = it[2] as Boolean,
+            config = RGBConfig(LightEffect.valueOf(it[3] as String), it[4] as Int, it[5] as Int, it[6] as Int),
+            dirty = it[7] as Boolean,
+            submittedRequestId = (it[8] as Long).takeIf { id -> id >= 0 },
+            explicitApplyRequestId = (it[9] as Long).takeIf { id -> id >= 0 },
+        )
+    },
+)
 
 // ───────────────────────── 动态预览 ─────────────────────────
 
@@ -389,8 +412,9 @@ private fun PaletteRow(r: Int, g: Int, b: Int, onPick: (Int, Int, Int) -> Unit) 
     // minimumInteractiveComponentSize() 把触控目标撑到 48dp（视觉仍 40dp），
     // selectable 给出 Role.RadioButton 与选中态语义 + 状态层，替掉裸 clickable。
     FlowRow(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().selectableGroup(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         PRESETS.forEach { preset ->
             val selected = preset.color.toArgb() == current
@@ -431,7 +455,7 @@ private fun ColorSlider(label: String, value: Int, trackColor: Color, onChange: 
     // 拖动期间以滑条为准;松手后再把外部值(点色板预设)同步回来。
     val sliderState = rememberSliderState(value = value.toFloat(), trackRange = 0f..255f)
     var dragging by remember { mutableStateOf(false) }
-    LaunchedEffect(value) { if (!dragging) sliderState.value = value.toFloat() }
+    LaunchedEffect(value, dragging) { if (!dragging) sliderState.value = value.toFloat() }
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
@@ -439,6 +463,7 @@ private fun ColorSlider(label: String, value: Int, trackColor: Color, onChange: 
                     .size(14.dp)
                     .clip(CircleShape)
                     .background(trackColor)
+                    .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
             )
             Spacer(Modifier.width(8.dp))
             Text(label, style = MaterialTheme.typography.labelLarge)
@@ -447,22 +472,16 @@ private fun ColorSlider(label: String, value: Int, trackColor: Color, onChange: 
         }
         Slider(
             state = sliderState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics { contentDescription = label },
             onValueChange = {
                 dragging = true
+                sliderState.value = it
                 onChange(it.toInt())
             },
             onValueChangeFinished = { dragging = false },
-            colors = SliderDefaults.colors(
-                // 三条轨道就是 R/G/B 通道本色（领域内容）；未激活段不再用 copy(alpha)，
-                // 改为向容器色插值，深浅色下都保持可见且不产生非规范色。
-                activeTrackColor = trackColor,
-                thumbColor = trackColor,
-                inactiveTrackColor = lerp(
-                    trackColor,
-                    MaterialTheme.colorScheme.surfaceContainerHighest,
-                    0.75f,
-                ),
-            ),
+            colors = SliderDefaults.colors(),
         )
     }
 }

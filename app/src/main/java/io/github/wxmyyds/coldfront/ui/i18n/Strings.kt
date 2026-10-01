@@ -147,6 +147,9 @@ interface AppStrings {
     val rgbPreview: String
     val rgbApply: String
     val rgbSynced: String
+    val rgbWriting: String
+    val rgbSent: String
+    val rgbWriteFailed: String
     val rgbConnectFirst: String
     val rgbGoConnect: String
     val rgbPalette: String
@@ -255,7 +258,7 @@ object ZhStrings : AppStrings {
     override val settingsDarkModeDark = "深色"
     override val settingsLanguage = "语言"
     override val settingsAbout = "关于"
-    override val settingsAboutDesc = "ColdFront · 红魔散热器控制 · v1.0"
+    override val settingsAboutDesc = "ColdFront · 红魔散热器控制"
 
     override val homeTitle = "散热控制"
     override val homeNoDevice = "尚未连接散热器"
@@ -332,6 +335,9 @@ object ZhStrings : AppStrings {
     override val rgbPalette = "预设颜色"
     override val rgbCustomColor = "自定义颜色"
     override val rgbApply = "应用"
+    override val rgbWriting = "正在发送…"
+    override val rgbSent = "已发送到设备"
+    override val rgbWriteFailed = "发送失败，点击重试"
     override val rgbOff = "关闭灯光"
     override val rgbNotSupported = "该设备不支持 RGB"
 
@@ -432,7 +438,7 @@ object EnStrings : AppStrings {
     override val settingsDarkModeDark = "Dark"
     override val settingsLanguage = "Language"
     override val settingsAbout = "About"
-    override val settingsAboutDesc = "ColdFront · Redmagic cooler control · v1.0"
+    override val settingsAboutDesc = "ColdFront · Redmagic cooler control"
 
     override val homeTitle = "Cooler Control"
     override val homeNoDevice = "No cooler connected"
@@ -509,6 +515,9 @@ object EnStrings : AppStrings {
     override val rgbPalette = "Preset colors"
     override val rgbCustomColor = "Custom color"
     override val rgbApply = "Apply"
+    override val rgbWriting = "Sending…"
+    override val rgbSent = "Sent to cooler"
+    override val rgbWriteFailed = "Send failed — tap to retry"
     override val rgbOff = "Lights off"
     override val rgbNotSupported = "This device does not support RGB"
 

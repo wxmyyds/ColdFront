@@ -37,6 +37,7 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
     private val thermal = ThermalMonitor(app)
 
     val liveState: StateFlow<io.github.wxmyyds.coldfront.domain.CoolerLiveState> = ble.state
+    val rgbWriteState = ble.rgbWriteState
 
     val discoveredDevices: StateFlow<List<CoolerDevice>> = ble.discoveredDevices
 

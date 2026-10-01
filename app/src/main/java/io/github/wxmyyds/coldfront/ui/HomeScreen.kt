@@ -5,6 +5,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -21,7 +21,6 @@ import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Button
@@ -38,12 +37,9 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.ToggleFloatingActionButton
-import androidx.compose.material3.ToggleFloatingActionButtonDefaults.animateIcon
 import androidx.compose.material3.rememberSliderState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,8 +48,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -70,13 +68,11 @@ import kotlin.math.roundToInt
 /**
  * 首页 —— 按 MD3E 七条表达性战术设计:
  *
- * - 战术 7(hero moment,全产品仅此一个):散热开关做成会形变的
- *   [ToggleFloatingActionButton],按下时图标 + 形状 + 颜色一起弹簧过渡。
  * - 战术 2/4(色彩层次 + 容器分组):温度英雄卡用 primaryContainer(制冷中)
  *   ↔ surfaceContainerHighest(待机)之间过渡,最亮表面留给最重要信息。
  * - 战术 3(排印引导):温度用 displayLarge + SemiBold 强调。
  * - 战术 5(流体动效):颜色过渡走 MaterialTheme.motionScheme 的 effects spec。
- * - 开关行用官方 [ListItem](表达性列表),带色调图标容器。
+ * - 电源和模式控制沿用 SegmentedSwitchRow 的原生开关与分组形态。
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -97,32 +93,6 @@ fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
                 scrollBehavior = scrollBehavior,
             )
         },
-        floatingActionButton = {
-            if (connected) {
-                // ── hero moment:散热开关形变 FAB ──
-                // 已知偏差(有意保留):规范把 ToggleFloatingActionButton 定位为
-                // FloatingActionButtonMenu 的载体 + 页面唯一最重要操作,纯 on/off 属 Switch 职责。
-                // 这里作为 MD3E 战术 7 的 hero moment 保留:全应用仅此一个 FAB,
-                // 位于底部 trailing(Scaffold 默认 16dp 边距),且不与其他主操作竞争。
-                ToggleFloatingActionButton(
-                    checked = state.coolingOn,
-                    onCheckedChange = { vm.setCooling(it) },
-                ) {
-                    // 形变:图标随 checkedProgress 在中点切换,颜色/尺寸由 animateIcon 弹簧过渡
-                    val icon by remember {
-                        derivedStateOf {
-                            if (checkedProgress > 0.5f) Icons.Filled.AcUnit
-                            else Icons.Filled.PowerSettingsNew
-                        }
-                    }
-                    Icon(
-                        painter = rememberVectorPainter(icon),
-                        contentDescription = strings.homeCoolingSwitch,
-                        modifier = Modifier.animateIcon({ checkedProgress }),
-                    )
-                }
-            }
-        },
     ) { inner ->
         if (connected) {
             Column(
@@ -134,15 +104,16 @@ fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 ConnectedContent(vm, state)
-                Spacer(Modifier.height(FabClearance))
             }
         } else {
-            // 未连接/连接中/失败:内容垂直居中,不贴顶
+            // 保留视口最小高度以正常居中，短窗口允许内容向下展开并滚动。
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(inner)
-                    .padding(horizontal = 24.dp),
+                    .padding(horizontal = 24.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(vertical = 24.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 when (state.connection) {
@@ -163,6 +134,14 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
     val strings = LocalStrings.current
 
     TempHero(state)
+
+    SegmentedSwitchRow(
+        title = strings.homeCoolingSwitch,
+        summary = strings.homeCoolingSwitchDesc,
+        checked = state.coolingOn,
+        onCheckedChange = vm::setCooling,
+        leadingContent = { RowIcon(Icons.Filled.AcUnit) },
+    )
 
     // 三个带说明的开关:分段选项列表(SegmentedGroup)——
     // 外角 16dp / 内角 4dp / 缝隙 / 触感反馈全部由组件统一处理
@@ -224,48 +203,47 @@ private fun TempHero(state: CoolerLiveState) {
             Modifier.padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
                 CoolerArt(
                     state.deviceType,
                     modifier = Modifier.size(64.dp),
                     iconTint = onContainer,
                 )
-                Spacer(Modifier.width(16.dp))
                 Column {
-                    Text(
-                        strings.homeTemp,
-                        // 次要文字不再用 onContainer.copy(alpha = 0.72f)——对角色色做透明度
-                        // 会拉低小字号的对比度；层级改由字号表达（labelMedium vs displayLarge）。
-                        style = MaterialTheme.typography.labelMedium,
-                        color = onContainer,
-                    )
-                    Text(
-                        state.temperatureText,
-                        style = EmphasizedTypography.displayLarge,
-                        color = onContainer,
-                    )
-                }
-                Spacer(Modifier.weight(1f))
-                Column(horizontalAlignment = Alignment.End) {
                     Text(
                         state.deviceName ?: "",
                         style = MaterialTheme.typography.labelMedium,
                         color = onContainer,
                     )
                     Text(
-                        // 此处必为已连接;制冷开/关由卡片容器颜色 + 形变 FAB 表达
                         strings.homeConnected,
                         style = MaterialTheme.typography.labelLarge,
                         color = onContainer,
                     )
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    strings.homeTemp,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = onContainer,
+                )
+                Text(
+                    state.temperatureText,
+                    style = EmphasizedTypography.displayLarge,
+                    color = onContainer,
+                )
+            }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 MetricPill(Icons.Filled.Speed, "${state.fanRpm ?: "--"} RPM", onContainer)
                 MetricPill(Icons.Filled.Bolt, "${state.powerW ?: "--"} W", onContainer)
-                // RSSI 由 CoolerBleManager 在发起连接时写入 liveState（非持续刷新）；
-                // 0 = 未取到 → 显示占位符，与旁边两粒的 "--" 一致。
-                // 旧写法只显示“信号”两个字、不带数值，信息量为零。
+                // RSSI 是连接时的读数（非持续刷新），0 表示未取得。
                 MetricPill(
                     Icons.Filled.Bluetooth,
                     "${if (state.rssi != 0) state.rssi.toString() else "--"} dBm",
@@ -347,11 +325,13 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
             Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            FlowRow(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) {
                 Icon(Icons.Filled.Speed, contentDescription = null)
-                Spacer(Modifier.width(10.dp))
                 Text(strings.homeLevel, style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.weight(1f))
                 Text(
                     if (isGear) strings.homeLevelGear.format(levelToGear(state.fanPercent))
                     else strings.homeLevelPercent.format(state.fanPercent),
@@ -366,13 +346,18 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
             val percent = state.fanPercent.toFloat()
             val gearSlider = rememberSliderState(value = gear, steps = 6, trackRange = 1f..8f)
             val percentSlider = rememberSliderState(value = percent, trackRange = 0f..100f)
-            LaunchedEffect(gear) { if (!dragging) gearSlider.value = gear }
-            LaunchedEffect(percent) { if (!dragging) percentSlider.value = percent }
+            LaunchedEffect(gear, dragging) { if (!dragging) gearSlider.value = gear }
+            LaunchedEffect(percent, dragging) { if (!dragging) percentSlider.value = percent }
             if (isGear) {
                 Slider(
                     state = gearSlider,
+                    modifier = Modifier.semantics {
+                        contentDescription = strings.homeLevel
+                        stateDescription = strings.homeLevelGear.format(gearSlider.value.roundToInt())
+                    },
                     onValueChange = {
                         dragging = true
+                        gearSlider.value = it
                         vm.setFanSpeed(gearToLevel(it.roundToInt()))
                     },
                     onValueChangeFinished = { dragging = false },
@@ -381,8 +366,13 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
             } else {
                 Slider(
                     state = percentSlider,
+                    modifier = Modifier.semantics {
+                        contentDescription = strings.homeLevel
+                        stateDescription = strings.homeLevelPercent.format(percentSlider.value.toInt())
+                    },
                     onValueChange = {
                         dragging = true
+                        percentSlider.value = it
                         vm.setFanSpeed(it.toInt())
                     },
                     onValueChangeFinished = { dragging = false },
@@ -476,9 +466,6 @@ private fun NotConnectedContent(strings: AppStrings, onAddDevice: () -> Unit) {
 }
 
 // ───────────────────── 工具 ─────────────────────
-
-/** 滚动内容底部给 FAB 让位：FAB 56dp + Scaffold 默认 16dp 边距。 */
-private val FabClearance = 72.dp
 
 /** 8 Pro:百分比 → 1..8 档 */
 private fun levelToGear(percent: Int): Int = ((percent + 12) / 13f).toInt().coerceIn(1, 8)
