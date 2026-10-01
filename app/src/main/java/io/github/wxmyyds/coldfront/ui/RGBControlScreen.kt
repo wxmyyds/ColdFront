@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -39,13 +38,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
@@ -67,7 +63,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -77,9 +72,8 @@ import io.github.wxmyyds.coldfront.domain.LightEffect
 import io.github.wxmyyds.coldfront.domain.RGBConfig
 import io.github.wxmyyds.coldfront.domain.RgbWriteStatus
 import io.github.wxmyyds.coldfront.ui.component.RowIcon
+import io.github.wxmyyds.coldfront.ui.component.PageScaffold
 import io.github.wxmyyds.coldfront.ui.component.LocalGlassHazeState
-import io.github.wxmyyds.coldfront.ui.component.LocalInterfaceBlur
-import io.github.wxmyyds.coldfront.ui.component.glassTopBarEffect
 import io.github.wxmyyds.coldfront.ui.component.glassSource
 import io.github.wxmyyds.coldfront.ui.component.SegmentedContainer
 import io.github.wxmyyds.coldfront.ui.component.SegmentedDropdownRow
@@ -136,26 +130,8 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
     }
 
     val contentScrollState = rememberScrollState()
-    val blurTopBar = LocalInterfaceBlur.current &&
-        (contentScrollState.value > 0 || contentScrollState.isScrollInProgress)
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
-    Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                modifier = Modifier.glassTopBarEffect(LocalGlassHazeState.current, blurTopBar),
-                windowInsets = WindowInsets(0, 0, 0, 0),
-                title = { Text(strings.rgbTitle) },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background.copy(alpha = if (blurTopBar) 0f else 1f),
-                    scrolledContainerColor = MaterialTheme.colorScheme.background.copy(alpha = if (blurTopBar) 0f else 1f),
-                ),
-                scrollBehavior = scrollBehavior,
-            )
-        },
-    ) { inner ->
+    PageScaffold(title = strings.rgbTitle) { inner ->
         Column(
             modifier = Modifier
                 .fillMaxSize()

@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -32,15 +31,12 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -56,7 +52,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
@@ -70,9 +65,8 @@ import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.domain.CoolerDevice
 import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
 import io.github.wxmyyds.coldfront.ui.component.LocalGlassHazeState
-import io.github.wxmyyds.coldfront.ui.component.LocalInterfaceBlur
 import io.github.wxmyyds.coldfront.ui.component.glassSource
-import io.github.wxmyyds.coldfront.ui.component.glassTopBarEffect
+import io.github.wxmyyds.coldfront.ui.component.PageScaffold
 import io.github.wxmyyds.coldfront.ui.component.SegmentedRow
 import io.github.wxmyyds.coldfront.ui.component.SegmentedSwitchRow
 import io.github.wxmyyds.coldfront.ui.component.segmentedRowShapes
@@ -95,10 +89,6 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
     var resumed by remember(vm) { mutableStateOf(false) }
     var scanRequested by rememberSaveable { mutableStateOf(true) }
     val listState = rememberLazyListState()
-    val blurTopBar = LocalInterfaceBlur.current &&
-        (listState.firstVisibleItemIndex > 0 ||
-            listState.firstVisibleItemScrollOffset > 0 ||
-            listState.isScrollInProgress)
     val context = LocalContext.current
     val locationRequired = Build.VERSION.SDK_INT <= Build.VERSION_CODES.R
     val locationReady = !locationRequired || scanState.locationServiceEnabled
@@ -172,32 +162,12 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
         }
     }
 
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
-
-    Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            // MD3E 小顶栏 + 返回导航:标题走默认 TitleLarge,滚动后容器转 surfaceContainer
-            TopAppBar(
-                windowInsets = WindowInsets(0, 0, 0, 0),
-                modifier = Modifier.glassTopBarEffect(LocalGlassHazeState.current, blurTopBar),
-                title = { Text(strings.scanTitle) },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background.copy(
-                        alpha = if (blurTopBar) 0f else 1f,
-                    ),
-                    scrolledContainerColor = MaterialTheme.colorScheme.background.copy(
-                        alpha = if (blurTopBar) 0f else 1f,
-                    ),
-                ),
-                scrollBehavior = scrollBehavior,
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = strings.back)
-                    }
-                },
-            )
+    PageScaffold(
+        title = strings.scanTitle,
+        navigationIcon = {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = strings.back)
+            }
         },
     ) { inner ->
         LazyColumn(

@@ -4,7 +4,6 @@ import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -22,25 +21,18 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.wxmyyds.coldfront.BuildConfig
 import io.github.wxmyyds.coldfront.ui.component.RowIcon
+import io.github.wxmyyds.coldfront.ui.component.PageScaffold
 import io.github.wxmyyds.coldfront.ui.component.LocalGlassHazeState
-import io.github.wxmyyds.coldfront.ui.component.LocalInterfaceBlur
-import io.github.wxmyyds.coldfront.ui.component.glassTopBarEffect
 import io.github.wxmyyds.coldfront.ui.component.glassSource
 import io.github.wxmyyds.coldfront.ui.component.SegmentedDropdownRow
 import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
@@ -66,9 +58,6 @@ fun SettingsScreen(vm: CoolerViewModel, onAbout: () -> Unit) {
     val palette by vm.palette.collectAsStateWithLifecycle()
     val predictiveBack by vm.predictiveBack.collectAsStateWithLifecycle()
     val contentScrollState = rememberScrollState()
-    val blurTopBar = LocalInterfaceBlur.current &&
-        (contentScrollState.value > 0 || contentScrollState.isScrollInProgress)
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     val supportsDynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
     // (存储值, 展示文案)；MainActivity 按同一套 "system"/"light"/"dark" 解析
@@ -88,22 +77,7 @@ fun SettingsScreen(vm: CoolerViewModel, onAbout: () -> Unit) {
     val themeMode = if (themeOptions.any { it.first == darkMode }) darkMode else "system"
     val language = if (languageOptions.any { it.first == appLanguage }) appLanguage else "system"
 
-    Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                modifier = Modifier.glassTopBarEffect(LocalGlassHazeState.current, blurTopBar),
-                windowInsets = WindowInsets(0, 0, 0, 0),
-                title = { Text(strings.settingsTitle, modifier = Modifier.semantics { heading() }) },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background.copy(alpha = if (blurTopBar) 0f else 1f),
-                    scrolledContainerColor = MaterialTheme.colorScheme.background.copy(alpha = if (blurTopBar) 0f else 1f),
-                ),
-                scrollBehavior = scrollBehavior,
-            )
-        },
-    ) { inner ->
+    PageScaffold(title = strings.settingsTitle) { inner ->
         Column(
             modifier = Modifier
                 .fillMaxSize()

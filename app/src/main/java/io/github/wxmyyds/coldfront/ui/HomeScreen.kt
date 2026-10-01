@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -32,12 +31,9 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberSliderState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -50,7 +46,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -60,9 +55,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.domain.CoolerLiveState
 import io.github.wxmyyds.coldfront.ui.component.RowIcon
+import io.github.wxmyyds.coldfront.ui.component.PageScaffold
 import io.github.wxmyyds.coldfront.ui.component.LocalGlassHazeState
-import io.github.wxmyyds.coldfront.ui.component.LocalInterfaceBlur
-import io.github.wxmyyds.coldfront.ui.component.glassTopBarEffect
 import io.github.wxmyyds.coldfront.ui.component.glassSource
 import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
 import io.github.wxmyyds.coldfront.ui.component.SegmentedSwitchRow
@@ -88,28 +82,8 @@ fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
     val state by vm.liveState.collectAsStateWithLifecycle()
     val connected = state.connection == ConnectionState.CONNECTED
     val contentScrollState = rememberScrollState()
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
-    val blurTopBar = LocalInterfaceBlur.current &&
-        (contentScrollState.value > 0 || contentScrollState.isScrollInProgress)
 
-    Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            // MD3E 小顶栏:标题用组件默认的 TitleLarge(旧写法 headlineSmall 24sp 超出小顶栏规格),
-            // 滚动时透明，让统一的 Haze 效果覆盖状态栏与标题栏。
-            TopAppBar(
-                modifier = Modifier.glassTopBarEffect(LocalGlassHazeState.current, blurTopBar),
-                windowInsets = WindowInsets(0, 0, 0, 0),
-                title = { Text(strings.homeTitle) },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background.copy(alpha = if (blurTopBar) 0f else 1f),
-                    scrolledContainerColor = MaterialTheme.colorScheme.background.copy(alpha = if (blurTopBar) 0f else 1f),
-                ),
-                scrollBehavior = scrollBehavior,
-            )
-        },
-    ) { inner ->
+    PageScaffold(title = strings.homeTitle) { inner ->
         if (connected) {
             Column(
                 modifier = Modifier
