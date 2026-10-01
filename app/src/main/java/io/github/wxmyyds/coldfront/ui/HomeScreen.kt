@@ -2,7 +2,6 @@ package io.github.wxmyyds.coldfront.ui
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -95,7 +94,6 @@ fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
             // 容器色不再强制透明——规范要求滚动后容器变为 surfaceContainer。
             TopAppBar(
                 title = { Text(strings.homeTitle) },
-                windowInsets = WindowInsets(0, 0, 0, 0),
                 scrollBehavior = scrollBehavior,
             )
         },

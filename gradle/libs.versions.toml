@@ -1,17 +1,17 @@
 # RedmagicCooler 重写版依赖版本表（MD3E alpha 线）
-# 知识基线 2026-09-14：material3 1.5.0-alpha28 / compose-bom-alpha 2026.09.00
+# 全量升级 2026-09-30：material3 1.5.0-alpha29 / compose-bom-alpha 2026.09.01
 
 [versions]
-agp = "9.2.1"
-kotlin = "2.3.21"
-coreKtx = "1.18.0"
-lifecycle = "2.12.0-alpha03"
-activityCompose = "1.14.0-alpha02"
-composeBom = "2026.09.00"            # compose-bom-alpha，托管 material3 1.5.0-alpha28
+agp = "9.4.1"
+kotlin = "2.4.20"
+coreKtx = "1.19.1"
+lifecycle = "2.12.0-alpha04"
+activityCompose = "1.14.0-alpha03"
+composeBom = "2026.09.01"            # compose-bom-alpha，托管 material3 1.5.0-alpha29
 kotlinxCoroutines = "1.11.0"
-workRuntimeKtx = "2.11.2"
-navigationCompose = "2.9.8"
-datastore = "1.1.7"
+workRuntimeKtx = "2.12.0"
+navigationCompose = "2.10.2"
+datastore = "1.2.1"
 junit = "4.13.2"
 junitVersion = "1.3.0"
 espressoCore = "3.7.0"

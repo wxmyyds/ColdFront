@@ -1,7 +1,6 @@
 package io.github.wxmyyds.coldfront.ui
 
 import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -75,7 +74,6 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
         topBar = {
             TopAppBar(
                 title = { Text(strings.devicesTitle) },
-                windowInsets = WindowInsets(0, 0, 0, 0),
                 scrollBehavior = scrollBehavior,
             )
         },
