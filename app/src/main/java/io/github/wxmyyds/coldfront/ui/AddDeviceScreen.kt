@@ -59,6 +59,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -449,15 +450,20 @@ private fun DiagnosticCard(
         ),
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    entry.name ?: strings.diagNoName,
-                    style = EmphasizedTypography.titleSmall,
-                    modifier = Modifier.weight(1f),
-                )
+            Text(
+                text = entry.name ?: strings.diagNoName,
+                style = EmphasizedTypography.titleSmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) {
                 if (isCooler) {
-                    // 静态徽标：不用 ElevatedAssistChip(onClick = {})——那是假可供性
-                    // （TalkBack 播报为按钮、有涟漪却无动作），且规范禁止在可操作面上再放操作。
+                    // 静态徽标保持不可交互，避免在可选择的设备卡内产生假按钮语义。
                     Surface(
                         shape = MaterialTheme.shapes.small,
                         color = MaterialTheme.colorScheme.primary,
@@ -507,7 +513,10 @@ private fun DiagnosticCard(
 
 @Composable
 private fun DetailLine(label: String, value: String) {
-    Row {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         Text(
             label,
             style = MaterialTheme.typography.labelSmall,
@@ -519,6 +528,8 @@ private fun DetailLine(label: String, value: String) {
             style = MaterialTheme.typography.labelSmall,
             fontFamily = FontFamily.Monospace,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+            softWrap = true,
         )
     }
 }
