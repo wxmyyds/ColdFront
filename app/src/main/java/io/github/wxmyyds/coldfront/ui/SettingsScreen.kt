@@ -14,25 +14,20 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -61,7 +56,7 @@ import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(vm: CoolerViewModel) {
+fun SettingsScreen(vm: CoolerViewModel, onAbout: () -> Unit) {
     val strings = LocalStrings.current
     val dynamicColor by vm.dynamicColor.collectAsStateWithLifecycle()
     val darkMode by vm.darkMode.collectAsStateWithLifecycle()
@@ -69,7 +64,6 @@ fun SettingsScreen(vm: CoolerViewModel) {
     val interfaceBlur by vm.interfaceBlur.collectAsStateWithLifecycle()
     val palette by vm.palette.collectAsStateWithLifecycle()
     val predictiveBack by vm.predictiveBack.collectAsStateWithLifecycle()
-    var showAbout by remember { mutableStateOf(false) }
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     val supportsDynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
@@ -200,7 +194,7 @@ fun SettingsScreen(vm: CoolerViewModel) {
                         title = strings.settingsAbout,
                         summary = "${strings.settingsAboutDesc} · v${BuildConfig.VERSION_NAME}",
                         leadingContent = { RowIcon(Icons.Filled.Info) },
-                        onClick = { showAbout = true },
+                        onClick = onAbout,
                     )
                 }
             }
@@ -208,17 +202,6 @@ fun SettingsScreen(vm: CoolerViewModel) {
         }
     }
 
-    if (showAbout) {
-        AlertDialog(
-            onDismissRequest = { showAbout = false },
-            icon = { RowIcon(Icons.Filled.Info) },
-            title = { Text(strings.settingsAbout) },
-            text = { Text("${strings.settingsAboutDesc}\n${BuildConfig.VERSION_NAME}") },
-            confirmButton = {
-                TextButton(onClick = { showAbout = false }) { Text(strings.ok) }
-            },
-        )
-    }
 }
 
 /** 主题模式的行首图标跟着当前档位走，扫一眼就知道现在是什么模式 */

@@ -175,7 +175,8 @@ private fun routeOrder(route: String?): Int = when (route) {
     Routes.DEVICES -> 1
     Routes.RGB -> 2
     Routes.SETTINGS -> 3
-    else -> 4
+    Routes.ABOUT -> 4
+    else -> 5
 }
 
 private object Routes {
@@ -184,6 +185,7 @@ private object Routes {
     const val SCAN = "scan"
     const val RGB = "rgb"
     const val SETTINGS = "settings"
+    const val ABOUT = "about"
 }
 
 @Composable
@@ -230,7 +232,7 @@ private fun AppNav(vm: CoolerViewModel) {
             containerColor = MaterialTheme.colorScheme.background,
             contentWindowInsets = WindowInsets(left = 0.dp, top = 0.dp, right = 0.dp, bottom = 0.dp),
             bottomBar = {
-                if (!useRail) {
+                if (!useRail && current?.route != Routes.ABOUT) {
                     NavigationBar(
                         modifier = Modifier
                             .semantics { isTraversalGroup = true }
@@ -266,7 +268,7 @@ private fun AppNav(vm: CoolerViewModel) {
                     // see only remaining insets. The bar retains a compact 12dp gesture inset.
                     .consumeWindowInsets(inner),
             ) {
-                if (useRail) {
+                if (useRail && current?.route != Routes.ABOUT) {
                     NavigationRail(
                         modifier = Modifier
                             .fillMaxHeight()
@@ -334,7 +336,10 @@ private fun AppNav(vm: CoolerViewModel) {
                         composable(Routes.DEVICES) { DevicesScreen(vm, onAddDevice = { nav.navigate(Routes.SCAN) }) }
                         composable(Routes.SCAN) { AddDeviceScreen(vm, onBack = { nav.popBackStack() }) }
                         composable(Routes.RGB) { RGBControlScreen(vm, onConnect = { nav.navigate(Routes.SCAN) }) }
-                        composable(Routes.SETTINGS) { SettingsScreen(vm) }
+                        composable(Routes.SETTINGS) {
+                            SettingsScreen(vm, onAbout = { nav.navigate(Routes.ABOUT) })
+                        }
+                        composable(Routes.ABOUT) { AboutScreen(onBack = { nav.popBackStack() }) }
                     }
                 }
             }

@@ -79,6 +79,8 @@ interface AppStrings {
     val settingsLanguage: String
     val settingsAbout: String
     val settingsAboutDesc: String
+    val settingsAboutReport: String
+    val settingsAboutProject: String
 
     // —— 首页 ——
     val homeTitle: String
@@ -262,6 +264,8 @@ object ZhStrings : AppStrings {
     override val settingsLanguage = "语言"
     override val settingsAbout = "关于"
     override val settingsAboutDesc = "ColdFront · 红魔散热器控制"
+    override val settingsAboutReport = "提交错误报告"
+    override val settingsAboutProject = "项目主页"
 
     override val homeTitle = "散热控制"
     override val homeNoDevice = "尚未连接散热器"
@@ -436,6 +440,8 @@ object EnStrings : AppStrings {
     override val settingsLanguage = "Language"
     override val settingsAbout = "About"
     override val settingsAboutDesc = "ColdFront · Redmagic cooler control"
+    override val settingsAboutReport = "Report an issue"
+    override val settingsAboutProject = "Project homepage"
 
     override val homeTitle = "Cooler Control"
     override val homeNoDevice = "No cooler connected"
