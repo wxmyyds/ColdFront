@@ -19,8 +19,12 @@ val LocalInterfaceBlur = compositionLocalOf { false }
 @Composable
 fun rememberGlassHazeState(): HazeState = rememberHazeState()
 
-fun Modifier.glassSource(state: HazeState?): Modifier =
-    if (state == null) this else hazeSource(state)
+@Composable
+fun Modifier.glassSource(state: HazeState?): Modifier {
+    if (state == null) return this
+    val surface = MaterialTheme.colorScheme.background
+    return background(surface).hazeSource(state)
+}
 
 @Composable
 fun Modifier.glassTopBarEffect(state: HazeState?, enabled: Boolean): Modifier {
@@ -37,8 +41,8 @@ fun Modifier.glassTopBarEffect(state: HazeState?, enabled: Boolean): Modifier {
 fun Modifier.glassEffect(state: HazeState?, enabled: Boolean): Modifier {
     if (!enabled || state == null) return this
     val surface = MaterialTheme.colorScheme.background
-    val tint = surface.copy(alpha = 0.58f)
-    return hazeEffect(
+    val tint = surface.copy(alpha = 0.8f)
+    return this.hazeEffect(
         state = state,
         style = HazeStyle(
             backgroundColor = surface,

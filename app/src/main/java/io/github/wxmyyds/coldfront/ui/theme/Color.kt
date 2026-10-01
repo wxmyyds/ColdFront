@@ -5,7 +5,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 
-internal val PageBackgroundLight = Color(0xFFEFECF5)
+internal val PageBackgroundLight = Color(0xFFEFECF6)
 internal val OptionSurfaceLight = Color(0xFFFBF9FE)
 internal val PageBackgroundDark = Color(0xFF191920)
 internal val OptionSurfaceDark = Color(0xFF2B2B34)

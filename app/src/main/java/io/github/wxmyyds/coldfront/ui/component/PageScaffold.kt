@@ -28,8 +28,7 @@ fun PageScaffold(
     content: @Composable (PaddingValues) -> Unit,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    val blurEnabled = LocalInterfaceBlur.current
-    val blurTopBar = blurEnabled
+    val blurTopBar = LocalInterfaceBlur.current && LocalGlassHazeState.current != null
     val background = MaterialTheme.colorScheme.background
 
     Scaffold(

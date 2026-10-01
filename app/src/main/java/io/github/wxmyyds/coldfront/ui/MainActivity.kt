@@ -243,7 +243,7 @@ private fun AppNav(vm: CoolerViewModel) {
                             .semantics { isTraversalGroup = true }
                             .glassEffect(LocalGlassHazeState.current, LocalInterfaceBlur.current),
                         containerColor = MaterialTheme.colorScheme.background.copy(
-                            alpha = if (LocalInterfaceBlur.current) 0f else 1f,
+                            alpha = if (LocalInterfaceBlur.current && LocalGlassHazeState.current != null) 0f else 1f,
                         ),
                         tonalElevation = 0.dp,
                         windowInsets = WindowInsets(
