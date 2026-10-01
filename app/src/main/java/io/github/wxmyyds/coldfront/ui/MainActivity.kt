@@ -227,6 +227,7 @@ private fun AppNav(vm: CoolerViewModel) {
         val useRail = maxWidth >= 600.dp
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
+            contentWindowInsets = WindowInsets(left = 0.dp, top = 0.dp, right = 0.dp, bottom = 0.dp),
             bottomBar = {
                 if (!useRail) {
                     NavigationBar(

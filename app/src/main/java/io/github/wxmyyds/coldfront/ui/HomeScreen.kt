@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -60,7 +61,7 @@ import io.github.wxmyyds.coldfront.domain.CoolerLiveState
 import io.github.wxmyyds.coldfront.ui.component.RowIcon
 import io.github.wxmyyds.coldfront.ui.component.LocalGlassHazeState
 import io.github.wxmyyds.coldfront.ui.component.LocalInterfaceBlur
-import io.github.wxmyyds.coldfront.ui.component.glassEffect
+import io.github.wxmyyds.coldfront.ui.component.glassTopBarEffect
 import io.github.wxmyyds.coldfront.ui.component.glassSource
 import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
 import io.github.wxmyyds.coldfront.ui.component.SegmentedSwitchRow
@@ -94,7 +95,8 @@ fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
             // MD3E 小顶栏:标题用组件默认的 TitleLarge(旧写法 headlineSmall 24sp 超出小顶栏规格),
             // 容器色不再强制透明——规范要求滚动后容器变为 surfaceContainer。
             TopAppBar(
-                modifier = Modifier.glassEffect(LocalGlassHazeState.current, LocalInterfaceBlur.current),
+                modifier = Modifier.glassTopBarEffect(LocalGlassHazeState.current, LocalInterfaceBlur.current),
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 title = { Text(strings.homeTitle) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (LocalInterfaceBlur.current) 0.62f else 1f),
