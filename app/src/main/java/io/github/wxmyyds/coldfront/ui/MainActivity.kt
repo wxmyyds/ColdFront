@@ -12,7 +12,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.core.view.WindowCompat
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
@@ -20,9 +19,8 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.Bluetooth
@@ -32,7 +30,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
@@ -45,8 +42,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.isTraversalGroup
@@ -210,31 +205,19 @@ private fun AppNav(vm: CoolerViewModel) {
                     NavigationBar(
                         modifier = Modifier.semantics { isTraversalGroup = true },
                         containerColor = MaterialTheme.colorScheme.background,
+                        windowInsets = WindowInsets(
+                            left = 0.dp,
+                            top = 0.dp,
+                            right = 0.dp,
+                            bottom = 12.dp,
+                        ),
                     ) {
                         items.forEach { (route, icon, label) ->
-                            val selected = current?.hierarchy?.any { it.route == route } == true
                             NavigationBarItem(
-                                selected = selected,
+                                selected = current?.hierarchy?.any { it.route == route } == true,
                                 onClick = { navigateToTab(route) },
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    indicatorColor = Color.Transparent,
-                                ),
-                                // Keep the standard 56dp width while shortening the selected pill.
-                                icon = {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(width = 56.dp, height = 24.dp)
-                                            .clip(RoundedCornerShape(50))
-                                            .background(
-                                                if (selected) MaterialTheme.colorScheme.secondaryContainer
-                                                else Color.Transparent,
-                                            ),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Icon(icon, contentDescription = null)
-                                    }
-                                },
+                                // Label + native selectable semantics announce the destination once.
+                                icon = { Icon(icon, contentDescription = null) },
                                 label = { Text(label()) },
                             )
                         }
@@ -247,7 +230,7 @@ private fun AppNav(vm: CoolerViewModel) {
                     .fillMaxSize()
                     .padding(inner)
                     // Consume Scaffold's system/bar padding once; nested app bars and the rail
-                    // see only remaining insets. NavigationBar keeps its default bottom insets.
+                    // see only remaining insets. The bar retains a compact 12dp gesture inset.
                     .consumeWindowInsets(inner),
             ) {
                 if (useRail) {
