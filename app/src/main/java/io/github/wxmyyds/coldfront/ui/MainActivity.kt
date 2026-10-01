@@ -47,8 +47,10 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.scaleOut
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.isTraversalGroup
@@ -169,6 +171,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
+private fun isSecondaryRoute(route: String?): Boolean =
+    route == Routes.SCAN || route == Routes.ABOUT
 
 private fun routeOrder(route: String?): Int = when (route) {
     Routes.HOME -> 0
@@ -301,28 +306,26 @@ private fun AppNav(vm: CoolerViewModel) {
                             slideOutHorizontally(targetOffsetX = { if (forward) -it / 8 else it / 8 }) + fadeOut()
                         },
                         popEnterTransition = {
-                            if (predictiveBack) {
+                            if (predictiveBack && isSecondaryRoute(initialState.destination.route)) {
                                 val forward = routeOrder(targetState.destination.route) >= routeOrder(initialState.destination.route)
                                 slideInHorizontally(initialOffsetX = { if (forward) it / 8 else -it / 8 }) + fadeIn()
                             } else EnterTransition.None
                         },
                         popExitTransition = {
-                            if (predictiveBack) {
+                            if (predictiveBack && isSecondaryRoute(initialState.destination.route)) {
                                 val forward = routeOrder(targetState.destination.route) >= routeOrder(initialState.destination.route)
                                 slideOutHorizontally(targetOffsetX = { if (forward) -it / 8 else it / 8 }) + fadeOut()
                             } else ExitTransition.None
                         },
-                        predictivePopEnterTransition = { swipeEdge ->
-                            if (predictiveBack) {
-                                slideInHorizontally(
-                                    initialOffsetX = { if (swipeEdge == BackEventCompat.EDGE_LEFT) -it / 8 else it / 8 },
-                                )
-                            } else EnterTransition.None
-                        },
+                        predictivePopEnterTransition = { EnterTransition.None },
                         predictivePopExitTransition = { swipeEdge ->
-                            if (predictiveBack) {
-                                slideOutHorizontally(
-                                    targetOffsetX = { if (swipeEdge == BackEventCompat.EDGE_LEFT) it / 8 else -it / 8 },
+                            if (predictiveBack && isSecondaryRoute(initialState.destination.route)) {
+                                scaleOut(
+                                    targetScale = 0.93f,
+                                    transformOrigin = TransformOrigin(
+                                        pivotFractionX = if (swipeEdge == BackEventCompat.EDGE_LEFT) 0f else 1f,
+                                        pivotFractionY = 0.5f,
+                                    ),
                                 )
                             } else ExitTransition.None
                         },

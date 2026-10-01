@@ -253,14 +253,14 @@ private fun TempHero(state: CoolerLiveState) {
                     color = onContainer,
                 )
             }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                MetricPill(Icons.Filled.Speed, "${state.fanRpm ?: "--"} RPM", onContainer, Modifier.weight(1f))
-                MetricPill(Icons.Filled.Bolt, "${state.powerW ?: "--"} W", onContainer, Modifier.weight(1f))
+                MetricPill(Icons.Filled.Speed, "${state.fanRpm ?: "--"} RPM", onContainer)
+                MetricPill(Icons.Filled.Bolt, "${state.powerW ?: "--"} W", onContainer)
                 state.rssi?.let { rssi ->
-                    MetricPill(Icons.Filled.Bluetooth, "$rssi dBm", onContainer, Modifier.weight(1f))
+                    MetricPill(Icons.Filled.Bluetooth, "$rssi dBm", onContainer)
                 }
             }
         }
@@ -268,17 +268,16 @@ private fun TempHero(state: CoolerLiveState) {
 }
 
 @Composable
-private fun MetricPill(icon: ImageVector, text: String, content: Color, modifier: Modifier = Modifier) {
+private fun MetricPill(icon: ImageVector, text: String, content: Color) {
     // 胶囊底是对 content 的装饰性淡色叠加：英雄卡容器会在 primaryContainer 与
     // surfaceContainerHighest 之间过渡，没有单一角色色能同时适配，故保留 alpha 写法。
     // 但文字与图标不再做 alpha（那直接影响对比度），一律用全强度 content。
     Surface(
-        modifier = modifier,
         shape = CircleShape,
         color = content.copy(alpha = 0.12f),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 7.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
