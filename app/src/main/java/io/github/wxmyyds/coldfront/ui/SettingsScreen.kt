@@ -99,8 +99,8 @@ fun SettingsScreen(vm: CoolerViewModel) {
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 title = { Text(strings.settingsTitle, modifier = Modifier.semantics { heading() }) },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (LocalInterfaceBlur.current) 0.62f else 1f),
-                    scrolledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (LocalInterfaceBlur.current) 0.62f else 1f),
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (LocalInterfaceBlur.current) 0f else 1f),
+                    scrolledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (LocalInterfaceBlur.current) 0f else 1f),
                 ),
                 scrollBehavior = scrollBehavior,
             )
