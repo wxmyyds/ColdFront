@@ -66,6 +66,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.enableEdgeToEdge(window)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // 关掉系统对导航栏的强制对比度遮罩，edge-to-edge 下保持纯净透明。
+            window.isNavigationBarContrastEnforced = false
+        }
         setContent {
             AppContent(vm)
         }
