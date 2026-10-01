@@ -25,11 +25,25 @@ fun RedmagicCoolerTheme(
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
-    val colorScheme = if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+    val baseColorScheme = if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
     } else {
         if (darkTheme) DarkColorScheme else LightColorScheme
     }
+    val pageColor = if (darkTheme) PageBackgroundDark else PageBackgroundLight
+    val optionColor = if (darkTheme) OptionSurfaceDark else OptionSurfaceLight
+    val colorScheme = baseColorScheme.copy(
+        background = pageColor,
+        surface = optionColor,
+        surfaceVariant = optionColor,
+        surfaceBright = optionColor,
+        surfaceDim = pageColor,
+        surfaceContainer = optionColor,
+        surfaceContainerHigh = optionColor,
+        surfaceContainerHighest = optionColor,
+        surfaceContainerLow = optionColor,
+        surfaceContainerLowest = optionColor,
+    )
     MaterialExpressiveTheme(
         // 切深浅/开关动态取色时整套角色色平滑过渡，而非瞬时跳变（MD3E 动效表达因果）
         colorScheme = animateColorScheme(colorScheme),
