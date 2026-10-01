@@ -1,34 +1,23 @@
 package io.github.wxmyyds.coldfront.domain
 
-import android.bluetooth.BluetoothDevice
-
 /**
  * 扫描到的散热器设备。
  *
- * @param bluetoothDevice 系统 BLE 设备句柄
+ * @param address BLE 设备 MAC 地址
+ * @param bleName BLE 广播名，可能为空
  * @param deviceType 识别出的型号（优先 ServiceData UUID，回退广播名）
  * @param rssi 信号强度（dBm）
  * @param scanTimeNanos 扫描时间戳
  * @param matchedByName 为 true 表示本次识别走的是名称兜底（UUID 未确认）
  */
 data class CoolerDevice(
-    val bluetoothDevice: BluetoothDevice,
+    val address: String,
+    val bleName: String?,
     val deviceType: CoolerDeviceType,
     val rssi: Int,
     val scanTimeNanos: Long = System.nanoTime(),
     val matchedByName: Boolean = false,
 ) {
-    /** MAC 地址 */
-    val address: String get() = bluetoothDevice.address
-
-    /** BLE 广播名（可能为 null，SecurityException 时安全返回 null） */
-    val bleName: String?
-        get() = try {
-            bluetoothDevice.name
-        } catch (_: SecurityException) {
-            null
-        }
-
     /** UI 显示名 */
     val displayName: String get() = bleName ?: deviceType.deviceName
 

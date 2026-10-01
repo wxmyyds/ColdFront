@@ -300,7 +300,8 @@ class CoolerBleManager(private val context: Context) {
         if (type == null) return null
 
         return CoolerDevice(
-            bluetoothDevice = btDevice,
+            address = btDevice.address,
+            bleName = result.scanRecord?.deviceName ?: btDevice.safeName(),
             deviceType = type,
             rssi = result.rssi,
             matchedByName = matchedByName,
@@ -352,8 +353,15 @@ class CoolerBleManager(private val context: Context) {
             deviceAddress = device.address,
             rssi = device.rssi,
         )
+        val bluetoothDevice = runCatching {
+            bluetoothAdapter?.getRemoteDevice(device.address)
+        }.getOrNull()
+        if (bluetoothDevice == null) {
+            _state.update { it.copy(connection = ConnectionState.FAILED) }
+            return
+        }
         // TRANSPORT_LE 显式指定:避免双模手机走 BR/EDR 导致连接失败
-        gatt = openGatt(device.bluetoothDevice)
+        gatt = openGatt(bluetoothDevice)
     }
 
     /** 诊断模式:手动指定型号连接(不做识别检查) */
@@ -364,7 +372,8 @@ class CoolerBleManager(private val context: Context) {
             ?: return
         connect(
             CoolerDevice(
-                bluetoothDevice = btDevice,
+                address = btDevice.address,
+                bleName = entry.name ?: btDevice.safeName(),
                 deviceType = type,
                 rssi = entry.rssi,
                 matchedByName = true,
