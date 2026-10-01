@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import android.os.Bundle
+import androidx.activity.BackEventCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -307,6 +308,20 @@ private fun AppNav(vm: CoolerViewModel) {
                             if (predictiveBack) {
                                 val forward = routeOrder(targetState.destination.route) >= routeOrder(initialState.destination.route)
                                 slideOutHorizontally(targetOffsetX = { if (forward) -it / 8 else it / 8 }) + fadeOut()
+                            } else ExitTransition.None
+                        },
+                        predictivePopEnterTransition = { swipeEdge ->
+                            if (predictiveBack) {
+                                slideInHorizontally(
+                                    initialOffsetX = { if (swipeEdge == BackEventCompat.EDGE_LEFT) -it / 8 else it / 8 },
+                                )
+                            } else EnterTransition.None
+                        },
+                        predictivePopExitTransition = { swipeEdge ->
+                            if (predictiveBack) {
+                                slideOutHorizontally(
+                                    targetOffsetX = { if (swipeEdge == BackEventCompat.EDGE_LEFT) it / 8 else -it / 8 },
+                                )
                             } else ExitTransition.None
                         },
                         // Constrain the child, not the weighted slot: retain centering on wide windows.
