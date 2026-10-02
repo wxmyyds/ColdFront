@@ -70,7 +70,7 @@ data class ScanState(
  * CONNECTED means required startup commands and supported initialization attempts have completed.
  */
 @SuppressLint("MissingPermission")
-class CoolerBleManager(private val context: Context) {
+class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
     // Process-reusable: release resets transports/state, never cancels this scope.
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val handler = Handler(Looper.getMainLooper())
@@ -252,18 +252,27 @@ class CoolerBleManager(private val context: Context) {
 
     // All entry points share permission, address, adapter and exception handling.
     fun connect(device: CoolerDevice) = onMain {
+        // connectInternal is always Main-confined, so clearing here cannot race resume.
+        lastLinkLoss = null
         connectInternal(device.address, device.deviceType, device.displayName)
     }
 
     fun connectRaw(entry: BleScanDiagnostic, type: CoolerDeviceType) = onMain {
+        // connectInternal is always Main-confined, so clearing here cannot race resume.
+        lastLinkLoss = null
         connectInternal(entry.address, type, entry.name)
     }
 
     fun connectByAddress(macAddress: String, type: CoolerDeviceType) = onMain {
+        // connectInternal is always Main-confined, so clearing here cannot race resume.
+        lastLinkLoss = null
         connectInternal(macAddress, type, null)
     }
 
     private fun connectInternal(address: String, type: CoolerDeviceType, name: String?) {
+        // connectInternal owns any transition out of DISCONNECTED/FAILED, and it always owns
+        // the fresh session field. The single internal resume path consumes its own record
+        // before calling here; explicit entries clear theirs on the Main entry above.
         stopScanInternal()
         disconnectInternal()
         val s = Session(++nextSessionId)
@@ -316,9 +325,26 @@ class CoolerBleManager(private val context: Context) {
         return device.connectGatt(settings, context.mainExecutor, callback)
     }
 
+    private class LinkLoss(val address: String?, val type: CoolerDeviceType?)
+    private var lastLinkLoss: LinkLoss? = null
+
+    fun hasRunningSession(): Boolean = session != null
+
+    override fun consumeLinkLoss(): BackgroundLinkLoss? {
+        val loss = lastLinkLoss ?: return null
+        lastLinkLoss = null
+        return BackgroundLinkLoss(loss.address, loss.type)
+    }
+
     fun disconnect() = onMain {
+        lastLinkLoss = null
         disconnectInternal()
         _state.value = CoolerLiveState(connection = ConnectionState.DISCONNECTED)
+    }
+
+    /** Consume without dialing: used when a newer explicit intent supersedes a stale loss. */
+    override fun clearLinkLoss() {
+        lastLinkLoss = null
     }
 
     private fun disconnectInternal() {
@@ -389,9 +415,15 @@ class CoolerBleManager(private val context: Context) {
                     }
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
-                    if (_state.value.isConnected) {
+                    if (status != BluetoothGatt.GATT_SUCCESS || _state.value.isConnected) {
+                        val address = _state.value.deviceAddress
+                        val type = _state.value.deviceType
                         disconnectInternal()
+                        // System-initiated link loss while idle is recoverable: preserve the
+                        // successful-connection identity so foreground return can resume the
+                        // same device without rebuilding profile metadata or user settings.
                         _state.value = CoolerLiveState(connection = ConnectionState.DISCONNECTED)
+                        lastLinkLoss = LinkLoss(address, type)
                     } else fail(s, "Disconnected before initialization completed")
                 }
             }
@@ -560,11 +592,15 @@ class CoolerBleManager(private val context: Context) {
         ).success
     }
 
-    /** Missing read property is a deliberate skip, not a failed read. Data commits only in matching callbacks. */
+    /** Missing read property is a deliberate skip, not a failed read. Data commits only in matching callbacks.
+     * [poisonOnTimeout] defaults to true for setup/control reads: a missing callback there means
+     * the session cannot complete initialization, so the timeout fails it explicitly.
+     */
     private suspend fun readIfReadable(
         s: Session,
         ch: BluetoothGattCharacteristic,
         fresh: () -> Boolean = { true },
+        poisonOnTimeout: Boolean = true,
     ): Boolean {
         val g = s.gatt ?: return false
         if (!owns(s) || !fresh()) return false
@@ -572,10 +608,15 @@ class CoolerBleManager(private val context: Context) {
         return operations.execute(g, ch, GattOperationQueue.Kind.READ, READ_TIMEOUT_MS,
             isCurrent = { owns(s) && s.characteristics[ch.uuid] === ch && fresh() },
             start = { g.readCharacteristic(ch) },
+            poisonOnTimeout = poisonOnTimeout,
         ).success
     }
 
-    private suspend fun enableNotification(s: Session, ch: BluetoothGattCharacteristic): Boolean {
+    private suspend fun enableNotification(
+        s: Session,
+        ch: BluetoothGattCharacteristic,
+        poisonOnTimeout: Boolean = true,
+    ): Boolean {
         val g = s.gatt ?: return false
         if (!owns(s)) return false
         val notify = ch.properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0
@@ -593,46 +634,72 @@ class CoolerBleManager(private val context: Context) {
                     g.writeDescriptor(descriptor)
                 }
             },
+            poisonOnTimeout = poisonOnTimeout,
         ).success
     }
 
     private fun startPollLoop(s: Session) {
         if (!ready(s)) return
         s.lastTempUpdateMs = SystemClock.elapsedRealtime()
+        // Background polling cadence: frequent state costs a wake plus radio time on every
+        // accepted read. Notification-capable telemetry already arrives on its own; reduce
+        // the steady-state read volume so Doze/background scheduling cannot starve — and
+        // then poison — the session with backlog timeouts.
+        var degradedPollCycles = 0
         s.pollJob = scope.launch {
             while (isActive && ready(s)) {
                 if (s.controls == 0) {
-                    for (uuid in telemetryUuids.filterNot { it == CoolerBleConstants.LIGHT_CONTROL_UUID }) {
-                        if (!ready(s)) return@launch
-                        val ch = s.characteristics[uuid] ?: continue
-                        readIfReadable(s, ch)
-                        if (!ready(s)) return@launch
-                    }
-                    if (SystemClock.elapsedRealtime() - s.lastTempUpdateMs > 6000) {
-                        for (uuid in listOf(CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID, CoolerBleConstants.STATUS_UUID)) {
-                            if (!ready(s)) return@launch
-                            val ch = s.characteristics[uuid] ?: continue
-                            enableNotification(s, ch)
-                            if (!ready(s)) return@launch
-                            readIfReadable(s, ch)
-                            if (!ready(s)) return@launch
-                        }
-                        s.lastTempUpdateMs = SystemClock.elapsedRealtime() - 4000
-                    }
+                    val polled = pollTelemetryOnce(s)
+                    if (!ready(s)) return@launch
+                    // Back-to-back fully skipped passes mean every read was rejected or
+                    // non-readable: do not spin at foreground cadence while in background.
+                    degradedPollCycles = if (polled) 0 else degradedPollCycles + 1
+                } else {
+                    degradedPollCycles = 0
                 }
-                delay(500)
+                delay(if (degradedPollCycles >= 3) 4000 else 500)
             }
         }
         s.rssiJob = scope.launch {
+            // RSSI is best-effort UI telemetry: its loss never invalidates the session and
+            // its success clears only a UI null, never protocol state.
             while (isActive && ready(s)) {
                 val g = s.gatt ?: return@launch
                 val result = operations.execute(g, g, GattOperationQueue.Kind.RSSI, READ_TIMEOUT_MS,
-                    isCurrent = { ready(s) }, start = { g.readRemoteRssi() })
+                    isCurrent = { ready(s) }, start = { g.readRemoteRssi() }, poisonOnTimeout = false)
                 if (!ready(s)) return@launch
                 if (!result.success) _state.update { it.copy(rssi = null) }
                 delay(2000)
             }
         }
+    }
+
+    /**
+     * One background-tolerant telemetry pass. Returns true when at least one read was
+     * accepted. Setup/control paths still use the poisoning default; only this periodic
+     * pass opts out, so a Doze-delayed callback degrades the UI value instead of
+     * invalidating an otherwise healthy session.
+     */
+    private suspend fun pollTelemetryOnce(s: Session): Boolean {
+        var accepted = false
+        for (uuid in telemetryUuids.filterNot { it == CoolerBleConstants.LIGHT_CONTROL_UUID }) {
+            if (!ready(s)) return accepted
+            val ch = s.characteristics[uuid] ?: continue
+            if (readIfReadable(s, ch, poisonOnTimeout = false)) accepted = true
+            if (!ready(s)) return accepted
+        }
+        if (SystemClock.elapsedRealtime() - s.lastTempUpdateMs > 6000) {
+            for (uuid in listOf(CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID, CoolerBleConstants.STATUS_UUID)) {
+                if (!ready(s)) return accepted
+                val ch = s.characteristics[uuid] ?: continue
+                enableNotification(s, ch, poisonOnTimeout = false)
+                if (!ready(s)) return accepted
+                if (readIfReadable(s, ch, poisonOnTimeout = false)) accepted = true
+                if (!ready(s)) return accepted
+            }
+            s.lastTempUpdateMs = SystemClock.elapsedRealtime() - 4000
+        }
+        return accepted
     }
 
     private fun handleData(s: Session, uuid: UUID, value: ByteArray) {
@@ -734,7 +801,7 @@ class CoolerBleManager(private val context: Context) {
             } else {
                 // No optimistic value to roll back. Where supported, reconcile the actual
                 // device value after explicit failure (timeouts already fail the session).
-                readIfReadable(s, command.characteristic) { fresh(command) }
+                readIfReadable(s, command.characteristic, fresh = { fresh(command) })
                 if (!fresh(command)) return false
             }
             return ok

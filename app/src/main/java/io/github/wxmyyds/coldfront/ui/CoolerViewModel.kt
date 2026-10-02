@@ -3,7 +3,9 @@ package io.github.wxmyyds.coldfront.ui
 import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.viewModelScope
+import io.github.wxmyyds.coldfront.ble.BackgroundResume
 import io.github.wxmyyds.coldfront.ble.BleManagerHolder
 import io.github.wxmyyds.coldfront.ble.BleScanDiagnostic
 import io.github.wxmyyds.coldfront.data.ProfileRepository
@@ -44,6 +46,8 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
     val discoveredDevices = ble.discoveredDevices
     val rawDevices = ble.rawDevices
     val scanState = ble.scanState
+    private val _bluetoothEnabled = MutableStateFlow(ble.isBluetoothEnabled)
+    val bluetoothEnabled: StateFlow<Boolean> = _bluetoothEnabled.asStateFlow()
 
     // A transient read failure keeps the last good value and retries, rather than replacing
     // persisted data with defaults or permanently killing an eagerly collected StateFlow.
@@ -55,6 +59,13 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
     }.stateIn(viewModelScope, SharingStarted.Eagerly, initial)
 
     val profiles = profileRepo.profiles.uiState(emptyList())
+    private val backgroundResume = BackgroundResume(
+        lifecycle = ProcessLifecycleOwner.get().lifecycle,
+        scope = viewModelScope,
+        store = ble,
+        hasRunningSession = ble::hasRunningSession,
+        connect = ble::connectByAddress,
+    )
     val dynamicColor = settingsRepo.dynamicColor.uiState(false)
     val darkMode = settingsRepo.darkMode.uiState("system")
     val palette = settingsRepo.palette.uiState("tonal_spot")
@@ -62,6 +73,7 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
     val appLanguage = settingsRepo.appLanguage.uiState("system")
 
     init {
+        backgroundResume.attach()
         viewModelScope.launch {
             liveState.filter { it.isConnected }
                 .distinctUntilChangedBy { it.connectionSessionId }
@@ -97,9 +109,6 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
     fun setPalette(palette: String) = saveSetting { settingsRepo.setPalette(palette) }
     fun setPredictiveBack(enabled: Boolean) = saveSetting { settingsRepo.setPredictiveBack(enabled) }
     fun setAppLanguage(language: String) = saveSetting { settingsRepo.setAppLanguage(language) }
-
-    private val _bluetoothEnabled = MutableStateFlow(ble.isBluetoothEnabled)
-    val bluetoothEnabled: StateFlow<Boolean> = _bluetoothEnabled.asStateFlow()
 
     fun refreshBluetoothState() {
         _bluetoothEnabled.value = ble.isBluetoothEnabled
@@ -152,6 +161,7 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        backgroundResume.detach()
         BleManagerHolder.release(this)
         storageErrors.close()
     }
