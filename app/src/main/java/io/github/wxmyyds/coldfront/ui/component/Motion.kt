@@ -4,8 +4,10 @@ import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -17,23 +19,127 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MotionScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.animation.scaleOut
+import androidx.activity.BackEventCompat
 
-/** A small shared vocabulary for app-owned motion; physics come from the active Material motion scheme. */
+internal enum class NavigationMotionKind {
+    TopLevel,
+    PushDetail,
+    PopDetail,
+}
+
+internal fun navigationMotionKind(
+    initialIsSecondary: Boolean,
+    targetIsSecondary: Boolean,
+): NavigationMotionKind = when {
+    !initialIsSecondary && targetIsSecondary -> NavigationMotionKind.PushDetail
+    initialIsSecondary && !targetIsSecondary -> NavigationMotionKind.PopDetail
+    else -> NavigationMotionKind.TopLevel
+}
+
+/** Shared transitions for app navigation; timing and physics always come from MaterialTheme.motionScheme. */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 internal object AppMotion {
-    fun pageEnter(forward: Boolean, motionScheme: MotionScheme): EnterTransition =
-        slideInHorizontally(
+    fun pageEnter(
+        kind: NavigationMotionKind,
+        forward: Boolean,
+        motionScheme: MotionScheme,
+    ): EnterTransition {
+        val offset: (Int) -> Int = when (kind) {
+            NavigationMotionKind.TopLevel -> { width -> if (forward) width / 12 else -width / 12 }
+            NavigationMotionKind.PushDetail -> { width -> width / 5 }
+            NavigationMotionKind.PopDetail -> { width -> -width / 32 }
+        }
+        val effects = when (kind) {
+            NavigationMotionKind.PushDetail,
+            NavigationMotionKind.TopLevel -> fadeIn(
+                animationSpec = motionScheme.defaultEffectsSpec<Float>(),
+                initialAlpha = 0.94f,
+            )
+            NavigationMotionKind.PopDetail -> EnterTransition.None
+        }
+        return slideInHorizontally(
             animationSpec = motionScheme.slowSpatialSpec<IntOffset>(),
-            initialOffsetX = { if (forward) it / 8 else -it / 8 },
-        ) + fadeIn(animationSpec = motionScheme.defaultEffectsSpec<Float>())
+            initialOffsetX = offset,
+        ) + effects
+    }
 
-    fun pageExit(forward: Boolean, motionScheme: MotionScheme): ExitTransition =
-        slideOutHorizontally(
+    fun pageExit(
+        kind: NavigationMotionKind,
+        forward: Boolean,
+        motionScheme: MotionScheme,
+    ): ExitTransition {
+        val offset: (Int) -> Int = when (kind) {
+            NavigationMotionKind.TopLevel -> { width -> if (forward) -width / 12 else width / 12 }
+            NavigationMotionKind.PushDetail -> { width -> -width / 32 }
+            NavigationMotionKind.PopDetail -> { width -> width / 5 }
+        }
+        val effects = when (kind) {
+            NavigationMotionKind.PopDetail,
+            NavigationMotionKind.TopLevel -> fadeOut(
+                animationSpec = motionScheme.defaultEffectsSpec<Float>(),
+                targetAlpha = 0.94f,
+            )
+            NavigationMotionKind.PushDetail -> ExitTransition.None
+        }
+        return slideOutHorizontally(
             animationSpec = motionScheme.slowSpatialSpec<IntOffset>(),
-            targetOffsetX = { if (forward) -it / 8 else it / 8 },
-        ) + fadeOut(animationSpec = motionScheme.defaultEffectsSpec<Float>())
+            targetOffsetX = offset,
+        ) + effects
+    }
+
+    /** Predictive progress reveals the previous page with the same shallow depth used by a normal pop. */
+    fun predictivePopEnter(motionScheme: MotionScheme): EnterTransition =
+        slideInHorizontally(
+            animationSpec = motionScheme.defaultSpatialSpec<IntOffset>(),
+            initialOffsetX = { -it / 32 },
+        )
+
+    /** The outgoing detail follows the active gesture edge while shrinking only slightly. */
+    fun predictivePopExit(
+        swipeEdge: Int,
+        motionScheme: MotionScheme,
+    ): ExitTransition {
+        val fromLeft = swipeEdge == BackEventCompat.EDGE_LEFT
+        val origin = TransformOrigin(
+            pivotFractionX = if (fromLeft) 0f else 1f,
+            pivotFractionY = 0.5f,
+        )
+        return slideOutHorizontally(
+            animationSpec = motionScheme.defaultSpatialSpec<IntOffset>(),
+            targetOffsetX = { if (fromLeft) it / 5 else -it / 5 },
+        ) + scaleOut(
+            animationSpec = motionScheme.defaultSpatialSpec<Float>(),
+            targetScale = 0.96f,
+            transformOrigin = origin,
+        ) + fadeOut(
+            animationSpec = motionScheme.defaultEffectsSpec<Float>(),
+            targetAlpha = 0.96f,
+        )
+    }
+
+    fun navigationBarEnter(motionScheme: MotionScheme) =
+        expandVertically(
+            animationSpec = motionScheme.fastSpatialSpec<IntSize>(),
+            expandFrom = Alignment.Bottom,
+        ) + slideInVertically(
+            animationSpec = motionScheme.fastSpatialSpec<IntOffset>(),
+            initialOffsetY = { it / 3 },
+        ) + fadeIn(animationSpec = motionScheme.fastEffectsSpec<Float>())
+
+    fun navigationBarExit(motionScheme: MotionScheme) =
+        shrinkVertically(
+            animationSpec = motionScheme.fastSpatialSpec<IntSize>(),
+            shrinkTowards = Alignment.Bottom,
+        ) + slideOutVertically(
+            animationSpec = motionScheme.fastSpatialSpec<IntOffset>(),
+            targetOffsetY = { it / 3 },
+        ) + fadeOut(animationSpec = motionScheme.fastEffectsSpec<Float>())
 
     /** Restrained spatial continuity for connection/empty-content state changes. */
     fun contentChange(motionScheme: MotionScheme): ContentTransform =
