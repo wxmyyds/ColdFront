@@ -336,25 +336,6 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         return BackgroundLinkLoss(loss.address, loss.type)
     }
 
-    /**
-     * Foreground return resumes the last system-dropped link exactly once: same address and
-     * type, no concurrent attempt, and the loss record is consumed before dialing. User or
-     * failed disconnects never populate [lastLinkLoss], so an explicit stop cannot be
-     * resurrected and a FAILED session keeps its failure UI until the user retries.
-     */
-    fun resumeLastLinkLoss(): Boolean {
-        // resumeLastLinkLoss runs inside onMain callers only (service/VM lifecycle), so the
-        // check-and-consume below cannot interleave with another Main resume attempt.
-        val loss = consumeLinkLoss() ?: return false
-        val address = loss.address ?: return false
-        val type = loss.type ?: return false
-        if (session != null) return false
-        val current = _state.value.connection
-        if (current == ConnectionState.CONNECTING || current == ConnectionState.DISCOVERING) return false
-        connectInternal(address, type, null)
-        return true
-    }
-
     fun disconnect() = onMain {
         lastLinkLoss = null
         disconnectInternal()
