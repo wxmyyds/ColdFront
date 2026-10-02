@@ -62,8 +62,8 @@ internal class GattOperationQueue(
         kind: Kind,
         timeoutMs: Long,
         isCurrent: () -> Boolean,
-        start: () -> Boolean,
         poisonOnTimeout: Boolean = true,
+        start: () -> Boolean,
     ): Result = mutex.withLock {
         if (!isCurrent()) return@withLock Result(false)
         // Cancellation must not free a lane that Android has already accepted. The owner
