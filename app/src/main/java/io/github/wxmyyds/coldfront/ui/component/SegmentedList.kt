@@ -692,6 +692,12 @@ private fun <T> SingleChoiceDropdownMenu(
                         onSelect(option)
                     },
                     text = { Text(optionLabel(option)) },
+                    // Keep menu geometry, containers, and selection animation on Material defaults;
+                    // only the option labels follow the app's theme emphasis color.
+                    colors = MenuDefaults.selectableItemColors(
+                        textColor = MaterialTheme.colorScheme.primary,
+                        selectedTextColor = MaterialTheme.colorScheme.primary,
+                    ),
                     // 连续分段形状：首尾项外圆角，中间项内角贴合
                     shapes = MenuDefaults.itemShape(index, options.size),
                     // 选中勾选图标：组件自带 expandHorizontally + fadeIn 动画
