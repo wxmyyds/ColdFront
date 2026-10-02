@@ -62,7 +62,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.compose.DefaultNavTransitions
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -70,12 +69,12 @@ import androidx.navigation.compose.rememberNavController
 import io.github.wxmyyds.coldfront.ble.BlePermissionManager
 import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.ui.component.AppMotion
-import io.github.wxmyyds.coldfront.ui.component.navigationMotionKind
+import io.github.wxmyyds.coldfront.ui.component.NavigationMotionKind
 import io.github.wxmyyds.coldfront.ui.component.isForwardTopLevelTransition
 import io.github.wxmyyds.coldfront.ui.component.isSecondaryDestination
-import io.github.wxmyyds.coldfront.ui.component.isTopLevelDestination
-import io.github.wxmyyds.coldfront.ui.component.topLevelRouteDistance
+import io.github.wxmyyds.coldfront.ui.component.navigationMotionKind
 import io.github.wxmyyds.coldfront.ui.component.shouldUsePredictivePop
+import io.github.wxmyyds.coldfront.ui.component.topLevelRouteDistance
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 import io.github.wxmyyds.coldfront.ui.i18n.rememberStrings
 import io.github.wxmyyds.coldfront.ui.theme.RedmagicCoolerTheme
@@ -232,12 +231,6 @@ private fun AppNav(vm: CoolerViewModel) {
     // Top-level destinations are exactly the primary navigation destinations in this NavHost.
     val topLevelRoutes = remember(items) { items.map { it.first } }
     val topLevelRouteSet = remember(topLevelRoutes) { topLevelRoutes.toSet() }
-    val predictivePopEligible = shouldUsePredictivePop(
-        predictiveBackEnabled = predictiveBack,
-        currentRoute = backStack?.destination?.route,
-        previousRoute = nav.previousBackStackEntry?.destination?.route,
-        topLevelRoutes = topLevelRouteSet,
-    )
 
     val navigateToTab: (String) -> Unit = { route ->
         nav.navigate(route) {
@@ -382,28 +375,36 @@ private fun AppNav(vm: CoolerViewModel) {
                                 routeDistance = topLevelRouteDistance(initialRoute, targetRoute, topLevelRoutes),
                             )
                         },
-                        predictivePopEnterTransition = { swipeEdge ->
-                            if (
-                                predictivePopEligible &&
-                                    initialState.destination.route == backStack?.destination?.route &&
-                                    isTopLevelDestination(
-                                        targetState.destination.route,
-                                        topLevelRouteSet,
-                                    )
+                        predictivePopEnterTransition = { _ ->
+                            if (shouldUsePredictivePop(
+                                    predictiveBackEnabled = predictiveBack,
+                                    currentRoute = initialState.destination.route,
+                                    previousRoute = targetState.destination.route,
+                                    topLevelRoutes = topLevelRouteSet,
+                                )
                             ) {
-                                DefaultNavTransitions.predictivePopEnterTransition.invoke(this, swipeEdge)
+                                AppMotion.pageEnter(
+                                    kind = NavigationMotionKind.PopDetail,
+                                    forward = false,
+                                    motionScheme = motionScheme,
+                                    routeDistance = 1,
+                                )
                             } else EnterTransition.None
                         },
-                        predictivePopExitTransition = { swipeEdge ->
-                            if (
-                                predictivePopEligible &&
-                                    initialState.destination.route == backStack?.destination?.route &&
-                                    isTopLevelDestination(
-                                        targetState.destination.route,
-                                        topLevelRouteSet,
-                                    )
+                        predictivePopExitTransition = { _ ->
+                            if (shouldUsePredictivePop(
+                                    predictiveBackEnabled = predictiveBack,
+                                    currentRoute = initialState.destination.route,
+                                    previousRoute = targetState.destination.route,
+                                    topLevelRoutes = topLevelRouteSet,
+                                )
                             ) {
-                                DefaultNavTransitions.predictivePopExitTransition.invoke(this, swipeEdge)
+                                AppMotion.pageExit(
+                                    kind = NavigationMotionKind.PopDetail,
+                                    forward = false,
+                                    motionScheme = motionScheme,
+                                    routeDistance = 1,
+                                )
                             } else ExitTransition.None
                         },
                         // Constrain the child, not the weighted slot: retain centering on wide windows.

@@ -66,6 +66,15 @@ class NavigationMotionKindTest {
             false,
             shouldUsePredictivePop(
                 predictiveBackEnabled = true,
+                currentRoute = "about",
+                previousRoute = "scan",
+                topLevelRoutes = roots,
+            ),
+        )
+        assertEquals(
+            false,
+            shouldUsePredictivePop(
+                predictiveBackEnabled = true,
                 currentRoute = "settings",
                 previousRoute = "home",
                 topLevelRoutes = roots,

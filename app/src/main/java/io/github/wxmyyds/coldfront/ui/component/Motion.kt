@@ -22,11 +22,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MotionScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
-import androidx.compose.animation.scaleOut
 
 internal enum class NavigationMotionKind {
     TopLevel,
@@ -96,7 +94,7 @@ internal object AppMotion {
         val offset: (Int) -> Int = when (kind) {
             NavigationMotionKind.TopLevel -> { width -> if (forward) width else -width }
             NavigationMotionKind.PushDetail -> { width -> width / 5 }
-            NavigationMotionKind.PopDetail -> { width -> -width / 32 }
+            NavigationMotionKind.PopDetail -> { 0 }
         }
         val effects = when (kind) {
             NavigationMotionKind.PushDetail -> fadeIn(
@@ -130,17 +128,10 @@ internal object AppMotion {
         val offset: (Int) -> Int = when (kind) {
             NavigationMotionKind.TopLevel -> { width -> if (forward) -width else width }
             NavigationMotionKind.PushDetail -> { width -> -width / 32 }
-            NavigationMotionKind.PopDetail -> { width -> width / 5 }
+            NavigationMotionKind.PopDetail -> { width -> width }
         }
         val effects = when (kind) {
-            NavigationMotionKind.PopDetail -> fadeOut(
-                animationSpec = motionScheme.defaultEffectsSpec<Float>(),
-                targetAlpha = 0.96f,
-            ) + scaleOut(
-                animationSpec = motionScheme.defaultSpatialSpec<Float>(),
-                targetScale = 0.96f,
-                transformOrigin = TransformOrigin(0f, 0.5f),
-            )
+            NavigationMotionKind.PopDetail -> ExitTransition.None
             NavigationMotionKind.TopLevel -> fadeOut(
                 animationSpec = tween(topLevelPageDuration(routeDistance), easing = FastOutSlowInEasing),
                 targetAlpha = 0.96f,
