@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.wxmyyds.coldfront.BuildConfig
+import io.github.wxmyyds.coldfront.ui.component.AnimatedRowIcon
 import io.github.wxmyyds.coldfront.ui.component.RowIcon
 import io.github.wxmyyds.coldfront.ui.component.PageScaffold
 import io.github.wxmyyds.coldfront.ui.component.SegmentedDropdownRow
@@ -124,7 +125,7 @@ fun SettingsScreen(vm: CoolerViewModel, onAbout: () -> Unit) {
                         optionLabel = { value ->
                             themeOptions.firstOrNull { it.first == value }?.second ?: value
                         },
-                        leadingContent = { RowIcon(themeModeIcon(themeMode)) },
+                        leadingContent = { AnimatedRowIcon(themeModeIcon(themeMode)) },
                     )
                 }
             }

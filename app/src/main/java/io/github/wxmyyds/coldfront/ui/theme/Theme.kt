@@ -2,7 +2,6 @@ package io.github.wxmyyds.coldfront.ui.theme
 
 import android.os.Build
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialExpressiveTheme
@@ -41,10 +40,11 @@ fun RedmagicCoolerTheme(
     val colorScheme = remember(seed, darkTheme, palette) {
         appColorScheme(seed, darkTheme, palette)
     }
+    val motionScheme = MotionScheme.expressive()
     MaterialExpressiveTheme(
         // 切深浅/开关动态取色时整套角色色平滑过渡，而非瞬时跳变（MD3E 动效表达因果）
-        colorScheme = animateColorScheme(colorScheme),
-        motionScheme = MotionScheme.expressive(),
+        colorScheme = animateColorScheme(colorScheme, motionScheme),
+        motionScheme = motionScheme,
         typography = AppTypography,
         shapes = AppShapes,
         content = content,
@@ -111,12 +111,14 @@ private fun paletteColorScheme(scheme: DynamicScheme, base: ColorScheme): ColorS
 
 /** Animate role values only; keep the existing theme transition and role semantics. */
 @Composable
-private fun animateColorScheme(target: ColorScheme): ColorScheme {
-    val spec = tween<Color>(durationMillis = 400)
-
+private fun animateColorScheme(target: ColorScheme, motionScheme: MotionScheme): ColorScheme {
     @Composable
     fun animated(color: Color): Color =
-        animateColorAsState(color, spec, label = "themeColor").value
+        animateColorAsState(
+            color,
+            motionScheme.defaultEffectsSpec<Color>(),
+            label = "themeColor",
+        ).value
 
     return target.copy(
         primary = animated(target.primary),

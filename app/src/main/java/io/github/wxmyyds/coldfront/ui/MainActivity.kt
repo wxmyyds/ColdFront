@@ -49,12 +49,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.scaleOut
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,6 +69,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import io.github.wxmyyds.coldfront.ble.BlePermissionManager
 import io.github.wxmyyds.coldfront.domain.ConnectionState
+import io.github.wxmyyds.coldfront.ui.component.AppMotion
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 import io.github.wxmyyds.coldfront.ui.i18n.rememberStrings
 import io.github.wxmyyds.coldfront.ui.theme.RedmagicCoolerTheme
@@ -204,6 +201,7 @@ private object Routes {
     const val ABOUT = "about"
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun AppNav(vm: CoolerViewModel) {
     val nav = rememberNavController()
@@ -242,6 +240,7 @@ private fun AppNav(vm: CoolerViewModel) {
 
     // Use existing foundation/Material3 APIs, without adding a window-size dependency.
     // Keep one NavHost at the same composition location across window resizing.
+    val motionScheme = MaterialTheme.motionScheme
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val useRail = maxWidth >= 600.dp
         Scaffold(
@@ -313,28 +312,29 @@ private fun AppNav(vm: CoolerViewModel) {
                         startDestination = Routes.HOME,
                         enterTransition = {
                             val forward = routeOrder(targetState.destination.route) >= routeOrder(initialState.destination.route)
-                            slideInHorizontally(initialOffsetX = { if (forward) it / 8 else -it / 8 }) + fadeIn()
+                            AppMotion.pageEnter(forward = forward, motionScheme = motionScheme)
                         },
                         exitTransition = {
                             val forward = routeOrder(targetState.destination.route) >= routeOrder(initialState.destination.route)
-                            slideOutHorizontally(targetOffsetX = { if (forward) -it / 8 else it / 8 }) + fadeOut()
+                            AppMotion.pageExit(forward = forward, motionScheme = motionScheme)
                         },
                         popEnterTransition = {
                             if (predictiveBack && isSecondaryRoute(initialState.destination.route)) {
                                 val forward = routeOrder(targetState.destination.route) >= routeOrder(initialState.destination.route)
-                                slideInHorizontally(initialOffsetX = { if (forward) it / 8 else -it / 8 }) + fadeIn()
+                                AppMotion.pageEnter(forward = forward, motionScheme = motionScheme)
                             } else EnterTransition.None
                         },
                         popExitTransition = {
                             if (predictiveBack && isSecondaryRoute(initialState.destination.route)) {
                                 val forward = routeOrder(targetState.destination.route) >= routeOrder(initialState.destination.route)
-                                slideOutHorizontally(targetOffsetX = { if (forward) -it / 8 else it / 8 }) + fadeOut()
+                                AppMotion.pageExit(forward = forward, motionScheme = motionScheme)
                             } else ExitTransition.None
                         },
                         predictivePopEnterTransition = { EnterTransition.None },
                         predictivePopExitTransition = { swipeEdge ->
                             if (predictiveBack && isSecondaryRoute(initialState.destination.route)) {
                                 scaleOut(
+                                    animationSpec = motionScheme.defaultSpatialSpec(),
                                     targetScale = 0.93f,
                                     transformOrigin = TransformOrigin(
                                         pivotFractionX = if (swipeEdge == BackEventCompat.EDGE_LEFT) 0f else 1f,

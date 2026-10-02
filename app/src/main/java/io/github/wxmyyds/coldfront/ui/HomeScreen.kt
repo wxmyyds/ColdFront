@@ -1,5 +1,7 @@
 package io.github.wxmyyds.coldfront.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
@@ -54,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.domain.CoolerLiveState
+import io.github.wxmyyds.coldfront.ui.component.AppMotion
 import io.github.wxmyyds.coldfront.ui.component.RowIcon
 import io.github.wxmyyds.coldfront.ui.component.PageScaffold
 import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
@@ -73,42 +76,62 @@ import kotlin.math.roundToInt
  * - 战术 5(流体动效):颜色过渡走 MaterialTheme.motionScheme 的 effects spec。
  * - 电源和模式控制沿用 SegmentedSwitchRow 的原生开关与分组形态。
  */
+private enum class HomeContentState { Connected, Connecting, Failed, Idle }
+
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
     val strings = LocalStrings.current
     val state by vm.liveState.collectAsStateWithLifecycle()
-    val connected = state.connection == ConnectionState.CONNECTED
+    val contentState = when (state.connection) {
+        ConnectionState.CONNECTED -> HomeContentState.Connected
+        ConnectionState.CONNECTING, ConnectionState.DISCOVERING -> HomeContentState.Connecting
+        ConnectionState.FAILED -> HomeContentState.Failed
+        else -> HomeContentState.Idle
+    }
     val contentScrollState = rememberScrollState()
+    val motionScheme = MaterialTheme.motionScheme
 
     PageScaffold(title = strings.homeTitle) { inner ->
-        if (connected) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(inner)
-                    .verticalScroll(contentScrollState)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                ConnectedContent(vm, state)
-            }
-        } else {
-            // 保留视口最小高度以正常居中，短窗口允许内容向下展开并滚动。
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(inner)
-                    .padding(horizontal = 24.dp)
-                    .verticalScroll(contentScrollState)
-                    .padding(vertical = 24.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                when (state.connection) {
-                    ConnectionState.CONNECTING, ConnectionState.DISCOVERING ->
-                        ConnectingContent(strings)
-                    ConnectionState.FAILED -> FailedContent(strings, onAddDevice)
-                    else -> NotConnectedContent(strings, onAddDevice)
+        AnimatedContent(
+            targetState = contentState,
+            transitionSpec = {
+                AppMotion.contentChange(motionScheme).using(
+                    SizeTransform(clip = false) { _, _ ->
+                        motionScheme.defaultSpatialSpec<IntSize>()
+                    },
+                )
+            },
+            label = "homeConnectionContent",
+        ) { target ->
+            if (target == HomeContentState.Connected) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(inner)
+                        .verticalScroll(contentScrollState)
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    ConnectedContent(vm, state)
+                }
+            } else {
+                // 保留视口最小高度以正常居中，短窗口允许内容向下展开并滚动。
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(inner)
+                        .padding(horizontal = 24.dp)
+                        .verticalScroll(contentScrollState)
+                        .padding(vertical = 24.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    when (target) {
+                        HomeContentState.Connecting -> ConnectingContent(strings)
+                        HomeContentState.Failed -> FailedContent(strings, onAddDevice)
+                        HomeContentState.Idle -> NotConnectedContent(strings, onAddDevice)
+                        HomeContentState.Connected -> Unit
+                    }
                 }
             }
         }
@@ -324,6 +347,7 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
             ) {
                 Icon(Icons.Filled.Speed, contentDescription = null)
                 Text(strings.homeLevel, style = MaterialTheme.typography.titleMedium)
+                // 设备档位可能随实时回读更新，保持数值即时，避免每次遥测都重启动效。
                 Text(
                     if (isGear) strings.homeLevelGear.format(levelToGear(displayedPercent))
                     else strings.homeLevelPercent.format(displayedPercent),
