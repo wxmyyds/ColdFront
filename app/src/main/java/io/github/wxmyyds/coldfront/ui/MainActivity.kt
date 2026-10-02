@@ -351,7 +351,8 @@ private fun AppNav(vm: CoolerViewModel) {
                             .fillMaxSize()
                             .clipToBounds(),
                     ) {
-                        val pageWidthPx = with(LocalDensity.current) { maxWidth.toPx() }
+                        val pageWidth = maxWidth
+                        val pageWidthPx = with(LocalDensity.current) { pageWidth.toPx() }
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -397,7 +398,7 @@ private fun AppNav(vm: CoolerViewModel) {
                             ).forEachIndexed { index, content ->
                                 Box(
                                     modifier = Modifier
-                                        .width(maxWidth)
+                                        .width(pageWidth)
                                         .fillMaxHeight()
                                         .offset {
                                             IntOffset(
