@@ -321,6 +321,7 @@ private fun AppNav(vm: CoolerViewModel) {
                             val initialRoute = initialState.destination.route
                             val targetRoute = targetState.destination.route
                             val kind = navigationMotionKind(
+                                isPop = false,
                                 initialIsSecondary = isSecondaryRoute(initialRoute),
                                 targetIsSecondary = isSecondaryRoute(targetRoute),
                             )
@@ -334,6 +335,7 @@ private fun AppNav(vm: CoolerViewModel) {
                             val initialRoute = initialState.destination.route
                             val targetRoute = targetState.destination.route
                             val kind = navigationMotionKind(
+                                isPop = false,
                                 initialIsSecondary = isSecondaryRoute(initialRoute),
                                 targetIsSecondary = isSecondaryRoute(targetRoute),
                             )
@@ -347,6 +349,7 @@ private fun AppNav(vm: CoolerViewModel) {
                             val initialRoute = initialState.destination.route
                             val targetRoute = targetState.destination.route
                             val kind = navigationMotionKind(
+                                isPop = true,
                                 initialIsSecondary = isSecondaryRoute(initialRoute),
                                 targetIsSecondary = isSecondaryRoute(targetRoute),
                             )
@@ -360,6 +363,7 @@ private fun AppNav(vm: CoolerViewModel) {
                             val initialRoute = initialState.destination.route
                             val targetRoute = targetState.destination.route
                             val kind = navigationMotionKind(
+                                isPop = true,
                                 initialIsSecondary = isSecondaryRoute(initialRoute),
                                 targetIsSecondary = isSecondaryRoute(targetRoute),
                             )

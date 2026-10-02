@@ -34,11 +34,12 @@ internal enum class NavigationMotionKind {
 }
 
 internal fun navigationMotionKind(
+    isPop: Boolean,
     initialIsSecondary: Boolean,
     targetIsSecondary: Boolean,
 ): NavigationMotionKind = when {
-    !initialIsSecondary && targetIsSecondary -> NavigationMotionKind.PushDetail
-    initialIsSecondary && !targetIsSecondary -> NavigationMotionKind.PopDetail
+    isPop && initialIsSecondary && !targetIsSecondary -> NavigationMotionKind.PopDetail
+    !isPop && !initialIsSecondary && targetIsSecondary -> NavigationMotionKind.PushDetail
     else -> NavigationMotionKind.TopLevel
 }
 
@@ -64,7 +65,11 @@ internal object AppMotion {
             NavigationMotionKind.PopDetail -> EnterTransition.None
         }
         return slideInHorizontally(
-            animationSpec = motionScheme.slowSpatialSpec<IntOffset>(),
+            animationSpec = if (kind == NavigationMotionKind.PopDetail) {
+                motionScheme.defaultSpatialSpec<IntOffset>()
+            } else {
+                motionScheme.slowSpatialSpec<IntOffset>()
+            },
             initialOffsetX = offset,
         ) + effects
     }
@@ -80,7 +85,14 @@ internal object AppMotion {
             NavigationMotionKind.PopDetail -> { width -> width / 5 }
         }
         val effects = when (kind) {
-            NavigationMotionKind.PopDetail,
+            NavigationMotionKind.PopDetail -> fadeOut(
+                animationSpec = motionScheme.defaultEffectsSpec<Float>(),
+                targetAlpha = 0.96f,
+            ) + scaleOut(
+                animationSpec = motionScheme.defaultSpatialSpec<Float>(),
+                targetScale = 0.96f,
+                transformOrigin = TransformOrigin(0f, 0.5f),
+            )
             NavigationMotionKind.TopLevel -> fadeOut(
                 animationSpec = motionScheme.defaultEffectsSpec<Float>(),
                 targetAlpha = 0.94f,
@@ -88,7 +100,11 @@ internal object AppMotion {
             NavigationMotionKind.PushDetail -> ExitTransition.None
         }
         return slideOutHorizontally(
-            animationSpec = motionScheme.slowSpatialSpec<IntOffset>(),
+            animationSpec = if (kind == NavigationMotionKind.PopDetail) {
+                motionScheme.defaultSpatialSpec<IntOffset>()
+            } else {
+                motionScheme.slowSpatialSpec<IntOffset>()
+            },
             targetOffsetX = offset,
         ) + effects
     }

@@ -5,18 +5,38 @@ import org.junit.Test
 
 class NavigationMotionKindTest {
     @Test
-    fun rootToSecondaryUsesDetailPush() {
+    fun pushToSecondaryUsesDetailPush() {
         assertEquals(
             NavigationMotionKind.PushDetail,
-            navigationMotionKind(initialIsSecondary = false, targetIsSecondary = true),
+            navigationMotionKind(
+                isPop = false,
+                initialIsSecondary = false,
+                targetIsSecondary = true,
+            ),
         )
     }
 
     @Test
-    fun secondaryToRootUsesReverseDetailPop() {
+    fun popFromSecondaryUsesReverseDetailMotion() {
         assertEquals(
             NavigationMotionKind.PopDetail,
-            navigationMotionKind(initialIsSecondary = true, targetIsSecondary = false),
+            navigationMotionKind(
+                isPop = true,
+                initialIsSecondary = true,
+                targetIsSecondary = false,
+            ),
+        )
+    }
+
+    @Test
+    fun navigatingFromDetailToRootIsNotMisclassifiedAsPop() {
+        assertEquals(
+            NavigationMotionKind.TopLevel,
+            navigationMotionKind(
+                isPop = false,
+                initialIsSecondary = true,
+                targetIsSecondary = false,
+            ),
         )
     }
 
@@ -24,11 +44,19 @@ class NavigationMotionKindTest {
     fun transitionsWithinSameLayerUseTopLevelMotion() {
         assertEquals(
             NavigationMotionKind.TopLevel,
-            navigationMotionKind(initialIsSecondary = false, targetIsSecondary = false),
+            navigationMotionKind(
+                isPop = false,
+                initialIsSecondary = false,
+                targetIsSecondary = false,
+            ),
         )
         assertEquals(
             NavigationMotionKind.TopLevel,
-            navigationMotionKind(initialIsSecondary = true, targetIsSecondary = true),
+            navigationMotionKind(
+                isPop = true,
+                initialIsSecondary = true,
+                targetIsSecondary = true,
+            ),
         )
     }
 }

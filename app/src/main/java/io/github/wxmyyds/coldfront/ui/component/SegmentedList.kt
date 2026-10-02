@@ -2,7 +2,11 @@
 
 package io.github.wxmyyds.coldfront.ui.component
 
-import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -247,8 +251,10 @@ fun SegmentedGroup(
     title: String? = null,
     content: SegmentedGroupScope.() -> Unit,
 ) {
-    val visible = SegmentedGroupScope().apply(content).entries.filter { it.visible }
-    if (visible.isEmpty()) return
+    val entries = SegmentedGroupScope().apply(content).entries
+    val visibleCount = entries.count { it.visible }
+    if (visibleCount == 0) return
+    val motionScheme = MaterialTheme.motionScheme
 
     Column(modifier = modifier) {
         if (!title.isNullOrEmpty()) {
@@ -260,17 +266,32 @@ fun SegmentedGroup(
             )
         }
         Column(
-            modifier = Modifier.animateContentSize(
-                MaterialTheme.motionScheme.defaultSpatialSpec<IntSize>(),
-            ),
             verticalArrangement = Arrangement.spacedBy(SegmentedRowGap),
         ) {
-            visible.forEachIndexed { index, entry ->
+            entries.forEachIndexed { index, entry ->
+                val visibleIndex = entries.take(index).count { it.visible }
                 key(entry.key) {
-                    CompositionLocalProvider(
-                        LocalSegmentedShapes provides segmentedRowShapes(index, visible.size),
+                    AnimatedVisibility(
+                        visible = entry.visible,
+                        enter = expandVertically(
+                            animationSpec = motionScheme.defaultSpatialSpec<IntSize>(),
+                        ) + fadeIn(
+                            animationSpec = motionScheme.defaultEffectsSpec<Float>(),
+                        ),
+                        exit = shrinkVertically(
+                            animationSpec = motionScheme.defaultSpatialSpec<IntSize>(),
+                        ) + fadeOut(
+                            animationSpec = motionScheme.defaultEffectsSpec<Float>(),
+                        ),
                     ) {
-                        entry.content()
+                        CompositionLocalProvider(
+                            LocalSegmentedShapes provides segmentedRowShapes(
+                                visibleIndex.coerceIn(0, visibleCount - 1),
+                                visibleCount,
+                            ),
+                        ) {
+                            entry.content()
+                        }
                     }
                 }
             }
