@@ -144,7 +144,9 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
             profileRepo.delete(id)
             if (removed != null && removed.macAddress.equals(state.deviceAddress, ignoreCase = true)) {
                 ignoredSessions.add(state.connectionSessionId)
-                if (!state.isConnected) ble.disconnect()
+                if (!state.isConnected && liveState.value.connectionSessionId == state.connectionSessionId) {
+                    ble.disconnect()
+                }
             }
         }
     }

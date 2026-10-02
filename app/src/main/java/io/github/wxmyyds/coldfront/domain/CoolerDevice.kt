@@ -21,9 +21,6 @@ data class CoolerDevice(
     /** UI 显示名 */
     val displayName: String get() = bleName ?: deviceType.deviceName
 
-    /** 信号是否足够强（> -70 dBm） */
-    val hasStrongSignal: Boolean get() = rssi > -70
-
     /** 信号质量百分比（0–100） */
     val signalQuality: Int
         get() = when {

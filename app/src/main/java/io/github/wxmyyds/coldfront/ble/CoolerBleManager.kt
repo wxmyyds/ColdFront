@@ -540,6 +540,7 @@ class CoolerBleManager(private val context: Context) {
         s: Session,
         ch: BluetoothGattCharacteristic,
         value: ByteArray,
+        onStart: () -> Unit = {},
         fresh: () -> Boolean = { true },
     ): Boolean {
         val g = s.gatt ?: return false
@@ -547,6 +548,7 @@ class CoolerBleManager(private val context: Context) {
         return operations.execute(g, ch, GattOperationQueue.Kind.WRITE, OP_TIMEOUT_MS,
             isCurrent = { owns(s) && s.characteristics[ch.uuid] === ch && fresh() },
             start = {
+                onStart()
                 @Suppress("DEPRECATION")
                 ch.value = value
                 ch.writeType = if (ch.properties and BluetoothGattCharacteristic.PROPERTY_WRITE != 0) {
@@ -717,8 +719,11 @@ class CoolerBleManager(private val context: Context) {
         try {
             if (debounceMs > 0) delay(debounceMs)
             if (!fresh(command)) return false
-            val revision = s.telemetryRevision[command.characteristic.uuid] ?: 0L
-            val ok = enqueueWrite(s, command.characteristic, value) { fresh(command) }
+            var revision = 0L
+            val ok = enqueueWrite(s, command.characteristic, value,
+                onStart = { revision = s.telemetryRevision[command.characteristic.uuid] ?: 0L },
+                fresh = { fresh(command) },
+            )
             if (!fresh(command)) return false
             if (ok) {
                 // A device report during this command is more authoritative than our fallback

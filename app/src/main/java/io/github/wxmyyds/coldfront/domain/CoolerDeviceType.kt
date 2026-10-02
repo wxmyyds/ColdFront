@@ -101,10 +101,6 @@ enum class CoolerDeviceType(
         fun fromMsdType(mainType: Int, subType: Int): CoolerDeviceType? =
             entries.firstOrNull { it.mainType == mainType && it.subType == subType }
 
-        /** 按商用名匹配 */
-        fun fromDeviceName(name: String): CoolerDeviceType? =
-            entries.firstOrNull { it.deviceName.equals(name, ignoreCase = true) }
-
         /**
          * 名称兜底识别:优先明确代数，最后匹配通用 Magcooler（第三代）。
          * MSD 不可用时(旧系统/广播被裁剪)的回退。
