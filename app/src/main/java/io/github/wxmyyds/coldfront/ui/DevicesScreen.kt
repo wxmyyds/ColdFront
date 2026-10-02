@@ -1,5 +1,7 @@
 package io.github.wxmyyds.coldfront.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,6 +51,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.domain.CoolerLiveState
 import io.github.wxmyyds.coldfront.domain.CoolerProfile
+import io.github.wxmyyds.coldfront.ui.component.AppMotion
 import io.github.wxmyyds.coldfront.ui.component.PageScaffold
 import io.github.wxmyyds.coldfront.ui.component.SegmentedRowGap
 import io.github.wxmyyds.coldfront.ui.component.segmentedRowShapes
@@ -72,6 +75,7 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
     val state by vm.liveState.collectAsStateWithLifecycle()
     var profileToDelete by remember { mutableStateOf<CoolerProfile?>(null) }
     val listState = rememberLazyListState()
+    val motionScheme = MaterialTheme.motionScheme
     PageScaffold(
         title = strings.devicesTitle,
         floatingActionButton = {
@@ -82,34 +86,46 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
             )
         },
     ) { inner ->
-        if (profiles.isEmpty()) {
-            EmptyState(
-                strings,
-                Modifier.padding(inner),
-            )
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(inner)
-                    .padding(horizontal = 16.dp),
-                state = listState,
-                verticalArrangement = Arrangement.spacedBy(SegmentedRowGap),
-                contentPadding = PaddingValues(
-                    top = 8.dp,
-                    bottom = FabClearance,
-                ),
-            ) {
-                itemsIndexed(profiles, key = { _, profile -> profile.id }) { index, profile ->
-                    SavedDeviceCard(
-                        strings = strings,
-                        profile = profile,
-                        index = index,
-                        count = profiles.size,
-                        state = state,
-                        onConnect = { vm.connectProfile(profile) },
-                        onDelete = { profileToDelete = profile },
-                    )
+        AnimatedContent(
+            targetState = profiles.isEmpty(),
+            transitionSpec = {
+                AppMotion.contentChange(motionScheme).using(
+                    SizeTransform(clip = false) { _, _ ->
+                        motionScheme.defaultSpatialSpec<IntSize>()
+                    },
+                )
+            },
+            label = "savedDevicesContent",
+        ) { isEmpty ->
+            if (isEmpty) {
+                EmptyState(
+                    strings,
+                    Modifier.padding(inner),
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(inner)
+                        .padding(horizontal = 16.dp),
+                    state = listState,
+                    verticalArrangement = Arrangement.spacedBy(SegmentedRowGap),
+                    contentPadding = PaddingValues(
+                        top = 8.dp,
+                        bottom = FabClearance,
+                    ),
+                ) {
+                    itemsIndexed(profiles, key = { _, profile -> profile.id }) { index, profile ->
+                        SavedDeviceCard(
+                            strings = strings,
+                            profile = profile,
+                            index = index,
+                            count = profiles.size,
+                            state = state,
+                            onConnect = { vm.connectProfile(profile) },
+                            onDelete = { profileToDelete = profile },
+                        )
+                    }
                 }
             }
         }
