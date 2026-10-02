@@ -71,6 +71,10 @@ import io.github.wxmyyds.coldfront.ble.BlePermissionManager
 import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.ui.component.AppMotion
 import io.github.wxmyyds.coldfront.ui.component.navigationMotionKind
+import io.github.wxmyyds.coldfront.ui.component.isForwardTopLevelTransition
+import io.github.wxmyyds.coldfront.ui.component.isSecondaryDestination
+import io.github.wxmyyds.coldfront.ui.component.isTopLevelDestination
+import io.github.wxmyyds.coldfront.ui.component.topLevelRouteDistance
 import io.github.wxmyyds.coldfront.ui.component.shouldUsePredictivePop
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 import io.github.wxmyyds.coldfront.ui.i18n.rememberStrings
