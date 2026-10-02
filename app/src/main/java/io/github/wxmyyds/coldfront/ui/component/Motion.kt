@@ -42,23 +42,36 @@ internal fun navigationMotionKind(
     else -> NavigationMotionKind.TopLevel
 }
 
+internal fun navigationOffset(
+    kind: NavigationMotionKind,
+    entering: Boolean,
+    forward: Boolean,
+    width: Int,
+): Int = when (kind) {
+    NavigationMotionKind.TopLevel -> if (entering) {
+        if (forward) width else -width
+    } else {
+        if (forward) -width else width
+    }
+    NavigationMotionKind.PushDetail -> if (entering) width / 5 else -width / 5
+    NavigationMotionKind.PopDetail -> if (entering) -width / 5 else width / 5
+}
+
 internal fun isSecondaryDestination(route: String?, topLevelRoutes: Set<String>): Boolean =
     route != null && route !in topLevelRoutes
 
 internal fun isTopLevelDestination(route: String?, topLevelRoutes: Set<String>): Boolean =
     route != null && route in topLevelRoutes
 
-private fun topLevelRouteIndex(route: String?, routes: List<String>): Int =
-    route?.let { routes.indexOf(it) }?.coerceAtLeast(0) ?: 0
-
 internal fun topLevelRouteDistance(
     initialRoute: String?,
     targetRoute: String?,
     topLevelRoutes: List<String>,
 ): Int {
-    val initialIndex = topLevelRouteIndex(initialRoute, topLevelRoutes)
-    val targetIndex = topLevelRouteIndex(targetRoute, topLevelRoutes)
-    return kotlin.math.abs(targetIndex - initialIndex).coerceAtLeast(1)
+    val initialIndex = topLevelIndex(initialRoute, topLevelRoutes)
+    val targetIndex = topLevelIndex(targetRoute, topLevelRoutes)
+    return if (initialIndex < 0 || targetIndex < 0) 1
+    else kotlin.math.abs(targetIndex - initialIndex).coerceAtLeast(1)
 }
 
 internal fun isForwardTopLevelTransition(
@@ -66,9 +79,17 @@ internal fun isForwardTopLevelTransition(
     targetRoute: String?,
     topLevelRoutes: List<String>,
 ): Boolean {
-    val initialIndex = topLevelRouteIndex(initialRoute, topLevelRoutes)
-    val targetIndex = topLevelRouteIndex(targetRoute, topLevelRoutes)
-    return targetIndex >= initialIndex
+    val initialIndex = topLevelIndex(initialRoute, topLevelRoutes)
+    val targetIndex = topLevelIndex(targetRoute, topLevelRoutes)
+    return initialIndex < 0 || targetIndex < 0 || targetIndex >= initialIndex
+}
+
+private fun topLevelIndex(route: String?, routes: List<String>): Int {
+    val rootRoute = when (route) {
+        "about" -> "settings"
+        else -> route
+    }
+    return rootRoute?.let(routes::indexOf) ?: -1
 }
 
 internal fun topLevelPageDuration(routeDistance: Int): Int =
@@ -91,10 +112,8 @@ internal object AppMotion {
         motionScheme: MotionScheme,
         routeDistance: Int,
     ): EnterTransition {
-        val offset: (Int) -> Int = when (kind) {
-            NavigationMotionKind.TopLevel -> { width -> if (forward) width else -width }
-            NavigationMotionKind.PushDetail -> { width -> width / 5 }
-            NavigationMotionKind.PopDetail -> { _ -> 0 }
+        val offset: (Int) -> Int = { width ->
+            navigationOffset(kind, entering = true, forward = forward, width = width)
         }
         val effects = when (kind) {
             NavigationMotionKind.PushDetail -> fadeIn(
@@ -125,10 +144,8 @@ internal object AppMotion {
         motionScheme: MotionScheme,
         routeDistance: Int,
     ): ExitTransition {
-        val offset: (Int) -> Int = when (kind) {
-            NavigationMotionKind.TopLevel -> { width -> if (forward) -width else width }
-            NavigationMotionKind.PushDetail -> { width -> -width / 32 }
-            NavigationMotionKind.PopDetail -> { width -> width }
+        val offset: (Int) -> Int = { width ->
+            navigationOffset(kind, entering = false, forward = forward, width = width)
         }
         val effects = when (kind) {
             NavigationMotionKind.PopDetail -> ExitTransition.None

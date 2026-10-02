@@ -34,9 +34,21 @@ internal class GattOperationQueue(
 
     private val mutex = Mutex()
     private var pending: Pending? = null
+    private val timedOutReads = java.util.IdentityHashMap<Any, MutableSet<Any>>()
 
-    /** Returns false for unsolicited, stale-owner, wrong-kind or wrong-target callbacks. */
+    private fun readTimedOut(owner: Any, target: Any): Boolean =
+        timedOutReads[owner]?.contains(target) == true
+
+    private fun markReadTimedOut(owner: Any, target: Any) {
+        val targets = timedOutReads.getOrPut(owner) {
+            java.util.Collections.newSetFromMap(java.util.IdentityHashMap<Any, Boolean>())
+        }
+        targets.add(target)
+    }
+
+    /** Returns false for unsolicited, stale-owner, wrong-kind/target, or timed-out reads. */
     fun complete(owner: Any, target: Any, kind: Kind, result: Result): Boolean {
+        if (kind == Kind.READ && readTimedOut(owner, target)) return false
         val operation = pending ?: return false
         if (operation.owner !== owner || operation.target !== target || operation.kind != kind) return false
         clear(operation)
@@ -46,6 +58,7 @@ internal class GattOperationQueue(
 
     /** Call only after invalidating the owner, before closing its transport. */
     fun abort(owner: Any) {
+        timedOutReads.remove(owner)
         val operation = pending ?: return
         if (operation.owner !== owner) return
         clear(operation)
@@ -65,7 +78,9 @@ internal class GattOperationQueue(
         poisonOnTimeout: Boolean = true,
         start: () -> Boolean,
     ): Result = mutex.withLock {
-        if (!isCurrent()) return@withLock Result(false)
+        if (!isCurrent() || (kind == Kind.READ && readTimedOut(owner, target))) {
+            return@withLock Result(false)
+        }
         // Cancellation must not free a lane that Android has already accepted. The owner
         // can still abort it immediately on disconnect; timeout remains bounded.
         withContext(NonCancellable) {
@@ -88,6 +103,7 @@ internal class GattOperationQueue(
                         // Optional telemetry opts out: a delayed background callback must not
                         // invalidate the session, the next poll simply observes the next value.
                         if (poisonOnTimeout) onTimeout(owner)
+                        else if (kind == Kind.READ) markReadTimedOut(owner, target)
                         return@withContext Result(false)
                     }
                     result = callback

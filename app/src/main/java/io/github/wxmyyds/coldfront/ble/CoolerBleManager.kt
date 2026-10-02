@@ -396,6 +396,21 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
 
     private fun callbackFor(s: Session) = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) = dispatch(s, g) {
+            if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                val previous = _state.value
+                if (previous.isConnected) {
+                    val address = previous.deviceAddress
+                    val type = previous.deviceType
+                    disconnectInternal()
+                    _state.value = CoolerLiveState(connection = ConnectionState.DISCONNECTED)
+                    lastLinkLoss = LinkLoss(address, type)
+                } else if (status != BluetoothGatt.GATT_SUCCESS) {
+                    fail(s, "Connection callback failed: $status")
+                } else {
+                    fail(s, "Disconnected before initialization completed")
+                }
+                return@dispatch
+            }
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 fail(s, "Connection callback failed: $status")
                 return@dispatch
@@ -413,18 +428,6 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                             fail(s, "Service discovery rejected")
                         }
                     }
-                }
-                BluetoothProfile.STATE_DISCONNECTED -> {
-                    if (status != BluetoothGatt.GATT_SUCCESS || _state.value.isConnected) {
-                        val address = _state.value.deviceAddress
-                        val type = _state.value.deviceType
-                        disconnectInternal()
-                        // System-initiated link loss while idle is recoverable: preserve the
-                        // successful-connection identity so foreground return can resume the
-                        // same device without rebuilding profile metadata or user settings.
-                        _state.value = CoolerLiveState(connection = ConnectionState.DISCONNECTED)
-                        lastLinkLoss = LinkLoss(address, type)
-                    } else fail(s, "Disconnected before initialization completed")
                 }
             }
         }
