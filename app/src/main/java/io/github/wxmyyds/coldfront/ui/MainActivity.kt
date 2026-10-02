@@ -28,6 +28,14 @@ import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.Bluetooth
@@ -48,6 +56,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -58,6 +67,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -75,10 +86,16 @@ import io.github.wxmyyds.coldfront.ui.component.isSecondaryDestination
 import io.github.wxmyyds.coldfront.ui.component.navigationMotionKind
 import io.github.wxmyyds.coldfront.ui.component.shouldUsePredictivePop
 import io.github.wxmyyds.coldfront.ui.component.topLevelRouteDistance
+import io.github.wxmyyds.coldfront.ui.component.topLevelPageIndex
+import io.github.wxmyyds.coldfront.ui.component.TOP_LEVEL_PAGE_DURATION_MS
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 import io.github.wxmyyds.coldfront.ui.i18n.rememberStrings
 import io.github.wxmyyds.coldfront.ui.theme.RedmagicCoolerTheme
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.roundToInt
+import kotlin.math.sign
 
 class MainActivity : ComponentActivity() {
 
@@ -232,6 +249,22 @@ private fun AppNav(vm: CoolerViewModel) {
     val topLevelRoutes = remember(items) { items.map { it.first } }
     val topLevelRouteSet = remember(topLevelRoutes) { topLevelRoutes.toSet() }
 
+    val currentRoute = current?.route
+    val selectedPage = topLevelPageIndex(currentRoute, topLevelRoutes)
+    val pagePosition = remember { Animatable((selectedPage.coerceAtLeast(0)).toFloat()) }
+    val pageScope = rememberCoroutineScope()
+    LaunchedEffect(selectedPage) {
+        if (selectedPage >= 0) {
+            pagePosition.animateTo(
+                targetValue = selectedPage.toFloat(),
+                animationSpec = tween(
+                    TOP_LEVEL_PAGE_DURATION_MS,
+                    easing = androidx.compose.animation.core.FastOutSlowInEasing,
+                ),
+            )
+        }
+    }
+
     val navigateToTab: (String) -> Unit = { route ->
         nav.navigate(route) {
             popUpTo(nav.graph.findStartDestination().id) { saveState = true }
@@ -312,6 +345,71 @@ private fun AppNav(vm: CoolerViewModel) {
                     modifier = Modifier.weight(1f).fillMaxHeight(),
                     contentAlignment = Alignment.TopCenter,
                 ) {
+                    BoxWithConstraints(
+                        modifier = Modifier
+                            .widthIn(max = 840.dp)
+                            .fillMaxSize()
+                            .clipToBounds(),
+                    ) {
+                        val pageWidth = maxWidth
+                        val pageWidthPx = with(LocalDensity.current) { pageWidth.toPx() }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .draggable(
+                                    enabled = !isSecondaryDestination(currentRoute, topLevelRouteSet),
+                                    orientation = Orientation.Horizontal,
+                                    state = rememberDraggableState { delta ->
+                                        pageScope.launch {
+                                            pagePosition.snapTo(
+                                                (pagePosition.value - delta / pageWidthPx.coerceAtLeast(1f))
+                                                    .coerceIn(0f, topLevelRoutes.lastIndex.toFloat()),
+                                            )
+                                        }
+                                    },
+                                    onDragStopped = { velocity ->
+                                        val target = (if (abs(velocity) > 700f) {
+                                            (pagePosition.value - sign(velocity)).roundToInt()
+                                        } else {
+                                            pagePosition.value.roundToInt()
+                                        }).coerceIn(0, topLevelRoutes.lastIndex)
+                                        val targetRoute = topLevelRoutes[target]
+                                        if (targetRoute != currentRoute) {
+                                            navigateToTab(targetRoute)
+                                        } else {
+                                            pageScope.launch {
+                                                pagePosition.animateTo(
+                                                    target.toFloat(),
+                                                    tween(
+                                                        TOP_LEVEL_PAGE_DURATION_MS,
+                                                        easing = androidx.compose.animation.core.FastOutSlowInEasing,
+                                                    ),
+                                                )
+                                            }
+                                        }
+                                    },
+                                ),
+                        ) {
+                            listOf<@Composable () -> Unit>(
+                                { HomeScreen(vm, onAddDevice = { nav.navigate(Routes.SCAN) { launchSingleTop = true } }) },
+                                { DevicesScreen(vm, onAddDevice = { nav.navigate(Routes.SCAN) { launchSingleTop = true } }) },
+                                { RGBControlScreen(vm, onConnect = { nav.navigate(Routes.SCAN) { launchSingleTop = true } }) },
+                                { SettingsScreen(vm, onAbout = { nav.navigate(Routes.ABOUT) { launchSingleTop = true } }) },
+                            ).forEachIndexed { index, content ->
+                                Box(
+                                    modifier = Modifier
+                                        .width(pageWidth)
+                                        .fillMaxHeight()
+                                        .offset {
+                                            IntOffset(
+                                                ((index - pagePosition.value) * pageWidthPx).roundToInt(),
+                                                0,
+                                            )
+                                        },
+                                ) { content() }
+                            }
+                        }
+                    }
                     NavHost(
                         navController = nav,
                         startDestination = Routes.HOME,
@@ -413,19 +511,11 @@ private fun AppNav(vm: CoolerViewModel) {
                             .fillMaxSize()
                             .semantics { isTraversalGroup = true },
                     ) {
-                        composable(Routes.HOME) {
-                            HomeScreen(vm, onAddDevice = { nav.navigate(Routes.SCAN) { launchSingleTop = true } })
-                        }
-                        composable(Routes.DEVICES) {
-                            DevicesScreen(vm, onAddDevice = { nav.navigate(Routes.SCAN) { launchSingleTop = true } })
-                        }
+                        composable(Routes.HOME) {}
+                        composable(Routes.DEVICES) {}
                         composable(Routes.SCAN) { AddDeviceScreen(vm, onBack = { nav.popBackStack() }) }
-                        composable(Routes.RGB) {
-                            RGBControlScreen(vm, onConnect = { nav.navigate(Routes.SCAN) { launchSingleTop = true } })
-                        }
-                        composable(Routes.SETTINGS) {
-                            SettingsScreen(vm, onAbout = { nav.navigate(Routes.ABOUT) { launchSingleTop = true } })
-                        }
+                        composable(Routes.RGB) {}
+                        composable(Routes.SETTINGS) {}
                         composable(Routes.ABOUT) { AboutScreen(onBack = { nav.popBackStack() }) }
                     }
                 }

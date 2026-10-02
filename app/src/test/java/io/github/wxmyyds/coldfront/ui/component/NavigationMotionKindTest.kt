@@ -152,16 +152,26 @@ class NavigationMotionKindTest {
     }
 
     @Test
-    fun topLevelTravelKeepsDistanceTimingAndDirection() {
+    fun topLevelTravelUsesFixedDurationAndDirection() {
         val roots = listOf("home", "devices", "rgb", "settings")
 
         assertEquals(1, topLevelRouteDistance("home", "devices", roots))
-        assertEquals(3, topLevelRouteDistance("settings", "home", roots))
-        assertEquals(200, topLevelPageDuration(1))
-        assertEquals(400, topLevelPageDuration(3))
-        assertEquals(500, topLevelPageDuration(8))
+        assertEquals(2, topLevelRouteDistance("home", "rgb", roots))
+        assertEquals(3, topLevelRouteDistance("home", "settings", roots))
+        assertEquals(TOP_LEVEL_PAGE_DURATION_MS, topLevelPageDuration(1))
+        assertEquals(TOP_LEVEL_PAGE_DURATION_MS, topLevelPageDuration(2))
+        assertEquals(TOP_LEVEL_PAGE_DURATION_MS, topLevelPageDuration(3))
+        assertEquals(TOP_LEVEL_PAGE_DURATION_MS, topLevelPageDuration(8))
         assertEquals(true, isForwardTopLevelTransition("home", "settings", roots))
         assertEquals(false, isForwardTopLevelTransition("settings", "home", roots))
+    }
+
+    @Test
+    fun topLevelPageIndexKeepsAboutOnSettingsAndLeavesSecondaryRoutesUnmapped() {
+        val roots = listOf("home", "devices", "rgb", "settings")
+
+        assertEquals(3, topLevelPageIndex("about", roots))
+        assertEquals(-1, topLevelPageIndex("scan", roots))
     }
 
 }
