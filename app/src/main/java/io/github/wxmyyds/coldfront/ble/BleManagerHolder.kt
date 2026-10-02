@@ -1,10 +1,13 @@
 package io.github.wxmyyds.coldfront.ble
 
 import android.content.Context
+import android.annotation.SuppressLint
 import androidx.annotation.MainThread
 
 /** One transport shared by explicit Activity/ViewModel and foreground-service owners. */
 object BleManagerHolder {
+    // The singleton receives applicationContext only; never an Activity or Service context.
+    @SuppressLint("StaticFieldLeak")
     @Volatile
     private var instance: CoolerBleManager? = null
     private val owners = mutableSetOf<Any>()

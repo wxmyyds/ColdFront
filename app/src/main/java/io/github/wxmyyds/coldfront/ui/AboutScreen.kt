@@ -2,7 +2,7 @@ package io.github.wxmyyds.coldfront.ui
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.net.Uri
+import androidx.core.net.toUri
 import android.widget.Toast
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,7 +46,7 @@ fun AboutScreen(onBack: () -> Unit) {
     val contentScrollState = rememberScrollState()
     fun openLink(url: String) {
         try {
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
         } catch (_: ActivityNotFoundException) {
             Toast.makeText(context, strings.aboutOpenLinkFailed, Toast.LENGTH_LONG).show()
         }

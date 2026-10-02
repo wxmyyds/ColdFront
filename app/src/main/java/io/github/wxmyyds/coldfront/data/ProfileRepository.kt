@@ -24,8 +24,6 @@ class ProfileRepository internal constructor(private val dataStore: DataStore<Pr
         ProfileJson.parse(prefs[KEY_PROFILES]).profiles
     }.distinctUntilChanged()
 
-    val activeProfileId: Flow<String?> = dataStore.data.map { it[KEY_ACTIVE] }.distinctUntilChanged()
-
     /** Explicit service intent only: old active profiles never implicitly enable auto service. */
     val serviceProfile: Flow<CoolerProfile?> = dataStore.data.map { prefs ->
         referencedProfile(prefs, KEY_SERVICE)

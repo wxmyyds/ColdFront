@@ -21,6 +21,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import androidx.annotation.RequiresApi
+import androidx.core.util.size
 import io.github.wxmyyds.coldfront.domain.CoolerBleConstants
 import io.github.wxmyyds.coldfront.domain.CoolerDevice
 import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
@@ -207,7 +208,7 @@ class CoolerBleManager(private val context: Context) {
         val record = result.scanRecord ?: return
         val msdSparse = record.manufacturerSpecificData
         val msd = buildList {
-            for (i in 0 until msdSparse.size()) {
+            for (i in 0 until msdSparse.size) {
                 add(msdSparse.keyAt(i) to (msdSparse.valueAt(i)?.toHex() ?: ""))
             }
         }

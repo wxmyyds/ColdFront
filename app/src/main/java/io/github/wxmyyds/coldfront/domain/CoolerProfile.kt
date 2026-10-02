@@ -17,19 +17,4 @@ data class CoolerProfile(
     val rgb: RGBConfig? = null,
 ) {
     val displayName: String get() = name.ifBlank { deviceType.deviceName }
-
-    val icon: String get() = deviceType.suggestedIcon
-
-    companion object {
-        fun fromDevice(
-            device: CoolerDevice,
-            name: String? = null,
-        ): CoolerProfile = CoolerProfile(
-            name = name ?: device.displayName,
-            deviceType = device.deviceType,
-            macAddress = device.address,
-            fanPercent = 50,
-            fanMode = FanMode.MANUAL,
-        )
-    }
 }

@@ -17,6 +17,17 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ProfileJsonTest {
+    // Android's org.json API lacks JSONObject/JSONArray.similar; compare structures using
+    // only platform APIs even though the JVM runner uses the real org.json implementation.
+    private fun Any?.jsonValue(): Any? = when (this) {
+        null, JSONObject.NULL -> null
+        is JSONObject -> keys().asSequence().associateWith { get(it).jsonValue() }
+        is JSONArray -> (0 until length()).map { get(it).jsonValue() }
+        is Number -> toDouble()
+        else -> this
+    }
+
+    private fun Any.similar(other: Any?): Boolean = jsonValue() == other.jsonValue()
     private fun row(id: String, address: String = TEST_MAC): JSONObject = JSONObject()
         .put("id", id)
         .put("name", "Custom name")

@@ -1,5 +1,6 @@
 package io.github.wxmyyds.coldfront.ui
 
+import androidx.core.net.toUri
 import android.content.Intent
 import android.os.Build
 import android.provider.Settings
@@ -188,7 +189,7 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
                             context.startActivity(
                                 Intent(
                                     Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                                    android.net.Uri.parse("package:${context.packageName}"),
+                                    "package:${context.packageName}".toUri(),
                                 )
                             )
                         },
