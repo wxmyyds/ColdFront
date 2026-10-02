@@ -3,6 +3,7 @@
 package io.github.wxmyyds.coldfront.ui.component
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateDpAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -11,12 +12,13 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -54,6 +56,7 @@ import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -265,11 +268,38 @@ fun SegmentedGroup(
                 modifier = Modifier.padding(start = 16.dp, bottom = 8.dp),
             )
         }
-        Column(
-            verticalArrangement = Arrangement.spacedBy(SegmentedRowGap),
-        ) {
+        Column {
             entries.forEachIndexed { index, entry ->
                 val visibleIndex = entries.take(index).count { it.visible }
+                val topSpacing by animateDpAsState(
+                    targetValue = if (entry.visible && visibleIndex > 0) SegmentedRowGap else 0.dp,
+                    animationSpec = motionScheme.defaultSpatialSpec(),
+                    label = "segmentedRowSpacing",
+                )
+                val topRadius by animateDpAsState(
+                    targetValue = if (visibleIndex == 0) 16.dp else 4.dp,
+                    animationSpec = motionScheme.defaultSpatialSpec(),
+                    label = "segmentedRowTopRadius",
+                )
+                val bottomRadius by animateDpAsState(
+                    targetValue = if (visibleIndex == visibleCount - 1) 16.dp else 4.dp,
+                    animationSpec = motionScheme.defaultSpatialSpec(),
+                    label = "segmentedRowBottomRadius",
+                )
+                val rowShape = RoundedCornerShape(
+                    topStart = topRadius,
+                    topEnd = topRadius,
+                    bottomStart = bottomRadius,
+                    bottomEnd = bottomRadius,
+                )
+                val morphEnabled = segmentedGroupPressMorph(visibleCount)
+                val rowShapes = ListItemDefaults.shapes(
+                    shape = rowShape,
+                    selectedShape = rowShape,
+                    pressedShape = if (morphEnabled) MaterialTheme.shapes.large else rowShape,
+                    focusedShape = if (morphEnabled) MaterialTheme.shapes.large else rowShape,
+                    hoveredShape = if (morphEnabled) MaterialTheme.shapes.medium else rowShape,
+                )
                 key(entry.key) {
                     AnimatedVisibility(
                         visible = entry.visible,
@@ -284,13 +314,11 @@ fun SegmentedGroup(
                             animationSpec = motionScheme.defaultEffectsSpec<Float>(),
                         ),
                     ) {
-                        CompositionLocalProvider(
-                            LocalSegmentedShapes provides segmentedRowShapes(
-                                visibleIndex.coerceIn(0, visibleCount - 1),
-                                visibleCount,
-                            ),
-                        ) {
-                            entry.content()
+                        Column {
+                            Spacer(Modifier.height(topSpacing))
+                            CompositionLocalProvider(LocalSegmentedShapes provides rowShapes) {
+                                entry.content()
+                            }
                         }
                     }
                 }

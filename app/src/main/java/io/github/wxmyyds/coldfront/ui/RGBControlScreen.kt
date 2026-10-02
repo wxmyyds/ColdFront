@@ -87,6 +87,9 @@ import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 private val PreviewStage = Color.Black
 private val PreviewStageContent = Color.White
 private val PreviewLedOff = Color(0xFF101418)
+private val FullColorBreathPalette = listOf(
+    Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta,
+)
 
 /**
  * RGB 灯效页(MD3E):
@@ -343,13 +346,14 @@ private fun LightPreview(
             LightEffect.OFF -> drawRect(PreviewLedOff)
             LightEffect.COLORFUL -> {
                 // 彩虹流动渐变
-                val hues = FloatArray(8) { ((it / 8f) + (hueShift?.value ?: 0f)) % 1f }
-                val colors = hues.map { h -> Color(android.graphics.Color.HSVToColor(floatArrayOf(h * 360f, 0.9f, 1f))) }
+                val phase = hueShift?.value ?: 0f
+                val colors = List(8) { index ->
+                    Color.hsv(((index / 8f + phase) % 1f) * 360f, 0.9f, 1f)
+                }
                 drawRect(Brush.horizontalGradient(colors))
             }
             LightEffect.BREATH_FULLCOLOR -> {
-                val colors = listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta)
-                drawRect(Brush.horizontalGradient(colors), alpha = breathAlpha?.value ?: 1f)
+                drawRect(Brush.horizontalGradient(FullColorBreathPalette), alpha = breathAlpha?.value ?: 1f)
             }
             LightEffect.BREATH_SINGLE -> {
                 val alpha = breathAlpha?.value ?: 1f

@@ -182,23 +182,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private fun isSecondaryRoute(route: String?): Boolean =
-    route == Routes.SCAN || route == Routes.ABOUT
-
-private fun isTopLevelRoute(route: String?): Boolean = when (route) {
-    Routes.HOME, Routes.DEVICES, Routes.RGB, Routes.SETTINGS -> true
-    else -> false
-}
-
-private fun routeOrder(route: String?): Int = when (route) {
-    Routes.HOME -> 0
-    Routes.DEVICES -> 1
-    Routes.RGB -> 2
-    Routes.SETTINGS -> 3
-    Routes.ABOUT -> 4
-    else -> 5
-}
-
 private fun routeIsSelected(current: NavDestination?, route: String): Boolean =
     current?.hierarchy?.any { it.route == route } == true ||
         (current?.route == Routes.ABOUT && route == Routes.SETTINGS)
@@ -234,12 +217,17 @@ private fun AppNav(vm: CoolerViewModel) {
         }
     }
 
-    val items: List<Triple<String, ImageVector, () -> String>> = listOf(
-        Triple(Routes.HOME, Icons.Filled.AcUnit) { strings.navHome },
-        Triple(Routes.DEVICES, Icons.Filled.Bluetooth) { strings.navDevices },
-        Triple(Routes.RGB, Icons.Filled.Palette) { strings.navRgb },
-        Triple(Routes.SETTINGS, Icons.Filled.Settings) { strings.navSettings },
-    )
+    val items: List<Triple<String, ImageVector, () -> String>> = remember(strings) {
+        listOf(
+            Triple(Routes.HOME, Icons.Filled.AcUnit) { strings.navHome },
+            Triple(Routes.DEVICES, Icons.Filled.Bluetooth) { strings.navDevices },
+            Triple(Routes.RGB, Icons.Filled.Palette) { strings.navRgb },
+            Triple(Routes.SETTINGS, Icons.Filled.Settings) { strings.navSettings },
+        )
+    }
+    // Top-level destinations are exactly the primary navigation destinations in this NavHost.
+    val topLevelRoutes = remember(items) { items.map { it.first } }
+    val topLevelRouteSet = remember(topLevelRoutes) { topLevelRoutes.toSet() }
 
     val navigateToTab: (String) -> Unit = { route ->
         nav.navigate(route) {
@@ -329,13 +317,14 @@ private fun AppNav(vm: CoolerViewModel) {
                             val targetRoute = targetState.destination.route
                             val kind = navigationMotionKind(
                                 isPop = false,
-                                initialIsSecondary = isSecondaryRoute(initialRoute),
-                                targetIsSecondary = isSecondaryRoute(targetRoute),
+                                initialIsSecondary = isSecondaryDestination(initialRoute, topLevelRouteSet),
+                                targetIsSecondary = isSecondaryDestination(targetRoute, topLevelRouteSet),
                             )
                             AppMotion.pageEnter(
                                 kind = kind,
-                                forward = routeOrder(targetRoute) >= routeOrder(initialRoute),
+                                forward = isForwardTopLevelTransition(initialRoute, targetRoute, topLevelRoutes),
                                 motionScheme = motionScheme,
+                                routeDistance = topLevelRouteDistance(initialRoute, targetRoute, topLevelRoutes),
                             )
                         },
                         exitTransition = {
@@ -343,13 +332,14 @@ private fun AppNav(vm: CoolerViewModel) {
                             val targetRoute = targetState.destination.route
                             val kind = navigationMotionKind(
                                 isPop = false,
-                                initialIsSecondary = isSecondaryRoute(initialRoute),
-                                targetIsSecondary = isSecondaryRoute(targetRoute),
+                                initialIsSecondary = isSecondaryDestination(initialRoute, topLevelRouteSet),
+                                targetIsSecondary = isSecondaryDestination(targetRoute, topLevelRouteSet),
                             )
                             AppMotion.pageExit(
                                 kind = kind,
-                                forward = routeOrder(targetRoute) >= routeOrder(initialRoute),
+                                forward = isForwardTopLevelTransition(initialRoute, targetRoute, topLevelRoutes),
                                 motionScheme = motionScheme,
+                                routeDistance = topLevelRouteDistance(initialRoute, targetRoute, topLevelRoutes),
                             )
                         },
                         popEnterTransition = {
@@ -357,13 +347,14 @@ private fun AppNav(vm: CoolerViewModel) {
                             val targetRoute = targetState.destination.route
                             val kind = navigationMotionKind(
                                 isPop = true,
-                                initialIsSecondary = isSecondaryRoute(initialRoute),
-                                targetIsSecondary = isSecondaryRoute(targetRoute),
+                                initialIsSecondary = isSecondaryDestination(initialRoute, topLevelRouteSet),
+                                targetIsSecondary = isSecondaryDestination(targetRoute, topLevelRouteSet),
                             )
                             AppMotion.pageEnter(
                                 kind = kind,
-                                forward = routeOrder(targetRoute) >= routeOrder(initialRoute),
+                                forward = isForwardTopLevelTransition(initialRoute, targetRoute, topLevelRoutes),
                                 motionScheme = motionScheme,
+                                routeDistance = topLevelRouteDistance(initialRoute, targetRoute, topLevelRoutes),
                             )
                         },
                         popExitTransition = {
@@ -371,20 +362,27 @@ private fun AppNav(vm: CoolerViewModel) {
                             val targetRoute = targetState.destination.route
                             val kind = navigationMotionKind(
                                 isPop = true,
-                                initialIsSecondary = isSecondaryRoute(initialRoute),
-                                targetIsSecondary = isSecondaryRoute(targetRoute),
+                                initialIsSecondary = isSecondaryDestination(initialRoute, topLevelRouteSet),
+                                targetIsSecondary = isSecondaryDestination(targetRoute, topLevelRouteSet),
                             )
                             AppMotion.pageExit(
                                 kind = kind,
-                                forward = routeOrder(targetRoute) >= routeOrder(initialRoute),
+                                forward = isForwardTopLevelTransition(initialRoute, targetRoute, topLevelRoutes),
                                 motionScheme = motionScheme,
+                                routeDistance = topLevelRouteDistance(initialRoute, targetRoute, topLevelRoutes),
                             )
                         },
                         predictivePopEnterTransition = { swipeEdge ->
                             if (shouldUsePredictivePop(
                                     predictiveBackEnabled = predictiveBack,
-                                    initialIsSecondary = isSecondaryRoute(initialState.destination.route),
-                                    targetIsTopLevel = isTopLevelRoute(targetState.destination.route),
+                                    initialIsSecondary = isSecondaryDestination(
+                                        initialState.destination.route,
+                                        topLevelRouteSet,
+                                    ),
+                                    targetIsTopLevel = isTopLevelDestination(
+                                        targetState.destination.route,
+                                        topLevelRouteSet,
+                                    ),
                                 )
                             ) {
                                 DefaultNavTransitions.predictivePopEnterTransition.invoke(this, swipeEdge)
@@ -393,8 +391,14 @@ private fun AppNav(vm: CoolerViewModel) {
                         predictivePopExitTransition = { swipeEdge ->
                             if (shouldUsePredictivePop(
                                     predictiveBackEnabled = predictiveBack,
-                                    initialIsSecondary = isSecondaryRoute(initialState.destination.route),
-                                    targetIsTopLevel = isTopLevelRoute(targetState.destination.route),
+                                    initialIsSecondary = isSecondaryDestination(
+                                        initialState.destination.route,
+                                        topLevelRouteSet,
+                                    ),
+                                    targetIsTopLevel = isTopLevelDestination(
+                                        targetState.destination.route,
+                                        topLevelRouteSet,
+                                    ),
                                 )
                             ) {
                                 DefaultNavTransitions.predictivePopExitTransition.invoke(this, swipeEdge)

@@ -13,7 +13,9 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.tween
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -42,6 +44,38 @@ internal fun navigationMotionKind(
     else -> NavigationMotionKind.TopLevel
 }
 
+internal fun isSecondaryDestination(route: String?, topLevelRoutes: Set<String>): Boolean =
+    route != null && route !in topLevelRoutes
+
+internal fun isTopLevelDestination(route: String?, topLevelRoutes: Set<String>): Boolean =
+    route != null && route in topLevelRoutes
+
+private fun topLevelRouteIndex(route: String?, routes: List<String>): Int =
+    route?.let { routes.indexOf(it) }?.coerceAtLeast(0) ?: 0
+
+internal fun topLevelRouteDistance(
+    initialRoute: String?,
+    targetRoute: String?,
+    topLevelRoutes: List<String>,
+): Int {
+    val initialIndex = topLevelRouteIndex(initialRoute, topLevelRoutes)
+    val targetIndex = topLevelRouteIndex(targetRoute, topLevelRoutes)
+    return kotlin.math.abs(targetIndex - initialIndex).coerceAtLeast(1)
+}
+
+internal fun isForwardTopLevelTransition(
+    initialRoute: String?,
+    targetRoute: String?,
+    topLevelRoutes: List<String>,
+): Boolean {
+    val initialIndex = topLevelRouteIndex(initialRoute, topLevelRoutes)
+    val targetIndex = topLevelRouteIndex(targetRoute, topLevelRoutes)
+    return targetIndex >= initialIndex
+}
+
+internal fun topLevelPageDuration(routeDistance: Int): Int =
+    100 * (routeDistance.coerceIn(1, 4) + 1)
+
 internal fun shouldUsePredictivePop(
     predictiveBackEnabled: Boolean,
     initialIsSecondary: Boolean,
@@ -54,26 +88,32 @@ internal object AppMotion {
         kind: NavigationMotionKind,
         forward: Boolean,
         motionScheme: MotionScheme,
+        routeDistance: Int,
     ): EnterTransition {
         val offset: (Int) -> Int = when (kind) {
-            NavigationMotionKind.TopLevel -> { width -> if (forward) width / 12 else -width / 12 }
+            NavigationMotionKind.TopLevel -> { width -> if (forward) width else -width }
             NavigationMotionKind.PushDetail -> { width -> width / 5 }
             NavigationMotionKind.PopDetail -> { width -> -width / 32 }
         }
         val effects = when (kind) {
-            NavigationMotionKind.PushDetail,
-            NavigationMotionKind.TopLevel -> fadeIn(
+            NavigationMotionKind.PushDetail -> fadeIn(
                 animationSpec = motionScheme.defaultEffectsSpec<Float>(),
                 initialAlpha = 0.94f,
             )
+            NavigationMotionKind.TopLevel -> fadeIn(
+                animationSpec = tween(topLevelPageDuration(routeDistance), easing = FastOutSlowInEasing),
+                initialAlpha = 0.96f,
+            )
             NavigationMotionKind.PopDetail -> EnterTransition.None
         }
+        val spatialSpec = when (kind) {
+            NavigationMotionKind.TopLevel ->
+                tween<IntOffset>(topLevelPageDuration(routeDistance), easing = FastOutSlowInEasing)
+            NavigationMotionKind.PushDetail -> motionScheme.slowSpatialSpec<IntOffset>()
+            NavigationMotionKind.PopDetail -> motionScheme.defaultSpatialSpec<IntOffset>()
+        }
         return slideInHorizontally(
-            animationSpec = if (kind == NavigationMotionKind.PopDetail) {
-                motionScheme.defaultSpatialSpec<IntOffset>()
-            } else {
-                motionScheme.slowSpatialSpec<IntOffset>()
-            },
+            animationSpec = spatialSpec,
             initialOffsetX = offset,
         ) + effects
     }
@@ -82,9 +122,10 @@ internal object AppMotion {
         kind: NavigationMotionKind,
         forward: Boolean,
         motionScheme: MotionScheme,
+        routeDistance: Int,
     ): ExitTransition {
         val offset: (Int) -> Int = when (kind) {
-            NavigationMotionKind.TopLevel -> { width -> if (forward) -width / 12 else width / 12 }
+            NavigationMotionKind.TopLevel -> { width -> if (forward) -width else width }
             NavigationMotionKind.PushDetail -> { width -> -width / 32 }
             NavigationMotionKind.PopDetail -> { width -> width / 5 }
         }
@@ -98,17 +139,19 @@ internal object AppMotion {
                 transformOrigin = TransformOrigin(0f, 0.5f),
             )
             NavigationMotionKind.TopLevel -> fadeOut(
-                animationSpec = motionScheme.defaultEffectsSpec<Float>(),
-                targetAlpha = 0.94f,
+                animationSpec = tween(topLevelPageDuration(routeDistance), easing = FastOutSlowInEasing),
+                targetAlpha = 0.96f,
             )
             NavigationMotionKind.PushDetail -> ExitTransition.None
         }
+        val spatialSpec = when (kind) {
+            NavigationMotionKind.TopLevel ->
+                tween<IntOffset>(topLevelPageDuration(routeDistance), easing = FastOutSlowInEasing)
+            NavigationMotionKind.PushDetail -> motionScheme.slowSpatialSpec<IntOffset>()
+            NavigationMotionKind.PopDetail -> motionScheme.defaultSpatialSpec<IntOffset>()
+        }
         return slideOutHorizontally(
-            animationSpec = if (kind == NavigationMotionKind.PopDetail) {
-                motionScheme.defaultSpatialSpec<IntOffset>()
-            } else {
-                motionScheme.slowSpatialSpec<IntOffset>()
-            },
+            animationSpec = spatialSpec,
             targetOffsetX = offset,
         ) + effects
     }
