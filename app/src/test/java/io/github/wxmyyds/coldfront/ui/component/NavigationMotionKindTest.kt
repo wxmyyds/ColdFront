@@ -164,10 +164,4 @@ class NavigationMotionKindTest {
         assertEquals(false, isForwardTopLevelTransition("settings", "home", roots))
     }
 
-        val roots = listOf("home", "devices", "rgb", "settings")
-
-        assertEquals(1, topLevelRouteDistance(null, "home", roots))
-        assertEquals(true, isForwardTopLevelTransition(null, "home", roots))
-    }
-
 }
