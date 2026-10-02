@@ -3,25 +3,25 @@
 package io.github.wxmyyds.coldfront.ui.component
 
 import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuGroup
+import androidx.compose.material3.DropdownMenuPopup
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -31,6 +31,7 @@ import androidx.compose.material3.ListItemShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.SegmentedListItem
+import androidx.compose.material3.SelectableDropdownMenuItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -45,15 +46,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.round
 
 /**
  * MD3E 分段选项列表 —— ColdFront 自有实现。
@@ -395,7 +397,10 @@ fun SegmentedSwitchRow(
 /**
  * 下拉选择行：整行点击弹菜单，trailing 显示当前值 + 下拉箭头。
  *
- * 菜单采用紧凑的常规菜单行，选中项用轻量容器色和勾选图标表示。
+ * 菜单用 MD3E 表达性组件栈（[DropdownMenuPopup] + [DropdownMenuGroup] +
+ * [SelectableDropdownMenuItem]），并参考 KernelSU 的设置下拉交互：选项连成一体
+ * （分段形状、无间隙），选中项以展开动画的勾选图标强调；菜单锚定在手指按下的
+ * 位置展开，选项从按压点生长出来。
  */
 @Composable
 fun <T> SegmentedDropdownRow(
@@ -412,10 +417,21 @@ fun <T> SegmentedDropdownRow(
     leadingContent: (@Composable () -> Unit)? = null,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var pressPosition by remember { mutableStateOf(IntOffset.Zero) }
     val haptic = LocalHapticFeedback.current
     val selectedLabel = options.firstOrNull { it == selected }?.let(optionLabel).orEmpty()
 
-    Box(modifier = modifier) {
+    Box(
+        modifier = modifier
+            // 只观察手指落点（不消费事件，不影响行的点击/涟漪），
+            // 让菜单从按压位置展开，而不是固定在行首。
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    pressPosition = down.position.round()
+                }
+            }
+    ) {
         SegmentedRow(
             title = title,
             enabled = enabled,
@@ -438,55 +454,71 @@ fun <T> SegmentedDropdownRow(
                 )
             },
         )
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            offset = DpOffset(0.dp, 4.dp),
-            shape = MaterialTheme.shapes.large,
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            tonalElevation = 0.dp,
-            shadowElevation = 8.dp,
+        // 零尺寸锚点：偏移到按压位置，弹窗据此定位
+        Box(
+            modifier = Modifier.offset { IntOffset(pressPosition.x, pressPosition.y) },
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                options.forEach { option ->
-                    val isSelected = option == selected
-                    Row(
-                        modifier = Modifier
-                            .padding(horizontal = 4.dp)
-                            .fillMaxWidth()
-                            .widthIn(min = 240.dp)
-                            .heightIn(min = 64.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(
-                                if (isSelected) MaterialTheme.colorScheme.secondaryContainer
-                                else Color.Transparent,
-                            )
-                            .selectable(
-                                selected = isSelected,
-                                role = Role.RadioButton,
-                                onClick = {
-                                    expanded = false
-                                    haptic.performHapticFeedback(HapticFeedbackType.VirtualKey)
-                                    onSelect(option)
-                                },
-                            )
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(
+            SingleChoiceDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                options = options,
+                selected = selected,
+                onSelect = onSelect,
+                optionLabel = optionLabel,
+                haptic = haptic,
+            )
+        }
+    }
+}
+
+/**
+ * MD3E 单选下拉菜单，参考 KernelSU 的设置菜单项设计：
+ *
+ * - 选项连成一体：组容器负责外圆角，项用分段形状（首尾圆角、中间贴合），无间隙；
+ * - 选中项：默认 selectable 配色（容器轻微着色 + 文字转强调色），勾选图标带
+ *   横向展开 + 淡入动画，作为选中强调；
+ * - 按压反馈、涟漪、文字垂直居中、左右内边距与行高全部由 M3 组件默认值提供，
+ *   并自动适配本项目的浅色/深色/动态取色 ColorScheme。
+ */
+@Composable
+private fun <T> SingleChoiceDropdownMenu(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    options: List<T>,
+    selected: T,
+    onSelect: (T) -> Unit,
+    optionLabel: (T) -> String,
+    haptic: HapticFeedback,
+) {
+    DropdownMenuPopup(
+        expanded = expanded,
+        onDismissRequest = onDismissRequest,
+    ) {
+        DropdownMenuGroup(
+            shapes = MenuDefaults.groupShape(0, 1),
+            // 长菜单可滚动，避免选项溢出屏幕
+            modifier = Modifier.verticalScroll(rememberScrollState()),
+        ) {
+            options.forEachIndexed { index, option ->
+                SelectableDropdownMenuItem(
+                    selected = option == selected,
+                    onClick = {
+                        onDismissRequest()
+                        haptic.performHapticFeedback(HapticFeedbackType.VirtualKey)
+                        onSelect(option)
+                    },
+                    text = { Text(optionLabel(option)) },
+                    // 连续分段形状：首尾项外圆角，中间项内角贴合
+                    shapes = MenuDefaults.itemShape(index, options.size),
+                    // 选中勾选图标：组件自带 expandHorizontally + fadeIn 动画
+                    selectedLeadingIcon = {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = null,
                             modifier = Modifier.size(MenuDefaults.LeadingIconSize),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            if (isSelected) Icon(Icons.Filled.Check, contentDescription = null)
-                        }
-                        Text(
-                            text = optionLabel(option),
-                            modifier = Modifier.padding(start = 12.dp),
-                            color = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer
-                            else MaterialTheme.colorScheme.onSurface,
                         )
-                    }
-                }
+                    },
+                )
             }
         }
     }
