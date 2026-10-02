@@ -37,7 +37,7 @@ android {
         buildConfig = true
     }
 
-    // 纯 Compose 工程，资源里只保留矢量图标，无 XML 布局/主题/字符串
+    // Compose UI; XML resources contain the manifest and launcher vector, plus product images.
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -67,6 +67,9 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
 
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
+    // Real JSON implementation for repository tests; Android's mockable JAR only has stubs.
+    testImplementation(libs.org.json)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

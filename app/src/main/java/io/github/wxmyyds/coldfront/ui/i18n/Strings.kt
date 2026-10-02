@@ -2,6 +2,7 @@ package io.github.wxmyyds.coldfront.ui.i18n
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.platform.LocalConfiguration
 import java.util.Locale
 
 /**
@@ -14,19 +15,13 @@ interface AppStrings {
     val appName: String
 
     // —— 通用 ——
-    val ok: String
     val cancel: String
-    val save: String
     val delete: String
     val edit: String
     val back: String
     val retry: String
     val close: String
-    val next: String
-    val done: String
-    val loading: String
     val error: String
-    val settings: String
 
     // —— 导航 ——
     val navHome: String
@@ -76,27 +71,21 @@ interface AppStrings {
     val settingsDarkModeDark: String
     val settingsLanguage: String
     val settingsAbout: String
-    val settingsAboutDesc: String
     val settingsAboutReport: String
     val settingsAboutProject: String
+    val aboutOpenLinkFailed: String
+    val storageOperationFailed: String
 
     // —— 首页 ——
     val homeTitle: String
-    val homeNoDevice: String
     val homeNoDeviceHint: String
-    val homeAddDevice: String
     val homeConnecting: String
     val homeTemp: String
-    val homeModeManual: String
-    val homeAutoRunning: String
     val homeConnected: String
-    val homeDisconnected: String
     val homeConnectionFailed: String
     val homeRetryHint: String
     val homeGoScan: String
     val homeNotConnected: String
-    val homeStartService: String
-    val homeStopService: String
 
     // —— 扫描/添加设备 ——
     val scanTitle: String
@@ -106,12 +95,9 @@ interface AppStrings {
     val scanRescan: String
     val scanSelect: String
     val scanMatchedByName: String
-    val scanUuidUnconfirmed: String
     val scanBluetoothOff: String
     val scanBluetoothOffHint: String
     val scanEnableBluetooth: String
-    val scanPermissionNeeded: String
-    val scanGrantPermission: String
 
     // —— 诊断模式 ——
     val diagToggle: String
@@ -149,13 +135,10 @@ interface AppStrings {
     val rgbBreathMode: String
     val rgbBreathSingle: String
     val rgbBreathFull: String
-    val rgbColor: String
     val rgbRed: String
     val rgbGreen: String
     val rgbBlue: String
-    val rgbPreview: String
     val rgbApply: String
-    val rgbSynced: String
     val rgbWriting: String
     val rgbSent: String
     val rgbWriteFailed: String
@@ -163,23 +146,7 @@ interface AppStrings {
     val rgbGoConnect: String
     val rgbPalette: String
     val rgbCustomColor: String
-    val rgbOff: String
     val rgbNotSupported: String
-
-    // —— 档案 ——
-    val profileTitle: String
-    val profileName: String
-    val profileNameHint: String
-    val profileDeviceType: String
-    val profileMac: String
-    val profileFanSpeed: String
-    val profileMode: String
-    val profileCreatedAt: String
-    val profileLastConnected: String
-    val profileDeleteConfirm: String
-    val profileEmpty: String
-    val profileEmptyHint: String
-    val profileNew: String
 
     // —— 自动模式/服务 ——
     val serviceChannelName: String
@@ -188,32 +155,22 @@ interface AppStrings {
     val serviceSwitchManual: String
     val serviceReconnect: String
     val serviceWaitingConfig: String
+    val serviceManual: String
+    val serviceUnavailable: String
+    val serviceControlFailed: String
 
-    // —— 权限 ——
-    val permBluetoothTitle: String
-    val permBluetoothMsg: String
-    val permLocationTitle: String
-    val permLocationMsg: String
-    val permNotificationTitle: String
-    val permNotificationMsg: String
 }
 
 object ZhStrings : AppStrings {
     override val langIsZh = true
     override val appName = "ColdFront"
-    override val ok = "确定"
     override val cancel = "取消"
-    override val save = "保存"
     override val delete = "删除"
     override val edit = "编辑"
     override val back = "返回"
     override val retry = "重试"
     override val close = "关闭"
-    override val next = "下一步"
-    override val done = "完成"
-    override val loading = "加载中…"
     override val error = "出错了"
-    override val settings = "设置"
 
     override val navHome = "首页"
     override val navDevices = "设备"
@@ -259,26 +216,20 @@ object ZhStrings : AppStrings {
     override val settingsDarkModeDark = "深色"
     override val settingsLanguage = "语言"
     override val settingsAbout = "关于"
-    override val settingsAboutDesc = "ColdFront · 红魔散热器控制"
     override val settingsAboutReport = "提交错误报告"
     override val settingsAboutProject = "项目主页"
+    override val aboutOpenLinkFailed = "没有可用于打开此链接的应用。"
+    override val storageOperationFailed = "读取或保存配置失败，请稍后重试。"
 
     override val homeTitle = "散热控制"
-    override val homeNoDevice = "尚未连接散热器"
     override val homeNoDeviceHint = "点击下方按钮扫描并添加红魔散热器"
-    override val homeAddDevice = "添加设备"
     override val homeConnecting = "连接中…"
     override val homeTemp = "温度"
-    override val homeModeManual = "手动"
-    override val homeAutoRunning = "自动模式运行中"
     override val homeConnected = "已连接"
-    override val homeDisconnected = "已断开"
     override val homeConnectionFailed = "连接失败"
     override val homeRetryHint = "请确认散热器已通电并靠近后重试"
     override val homeGoScan = "去扫描设备"
     override val homeNotConnected = "未连接散热器"
-    override val homeStartService = "开启自动模式"
-    override val homeStopService = "停止自动模式"
 
     override val scanTitle = "扫描散热器"
     override val scanScanning = "正在扫描…"
@@ -287,12 +238,9 @@ object ZhStrings : AppStrings {
     override val scanRescan = "重新扫描"
     override val scanSelect = "连接"
     override val scanMatchedByName = "名称识别"
-    override val scanUuidUnconfirmed = "UUID 待确认"
     override val scanBluetoothOff = "蓝牙未开启"
     override val scanBluetoothOffHint = "请先开启蓝牙以扫描设备"
     override val scanEnableBluetooth = "开启蓝牙"
-    override val scanPermissionNeeded = "需要权限"
-    override val scanGrantPermission = "授予权限"
 
     override val diagToggle = "显示全部设备（诊断）"
     override val diagHint = "不过滤识别，显示周围全部 BLE 原始广播：MSD/UUID。散热器广播的内容可直接读出，也可手动选型号连接。"
@@ -327,12 +275,9 @@ object ZhStrings : AppStrings {
     override val rgbBreathMode = "呼吸颜色"
     override val rgbBreathSingle = "单色"
     override val rgbBreathFull = "全彩"
-    override val rgbColor = "颜色"
     override val rgbRed = "红"
     override val rgbGreen = "绿"
     override val rgbBlue = "蓝"
-    override val rgbPreview = "预览"
-    override val rgbSynced = "已同步到设备"
     override val rgbConnectFirst = "连接散热器后即可调节灯效"
     override val rgbGoConnect = "去连接"
     override val rgbPalette = "预设颜色"
@@ -341,22 +286,7 @@ object ZhStrings : AppStrings {
     override val rgbWriting = "正在发送…"
     override val rgbSent = "已发送到设备"
     override val rgbWriteFailed = "发送失败，点击重试"
-    override val rgbOff = "关闭灯光"
     override val rgbNotSupported = "该设备不支持 RGB"
-
-    override val profileTitle = "设备档案"
-    override val profileName = "名称"
-    override val profileNameHint = "给这个散热器起个名字"
-    override val profileDeviceType = "型号"
-    override val profileMac = "MAC 地址"
-    override val profileFanSpeed = "默认转速"
-    override val profileMode = "默认模式"
-    override val profileCreatedAt = "创建于"
-    override val profileLastConnected = "上次连接"
-    override val profileDeleteConfirm = "删除该档案？"
-    override val profileEmpty = "还没有档案"
-    override val profileEmptyHint = "连接设备后会自动创建档案"
-    override val profileNew = "新建档案"
 
     override val serviceChannelName = "散热器服务"
     override val serviceChannelDesc = "散热器自动模式与状态通知"
@@ -364,30 +294,21 @@ object ZhStrings : AppStrings {
     override val serviceSwitchManual = "切回手动"
     override val serviceReconnect = "重新连接"
     override val serviceWaitingConfig = "等待配置…"
-    override val permBluetoothTitle = "需要蓝牙权限"
-    override val permBluetoothMsg = "控制红魔散热器需要蓝牙连接权限。"
-    override val permLocationTitle = "需要位置权限"
-    override val permLocationMsg = "Android 11 及以下扫描蓝牙设备需要位置权限。"
-    override val permNotificationTitle = "需要通知权限"
-    override val permNotificationMsg = "前台服务需要通知权限以保持持续运行。"
+    override val serviceManual = "自动模式：关"
+    override val serviceControlFailed = "未能确认温控命令已发送，请检查连接后重试。"
+    override val serviceUnavailable = "无法启动自动模式，请打开应用检查蓝牙权限并连接支持智能温控的设备。"
 }
 
 object EnStrings : AppStrings {
     override val langIsZh = false
     override val appName = "ColdFront"
-    override val ok = "OK"
     override val cancel = "Cancel"
-    override val save = "Save"
     override val delete = "Delete"
     override val edit = "Edit"
     override val back = "Back"
     override val retry = "Retry"
     override val close = "Close"
-    override val next = "Next"
-    override val done = "Done"
-    override val loading = "Loading…"
     override val error = "Error"
-    override val settings = "Settings"
 
     override val navHome = "Home"
     override val navDevices = "Devices"
@@ -433,26 +354,20 @@ object EnStrings : AppStrings {
     override val settingsDarkModeDark = "Dark"
     override val settingsLanguage = "Language"
     override val settingsAbout = "About"
-    override val settingsAboutDesc = "ColdFront · Redmagic cooler control"
     override val settingsAboutReport = "Report an issue"
     override val settingsAboutProject = "Project homepage"
+    override val aboutOpenLinkFailed = "No app is available to open this link."
+    override val storageOperationFailed = "Couldn't read or save settings. Please try again."
 
     override val homeTitle = "Cooler Control"
-    override val homeNoDevice = "No cooler connected"
     override val homeNoDeviceHint = "Tap below to scan and add a Redmagic cooler"
-    override val homeAddDevice = "Add device"
     override val homeConnecting = "Connecting…"
     override val homeTemp = "Temperature"
-    override val homeModeManual = "Manual"
-    override val homeAutoRunning = "Auto mode running"
     override val homeConnected = "Connected"
-    override val homeDisconnected = "Disconnected"
     override val homeConnectionFailed = "Connection failed"
     override val homeRetryHint = "Make sure the cooler is powered on and nearby, then retry"
     override val homeGoScan = "Scan for devices"
     override val homeNotConnected = "Not connected"
-    override val homeStartService = "Start auto mode"
-    override val homeStopService = "Stop auto mode"
 
     override val scanTitle = "Scan for cooler"
     override val scanScanning = "Scanning…"
@@ -461,12 +376,9 @@ object EnStrings : AppStrings {
     override val scanRescan = "Rescan"
     override val scanSelect = "Connect"
     override val scanMatchedByName = "by name"
-    override val scanUuidUnconfirmed = "UUID unconfirmed"
     override val scanBluetoothOff = "Bluetooth is off"
     override val scanBluetoothOffHint = "Enable Bluetooth to scan for devices"
     override val scanEnableBluetooth = "Enable Bluetooth"
-    override val scanPermissionNeeded = "Permissions required"
-    override val scanGrantPermission = "Grant permission"
 
     override val diagToggle = "Show all devices (diagnostics)"
     override val diagHint = "No identification filtering — shows every raw BLE advertisement around you: MSD/UUID. Read what your cooler actually broadcasts, or connect by manually picking its model."
@@ -501,12 +413,9 @@ object EnStrings : AppStrings {
     override val rgbBreathMode = "Breath color"
     override val rgbBreathSingle = "Single color"
     override val rgbBreathFull = "Full color"
-    override val rgbColor = "Color"
     override val rgbRed = "R"
     override val rgbGreen = "G"
     override val rgbBlue = "B"
-    override val rgbPreview = "Preview"
-    override val rgbSynced = "Synced to cooler"
     override val rgbConnectFirst = "Connect your cooler to control lighting"
     override val rgbGoConnect = "Connect"
     override val rgbPalette = "Preset colors"
@@ -515,22 +424,7 @@ object EnStrings : AppStrings {
     override val rgbWriting = "Sending…"
     override val rgbSent = "Sent to cooler"
     override val rgbWriteFailed = "Send failed — tap to retry"
-    override val rgbOff = "Lights off"
     override val rgbNotSupported = "This device does not support RGB"
-
-    override val profileTitle = "Device profiles"
-    override val profileName = "Name"
-    override val profileNameHint = "Name this cooler"
-    override val profileDeviceType = "Model"
-    override val profileMac = "MAC address"
-    override val profileFanSpeed = "Default speed"
-    override val profileMode = "Default mode"
-    override val profileCreatedAt = "Created"
-    override val profileLastConnected = "Last connected"
-    override val profileDeleteConfirm = "Delete this profile?"
-    override val profileEmpty = "No profiles yet"
-    override val profileEmptyHint = "A profile is created automatically when you connect a device"
-    override val profileNew = "New profile"
 
     override val serviceChannelName = "Cooler service"
     override val serviceChannelDesc = "Cooler auto-mode and status notifications"
@@ -538,12 +432,9 @@ object EnStrings : AppStrings {
     override val serviceSwitchManual = "Switch to manual"
     override val serviceReconnect = "Reconnect"
     override val serviceWaitingConfig = "Waiting for config…"
-    override val permBluetoothTitle = "Bluetooth permission required"
-    override val permBluetoothMsg = "Bluetooth access is needed to control the Redmagic cooler."
-    override val permLocationTitle = "Location permission required"
-    override val permLocationMsg = "Android 11 and below require location access to scan for BLE devices."
-    override val permNotificationTitle = "Notification permission required"
-    override val permNotificationMsg = "Notifications are required to keep the foreground service running."
+    override val serviceManual = "Auto mode: off"
+    override val serviceControlFailed = "Couldn't confirm the smart-control command. Check the connection and retry."
+    override val serviceUnavailable = "Can't start auto mode. Open the app to check Bluetooth permissions and connect a cooler with smart control."
 }
 
 /**
@@ -563,4 +454,4 @@ val LocalStrings = staticCompositionLocalOf<AppStrings> { error("AppStrings not 
 
 @Composable
 fun rememberStrings(override: String? = null): AppStrings =
-    stringsFor(Locale.getDefault(), override)
+    stringsFor(LocalConfiguration.current.locales[0] ?: Locale.getDefault(), override)

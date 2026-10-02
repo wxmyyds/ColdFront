@@ -113,7 +113,7 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
     val currentWrite = editor.currentWrite(writeState)
     val currentWriteStatus = currentWrite?.status
     val applied = currentWriteStatus == RgbWriteStatus.SENT &&
-        currentWrite?.requestId == editor.explicitApplyRequestId
+        currentWrite.requestId == editor.explicitApplyRequestId
 
     LaunchedEffect(state, writeState) {
         savedEditor = savedEditor.receive(state, writeState)
@@ -300,37 +300,41 @@ private val RgbEditorSaver = listSaver<RgbEditorState, Any>(
 @Composable
 private fun LightPreview(effect: LightEffect, r: Int, g: Int, b: Int, modifier: Modifier = Modifier) {
     val color = Color(r / 255f, g / 255f, b / 255f)
-    val transition = rememberInfiniteTransition(label = "light")
-    val breathAlpha by transition.animateFloat(
-        initialValue = 0.15f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(1400, easing = LinearEasing), RepeatMode.Reverse),
-        label = "breath",
-    )
-    val hueShift by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(6000, easing = LinearEasing), RepeatMode.Restart),
-        label = "hue",
-    )
+    val breathAlpha = if (effect == LightEffect.BREATH_SINGLE || effect == LightEffect.BREATH_FULLCOLOR) {
+        rememberInfiniteTransition(label = "light-breath").animateFloat(
+            initialValue = 0.15f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(1400, easing = LinearEasing), RepeatMode.Reverse),
+            label = "breath",
+        )
+    } else null
+    val hueShift = if (effect == LightEffect.COLORFUL) {
+        rememberInfiniteTransition(label = "light-hue").animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(6000, easing = LinearEasing), RepeatMode.Restart),
+            label = "hue",
+        )
+    } else null
 
     Canvas(modifier = modifier.clip(MaterialTheme.shapes.large)) {
         when (effect) {
             LightEffect.OFF -> drawRect(PreviewLedOff)
             LightEffect.COLORFUL -> {
                 // 彩虹流动渐变
-                val hues = FloatArray(8) { ((it / 8f) + hueShift) % 1f }
+                val hues = FloatArray(8) { ((it / 8f) + (hueShift?.value ?: 0f)) % 1f }
                 val colors = hues.map { h -> Color(android.graphics.Color.HSVToColor(floatArrayOf(h * 360f, 0.9f, 1f))) }
                 drawRect(Brush.horizontalGradient(colors))
             }
             LightEffect.BREATH_FULLCOLOR -> {
                 val colors = listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta)
-                drawRect(Brush.horizontalGradient(colors), alpha = breathAlpha)
+                drawRect(Brush.horizontalGradient(colors), alpha = breathAlpha?.value ?: 1f)
             }
             LightEffect.BREATH_SINGLE -> {
+                val alpha = breathAlpha?.value ?: 1f
                 drawRect(PreviewLedOff)
-                drawRect(color.copy(alpha = breathAlpha))
-                glow(color, breathAlpha)
+                drawRect(color.copy(alpha = alpha))
+                glow(color, alpha)
             }
             LightEffect.ALWAYS_BRIGHT -> {
                 drawRect(color.copy(alpha = 0.2f))

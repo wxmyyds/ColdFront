@@ -153,6 +153,7 @@ private fun SavedDeviceCard(
     onDelete: () -> Unit,
 ) {
     val connected = state.isConnected && state.deviceAddress == profile.macAddress
+    val failed = state.connection == ConnectionState.FAILED && state.deviceAddress == profile.macAddress
     val connecting = state.connection in listOf(
         ConnectionState.CONNECTING, ConnectionState.DISCOVERING,
     ) && state.deviceAddress == profile.macAddress
@@ -198,6 +199,13 @@ private fun SavedDeviceCard(
                     ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (failed) {
+                Text(
+                    strings.homeConnectionFailed,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
                 )
             }
             FlowRow(

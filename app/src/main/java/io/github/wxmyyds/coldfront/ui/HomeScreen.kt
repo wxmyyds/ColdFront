@@ -277,6 +277,7 @@ private fun MetricPill(icon: ImageVector, text: String, content: Color) {
 private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: AppStrings) {
     val type = state.deviceType
     val isGear = type?.generation == 8
+    val displayedPercent = state.pendingFanPercent ?: state.fanPercent
 
     if (state.coolingOn && state.smartOn) {
         Surface(
@@ -324,8 +325,8 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
                 Icon(Icons.Filled.Speed, contentDescription = null)
                 Text(strings.homeLevel, style = MaterialTheme.typography.titleMedium)
                 Text(
-                    if (isGear) strings.homeLevelGear.format(levelToGear(state.fanPercent))
-                    else strings.homeLevelPercent.format(state.fanPercent),
+                    if (isGear) strings.homeLevelGear.format(levelToGear(displayedPercent))
+                    else strings.homeLevelPercent.format(displayedPercent),
                     style = EmphasizedTypography.headlineLarge,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -333,8 +334,8 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
             // MD3E:Slider 走 SliderState(alpha28 起 Slider(value=…) 无状态重载已弃用)。
             // 拖动期间以滑条为准,松手后再由设备回读值同步,避免两边互相打架。
             var dragging by remember { mutableStateOf(false) }
-            val gear = levelToGear(state.fanPercent).toFloat()
-            val percent = state.fanPercent.toFloat()
+            val gear = levelToGear(displayedPercent).toFloat()
+            val percent = displayedPercent.toFloat()
             val gearSlider = rememberSliderState(value = gear, steps = 6, trackRange = 1f..8f)
             val percentSlider = rememberSliderState(value = percent, trackRange = 0f..100f)
             LaunchedEffect(gear, dragging) { if (!dragging) gearSlider.value = gear }

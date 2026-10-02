@@ -38,7 +38,7 @@ class RgbEditorStateTest {
         assertEquals(1L, submitted.submittedRequestId)
         assertEquals(1L, submitted.explicitApplyRequestId)
         assertEquals(RgbWriteStatus.WRITING, submitted.currentWrite(request)?.status)
-        assertFalse(submitted.submit(request, explicitApply = false).appliesExplicitly())
+        assertNull(submitted.submit(request, explicitApply = false).explicitApplyRequestId)
     }
 
     @Test
@@ -94,6 +94,47 @@ class RgbEditorStateTest {
     }
 
     @Test
+    fun `matching send follows current device when intermediate matching readback was skipped`() {
+        val draftConfig = RGBConfig(LightEffect.ALWAYS_BRIGHT, 10, 20, 30)
+        val request = RgbWriteState(1, draftConfig, RgbWriteStatus.WRITING)
+        val draft = RgbEditorState.fromDevice(device()).submit(request, explicitApply = true)
+        val latestConfig = RGBConfig(LightEffect.OFF, 0, 0, 0)
+
+        // No receive(device(draftConfig), SENT) call: lifecycle/StateFlow skipped that emission.
+        val released = draft.receive(device(rgb = latestConfig), request.copy(status = RgbWriteStatus.SENT))
+        assertFalse(released.dirty)
+        assertEquals(latestConfig, released.config)
+        assertNull(released.submittedRequestId)
+        assertNull(released.explicitApplyRequestId)
+        assertEquals(device().rgb, released.receive(device(), request.copy(status = RgbWriteStatus.SENT)).config)
+    }
+
+    @Test
+    fun `matching completion never replaces an unsent or newer draft`() {
+        val base = RgbEditorState.fromDevice(device())
+        val request = RgbWriteState(1, base.config.copy(red = 12), RgbWriteStatus.WRITING)
+        val submitted = base.submit(request, explicitApply = true)
+        val sent = request.copy(status = RgbWriteStatus.SENT)
+        val unsent = submitted.edit(request.config.copy(green = 34))
+        assertEquals(unsent, unsent.receive(device(rgb = request.config), sent))
+        // Even an identical newer draft/request must not be cleared by the older request's send.
+        val sameConfigDraft = submitted.edit(request.config)
+        assertEquals(sameConfigDraft, sameConfigDraft.receive(device(rgb = request.config), sent))
+        val newer = submitted.submit(request.copy(requestId = 2), explicitApply = false)
+        assertEquals(newer, newer.receive(device(rgb = request.config), sent))
+    }
+
+    @Test
+    fun `failed draft remains protected even if readback matches`() {
+        val base = RgbEditorState.fromDevice(device())
+        val request = RgbWriteState(1, base.config.copy(blue = 45), RgbWriteStatus.FAILED)
+        val draft = base.submit(request, explicitApply = true)
+        assertEquals(draft, draft.receive(device(), request))
+        assertEquals(draft, draft.receive(device(rgb = request.config), request))
+        assertEquals(RgbWriteStatus.FAILED, draft.currentWrite(request)?.status)
+    }
+
+    @Test
     fun `restored draft never leaks across devices or sessions`() {
         val base = RgbEditorState.fromDevice(device())
         val draft = base.submit(
@@ -122,7 +163,4 @@ class RgbEditorStateTest {
         assertEquals(RGBConfig(LightEffect.ALWAYS_BRIGHT, 0, 80, 200), reset.config)
         assertNull(reset.currentWrite(null))
     }
-
-    private fun RgbEditorState.appliesExplicitly(): Boolean =
-        currentWrite(null) != null && explicitApplyRequestId == submittedRequestId
 }

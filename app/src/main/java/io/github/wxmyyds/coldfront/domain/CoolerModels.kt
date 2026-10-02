@@ -112,6 +112,8 @@ data class CoolerLiveState(
     val connection: ConnectionState = ConnectionState.DISCONNECTED,
     val temperatureC: Float? = null,
     val fanPercent: Int = 0,
+    /** Pending slider target; distinct from the last acknowledged/device-reported speed. */
+    val pendingFanPercent: Int? = null,
     val fanMode: FanMode = FanMode.OFF,
     val rgb: RGBConfig? = null,
     val deviceType: CoolerDeviceType? = null,

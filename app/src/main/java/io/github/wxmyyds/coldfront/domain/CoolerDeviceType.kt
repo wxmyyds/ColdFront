@@ -1,7 +1,5 @@
 package io.github.wxmyyds.coldfront.domain
 
-import java.util.UUID
-
 /**
  * 红魔/努比亚散热器支持的设备类型。
  *
@@ -108,13 +106,12 @@ enum class CoolerDeviceType(
             entries.firstOrNull { it.deviceName.equals(name, ignoreCase = true) }
 
         /**
-         * 名称兜底识别:遍历所有型号,返回第一个 [matchesBleName] 命中的。
+         * 名称兜底识别:优先明确代数，最后匹配通用 Magcooler（第三代）。
          * MSD 不可用时(旧系统/广播被裁剪)的回退。
          */
         fun fromBleName(bleName: String?): CoolerDeviceType? {
             if (bleName.isNullOrBlank()) return null
             val isRedMagic = bleName.contains("Magcooler", true) ||
-                bleName.contains("MagCooler", true) ||
                 bleName.contains("RM ", true) ||
                 bleName.contains("RedMagic", true) ||
                 bleName.contains("Red Magic", true) ||
@@ -122,7 +119,8 @@ enum class CoolerDeviceType(
                 bleName.contains("Cryo", true) ||
                 bleName.contains("Heat Sink", true)
             if (!isRedMagic) return null
-            return entries.firstOrNull { it.matchesBleName(bleName) }
+            return entries.firstOrNull { it != JACKET_3 && it.matchesBleName(bleName) }
+                ?: JACKET_3.takeIf { it.matchesBleName(bleName) }
         }
     }
 

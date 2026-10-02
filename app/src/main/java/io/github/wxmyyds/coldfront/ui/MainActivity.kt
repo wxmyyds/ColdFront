@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.BackEventCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -15,12 +16,18 @@ import androidx.activity.viewModels
 import androidx.core.view.WindowCompat
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AcUnit
@@ -41,6 +48,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.EnterTransition
@@ -68,6 +76,7 @@ import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 import io.github.wxmyyds.coldfront.ui.i18n.rememberStrings
 import io.github.wxmyyds.coldfront.ui.theme.RedmagicCoolerTheme
+import kotlinx.coroutines.flow.collect
 
 class MainActivity : ComponentActivity() {
 
@@ -93,6 +102,13 @@ class MainActivity : ComponentActivity() {
         val palette by vm.palette.collectAsStateWithLifecycle()
         // 语言覆盖必须在取文案之前生效
         val strings = rememberStrings(override = appLanguage)
+        val latestStrings by rememberUpdatedState(strings)
+        val context = LocalContext.current
+        LaunchedEffect(vm) {
+            vm.errors.collect {
+                Toast.makeText(context, latestStrings.storageOperationFailed, Toast.LENGTH_LONG).show()
+            }
+        }
         val dark = when (darkMode) {
             "light" -> false
             "dark" -> true
@@ -145,15 +161,19 @@ class MainActivity : ComponentActivity() {
         LaunchedEffect(Unit) { launcher.launch(perms) }
 
         // 蓝牙开关状态广播
-        DisposableEffect(Unit) {
+        DisposableEffect(context, vm) {
             val receiver = object : BroadcastReceiver() {
                 override fun onReceive(c: Context?, i: Intent?) {
-                    vm.refreshBluetoothState()
+                    // Query the adapter, never trust state extras from an exported receiver.
+                    if (i?.action == BluetoothAdapter.ACTION_STATE_CHANGED) {
+                        vm.refreshBluetoothState()
+                    }
                 }
             }
             val filter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+                // Bluetooth broadcasts can originate in a privileged process outside the system UID.
+                context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
             } else {
                 @Suppress("UnspecifiedRegisterReceiverFlag")
                 context.registerReceiver(receiver, filter)
@@ -199,7 +219,7 @@ private fun AppNav(vm: CoolerViewModel) {
             current?.hierarchy?.any { it.route == Routes.SCAN } == true
         ) {
             nav.navigate(Routes.HOME) {
-                popUpTo(Routes.SCAN) { inclusive = true }
+                popUpTo(nav.graph.findStartDestination().id)
                 launchSingleTop = true
             }
         }
@@ -234,11 +254,8 @@ private fun AppNav(vm: CoolerViewModel) {
                             .semantics { isTraversalGroup = true },
                         containerColor = MaterialTheme.colorScheme.background,
                         tonalElevation = 0.dp,
-                        windowInsets = WindowInsets(
-                            left = 0.dp,
-                            top = 0.dp,
-                            right = 0.dp,
-                            bottom = 12.dp,
+                        windowInsets = WindowInsets.navigationBars.union(
+                            WindowInsets(left = 0.dp, top = 0.dp, right = 0.dp, bottom = 12.dp),
                         ),
                     ) {
                         items.forEach { (route, icon, label) ->
@@ -259,7 +276,7 @@ private fun AppNav(vm: CoolerViewModel) {
                     .fillMaxSize()
                     .padding(inner)
                     // Consume Scaffold's system/bar padding once; nested app bars and the rail
-                    // see only remaining insets. The bar retains a compact 12dp gesture inset.
+                    // see only remaining insets. The bar uses the real navigation inset, at least 12dp.
                     .consumeWindowInsets(inner),
             ) {
                 if (useRail && current?.route != Routes.ABOUT) {
@@ -269,13 +286,21 @@ private fun AppNav(vm: CoolerViewModel) {
                             .semantics { isTraversalGroup = true },
                         containerColor = MaterialTheme.colorScheme.background,
                     ) {
-                        items.forEach { (route, icon, label) ->
-                            NavigationRailItem(
-                                selected = current?.hierarchy?.any { it.route == route } == true,
-                                onClick = { navigateToTab(route) },
-                                icon = { Icon(icon, contentDescription = null) },
-                                label = { Text(label()) },
-                            )
+                        // Scroll only the rail contents: keep system insets and the sibling NavHost fixed.
+                        Column(
+                            modifier = Modifier.verticalScroll(rememberScrollState()),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            // Match NavigationRail's native spacing inside the scroll container.
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            items.forEach { (route, icon, label) ->
+                                NavigationRailItem(
+                                    selected = current?.hierarchy?.any { it.route == route } == true,
+                                    onClick = { navigateToTab(route) },
+                                    icon = { Icon(icon, contentDescription = null) },
+                                    label = { Text(label()) },
+                                )
+                            }
                         }
                     }
                 }
@@ -324,12 +349,18 @@ private fun AppNav(vm: CoolerViewModel) {
                             .fillMaxSize()
                             .semantics { isTraversalGroup = true },
                     ) {
-                        composable(Routes.HOME) { HomeScreen(vm, onAddDevice = { nav.navigate(Routes.SCAN) }) }
-                        composable(Routes.DEVICES) { DevicesScreen(vm, onAddDevice = { nav.navigate(Routes.SCAN) }) }
+                        composable(Routes.HOME) {
+                            HomeScreen(vm, onAddDevice = { nav.navigate(Routes.SCAN) { launchSingleTop = true } })
+                        }
+                        composable(Routes.DEVICES) {
+                            DevicesScreen(vm, onAddDevice = { nav.navigate(Routes.SCAN) { launchSingleTop = true } })
+                        }
                         composable(Routes.SCAN) { AddDeviceScreen(vm, onBack = { nav.popBackStack() }) }
-                        composable(Routes.RGB) { RGBControlScreen(vm, onConnect = { nav.navigate(Routes.SCAN) }) }
+                        composable(Routes.RGB) {
+                            RGBControlScreen(vm, onConnect = { nav.navigate(Routes.SCAN) { launchSingleTop = true } })
+                        }
                         composable(Routes.SETTINGS) {
-                            SettingsScreen(vm, onAbout = { nav.navigate(Routes.ABOUT) })
+                            SettingsScreen(vm, onAbout = { nav.navigate(Routes.ABOUT) { launchSingleTop = true } })
                         }
                         composable(Routes.ABOUT) { AboutScreen(onBack = { nav.popBackStack() }) }
                     }

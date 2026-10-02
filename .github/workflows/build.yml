@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   build:
-    name: Assemble APKs
+    name: Test, lint and assemble APKs
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -31,11 +31,27 @@ jobs:
       - name: Accept Android SDK licenses
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
-      - name: Run unit tests
-        run: ./gradlew testDebugUnitTest --stacktrace
+      - name: Run debug and release unit tests
+        run: ./gradlew testDebugUnitTest testReleaseUnitTest --stacktrace
+
+      - name: Run full Android lint
+        if: ${{ !cancelled() }}
+        run: ./gradlew lintDebug lintRelease --stacktrace
 
       - name: Build debug & release APK
+        if: ${{ !cancelled() }}
         run: ./gradlew assembleDebug assembleRelease --stacktrace
+
+      - name: Upload validation reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ColdFront-validation-reports
+          path: |
+            app/build/reports/
+            app/build/test-results/
+            build/reports/
+          if-no-files-found: warn
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v7

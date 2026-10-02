@@ -10,134 +10,107 @@ import android.bluetooth.BluetoothGattConnectionSettings
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
+import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import androidx.annotation.RequiresApi
 import io.github.wxmyyds.coldfront.domain.CoolerBleConstants
 import io.github.wxmyyds.coldfront.domain.CoolerDevice
 import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
 import io.github.wxmyyds.coldfront.domain.CoolerLiveState
+import io.github.wxmyyds.coldfront.domain.CoolerTelemetryParser
 import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.domain.FanMode
-import io.github.wxmyyds.coldfront.domain.LightEffect
 import io.github.wxmyyds.coldfront.domain.RGBConfig
 import io.github.wxmyyds.coldfront.domain.RgbWriteState
 import io.github.wxmyyds.coldfront.domain.RgbWriteStatus
-import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicLong
 
 private const val TAG = "CoolerBleManager"
 private val CCC_DESCRIPTOR_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
-
-/** 单个 GATT 操作等待回调的超时(ms) */
 private const val OP_TIMEOUT_MS = 2500L
-
-/** 读操作超时(冰环看门狗同为 1200ms:坏连接时避免一轮轮询拖太久) */
 private const val READ_TIMEOUT_MS = 1200L
-/** 两个 GATT 操作之间的最小间隔(ms),给固件喘息 */
-private const val OP_SPACING_MS = 60L
+private const val CONNECT_TIMEOUT_MS = 15000L
+private const val DISCOVERY_TIMEOUT_MS = 10000L
+private const val INIT_TIMEOUT_MS = 30000L
 
-/** 扫描器实时状态（诊断可视化用） */
 data class ScanState(
     val scanning: Boolean = false,
     val permissionGranted: Boolean = false,
     val locationServiceEnabled: Boolean = true,
     val bluetoothOn: Boolean = false,
-    /** onScanFailed 的错误码 */
     val errorCode: Int? = null,
 )
 
 /**
- * BLE 控制器:封装扫描、连接、GATT 操作与状态广播。
- *
- * 关键设计——GATT 命令串行队列:
- * Android BLE 栈同一时刻只允许一个在途操作,并发发起会被静默丢弃。
- * 所有读/写/描述符写都经 [gattMutex] 串行化,等待对应回调确认(超时重试一次),
- * 操作间保留间隔。没有这套机制,「连接成功但风扇/温度/灯光全无反应」是必然的。
- *
- * 识别:MSD(公司 0x08CA)的 [mainType, subType](8 Pro = 5,8),回退广播名。
- * 协议详见 docs/protocol-8pro.md。
+ * Main-confined BLE owner. Public fire-and-forget methods dispatch to Main.immediate;
+ * all Android callbacks (including legacy Binder callbacks) are posted to the main Handler.
+ * CONNECTED means required startup commands and supported initialization attempts have completed.
  */
+@SuppressLint("MissingPermission")
 class CoolerBleManager(private val context: Context) {
+    // Process-reusable: release resets transports/state, never cancels this scope.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val handler = Handler(Looper.getMainLooper())
+    private val bluetoothAdapter: BluetoothAdapter? =
+        (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private class Session(val id: Long) {
+        var gatt: BluetoothGatt? = null
+        val characteristics = mutableMapOf<UUID, BluetoothGattCharacteristic>()
+        val generations = mutableMapOf<Control, Long>()
+        var discoveryJob: Job? = null
+        var initJob: Job? = null
+        var timeoutJob: Job? = null
+        var pollJob: Job? = null
+        var rssiJob: Job? = null
+        var discoveryRequested = false
+        var initializing = false
+        var controls = 0
+        var lastTempUpdateMs = 0L
+    }
 
-    private val bluetoothManager: BluetoothManager? =
-        context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
-    private val bluetoothAdapter: BluetoothAdapter? = bluetoothManager?.adapter
-    private val scanner get() = bluetoothAdapter?.bluetoothLeScanner
+    private enum class Control { FAN, COOLING, SMART, BOOST, PROTECTION, RGB }
+    private class ScanSession(val scanner: BluetoothLeScanner, val callback: ScanCallback)
+    private var session: Session? = null
+    private var scanSession: ScanSession? = null
+    private var nextSessionId = SystemClock.elapsedRealtimeNanos()
+    private var nextRgbRequestId = 0L
+    private var pendingRgb: RgbWriteState? = null
 
-    private var gatt: BluetoothGatt? = null
-    private var fanChar: BluetoothGattCharacteristic? = null
-    private var tempChar: BluetoothGattCharacteristic? = null
-    private var statusChar: BluetoothGattCharacteristic? = null
-    private var lightChar: BluetoothGattCharacteristic? = null
-    private var autoChar: BluetoothGattCharacteristic? = null
-    private var boostChar: BluetoothGattCharacteristic? = null
-    private var switchChar: BluetoothGattCharacteristic? = null
-    private var rpmChar: BluetoothGattCharacteristic? = null
-    private var powerChar: BluetoothGattCharacteristic? = null
-    private var protectChar: BluetoothGattCharacteristic? = null
+    private val operations = GattOperationQueue(onTimeout = { owner ->
+        session?.takeIf { it.gatt === owner }?.let { fail(it, "GATT callback timeout") }
+    })
 
-    private var scanning = false
-    private var pendingRgb: RGBConfig? = null
-    private var pendingRgbRequestId: Long? = null
-    private val nextRgbRequestId = AtomicLong()
-    private val nextConnectionSessionId = AtomicLong(android.os.SystemClock.elapsedRealtimeNanos())
-
-    /** 最近一次成功解析出温度的时间戳(轮询自愈用) */
-    @Volatile
-    private var lastTempUpdateMs = 0L
-
-    // —— GATT 串行队列 ——
-    private val gattMutex = Mutex()
-    private var writeWaiter: CompletableDeferred<Int>? = null
-    private var readWaiter: CompletableDeferred<Pair<Int, ByteArray>>? = null
-    private var descWaiter: CompletableDeferred<Int>? = null
-    private var rssiWaiter: CompletableDeferred<Pair<Int, Int>>? = null
-
-    // —— 防抖任务 ——
-    private var fanJob: Job? = null
-    private var lightJob: Job? = null
-    private var autoJob: Job? = null
-
-    // —— 状态轮询循环(8 Pro 温度/转速/功率靠主动读,不靠推送) ——
-    private var pollJob: Job? = null
-    private var rssiJob: Job? = null
-
-    private val _state = MutableStateFlow(CoolerLiveState(connection = ConnectionState.DISCONNECTED))
+    private val _state = MutableStateFlow(CoolerLiveState())
     val state: StateFlow<CoolerLiveState> = _state.asStateFlow()
-
     private val _rgbWriteState = MutableStateFlow<RgbWriteState?>(null)
     val rgbWriteState: StateFlow<RgbWriteState?> = _rgbWriteState.asStateFlow()
-
     private val _discoveredDevices = MutableStateFlow<List<CoolerDevice>>(emptyList())
     val discoveredDevices: StateFlow<List<CoolerDevice>> = _discoveredDevices.asStateFlow()
-
-    /** 诊断模式：未过滤的全部原始扫描结果(按地址去重,保留最新) */
     private val _rawDevices = MutableStateFlow<List<BleScanDiagnostic>>(emptyList())
     val rawDevices: StateFlow<List<BleScanDiagnostic>> = _rawDevices.asStateFlow()
-
-    /** 扫描器状态（权限/定位/蓝牙/失败码），供 UI 诊断展示 */
     private val _scanState = MutableStateFlow(
         ScanState(
             permissionGranted = BlePermissionManager.hasScanPermission(context),
@@ -147,8 +120,15 @@ class CoolerBleManager(private val context: Context) {
     )
     val scanState: StateFlow<ScanState> = _scanState.asStateFlow()
 
-    /** 外部在权限/蓝牙/定位变化后调用，重新评估扫描条件 */
-    fun refreshScanConditions() {
+    private fun onMain(block: () -> Unit) { scope.launch { block() } }
+    private fun owns(s: Session): Boolean = session === s && s.gatt != null
+    private fun ready(s: Session): Boolean = owns(s) && _state.value.isConnected
+    val isBluetoothEnabled: Boolean
+        get() = runCatching { bluetoothAdapter?.isEnabled == true }.getOrDefault(false)
+
+    fun refreshScanConditions() = onMain { refreshScanConditionsInternal() }
+
+    private fun refreshScanConditionsInternal() {
         _scanState.update {
             it.copy(
                 permissionGranted = BlePermissionManager.hasScanPermission(context),
@@ -158,58 +138,56 @@ class CoolerBleManager(private val context: Context) {
         }
     }
 
-    val isBluetoothEnabled: Boolean
-        get() = runCatching { bluetoothAdapter?.isEnabled == true }.getOrDefault(false)
+    fun startScan() = onMain {
+        refreshScanConditionsInternal()
+        if (scanSession != null) return@onMain
+        if (!_scanState.value.permissionGranted || !isBluetoothEnabled) return@onMain
+        val scanner = runCatching { bluetoothAdapter?.bluetoothLeScanner }.getOrNull() ?: return@onMain
+        lateinit var scan: ScanSession
+        val callback = object : ScanCallback() {
+            override fun onScanResult(callbackType: Int, result: ScanResult) {
+                handler.post { if (scanSession === scan) acceptScanResult(result) }
+            }
 
-    // ──────────────────────────── 扫描 ────────────────────────────
+            override fun onBatchScanResults(results: MutableList<ScanResult>) {
+                val snapshot = results.toList()
+                handler.post { if (scanSession === scan) snapshot.forEach(::acceptScanResult) }
+            }
 
-    @SuppressLint("MissingPermission")
-    fun startScan() {
-        refreshScanConditions()
-        if (scanning) return
-        if (!BlePermissionManager.hasScanPermission(context)) {
-            Log.w(TAG, "无扫描权限，跳过 startScan")
-            _scanState.update { it.copy(scanning = false, permissionGranted = false) }
-            return
+            override fun onScanFailed(errorCode: Int) {
+                handler.post {
+                    if (scanSession !== scan) return@post
+                    stopScanInternal()
+                    _scanState.update { it.copy(errorCode = errorCode) }
+                }
+            }
         }
-        val sc = runCatching { scanner }.getOrNull() ?: return
+        scan = ScanSession(scanner, callback)
+        scanSession = scan
         _discoveredDevices.value = emptyList()
         _rawDevices.value = emptyList()
-        scanning = true
         _scanState.update { it.copy(scanning = true, errorCode = null) }
-        // 注:不覆盖 connection 状态——已连接时进入扫描页不能显示"已断开"
         try {
-            sc.startScan(
-                /* filters = */ null,
-                ScanSettings.Builder()
-                    .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-                    .build(),
-                scanCallback,
-            )
+            scanner.startScan(null, ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(), callback)
         } catch (e: Exception) {
-            Log.e(TAG, "startScan 失败: ${e.message}")
-            scanning = false
-            _scanState.update { it.copy(scanning = false) }
+            Log.e(TAG, "startScan failed", e)
+            stopScanInternal()
         }
     }
 
-    @SuppressLint("MissingPermission")
-    fun stopScan() {
-        if (!scanning) return
-        scanning = false
+    fun stopScan() = onMain { stopScanInternal() }
+
+    private fun stopScanInternal() {
+        val old = scanSession
+        scanSession = null // Invalidate queued callbacks before touching the platform.
         _scanState.update { it.copy(scanning = false) }
-        val sc = runCatching { scanner }.getOrNull() ?: return
-        try {
-            sc.stopScan(scanCallback)
-        } catch (e: Exception) {
-            Log.e(TAG, "stopScan 失败: ${e.message}")
-        }
+        if (old != null) runCatching { old.scanner.stopScan(old.callback) }
+            .onFailure { Log.w(TAG, "stopScan failed", it) }
     }
 
-    private val scanCallback = object : ScanCallback() {
-        @SuppressLint("MissingPermission")
-        override fun onScanResult(callbackType: Int, result: ScanResult) {
-            // 诊断:先记录原始广播(不做任何过滤)
+    private fun acceptScanResult(result: ScanResult) {
+        // Permission may have been revoked after scan start.
+        try {
             recordRaw(result)
             val device = identify(result) ?: return
             _discoveredDevices.update { list ->
@@ -217,934 +195,623 @@ class CoolerBleManager(private val context: Context) {
                     list.map { if (it.address == device.address) device else it }
                 } else list + device
             }
-        }
-
-        override fun onScanFailed(errorCode: Int) {
-            Log.e(TAG, "扫描失败 errorCode=$errorCode")
-            scanning = false
-            _scanState.update { it.copy(scanning = false, errorCode = errorCode) }
+        } catch (e: SecurityException) {
+            Log.w(TAG, "Scan permission revoked", e)
+            stopScanInternal()
+            refreshScanConditionsInternal()
         }
     }
 
-    /** 记录原始扫描结果(诊断用,不过滤) */
-    @SuppressLint("MissingPermission")
     private fun recordRaw(result: ScanResult) {
         val record = result.scanRecord ?: return
-        val name = record.deviceName ?: result.device.safeName()
         val msdSparse = record.manufacturerSpecificData
         val msd = buildList {
             for (i in 0 until msdSparse.size()) {
-                val key = msdSparse.keyAt(i)
-                add(key to (msdSparse.valueAt(i)?.toHex() ?: ""))
+                add(msdSparse.keyAt(i) to (msdSparse.valueAt(i)?.toHex() ?: ""))
             }
         }
-        // MSD 命中已知散热器型号 → 直接标记,诊断卡片可一键连接
-        val coolerType = run {
-            val payload = msdSparse.get(CoolerBleConstants.MSD_COMPANY_ID) ?: return@run null
-            if (payload.size > 1) {
-                CoolerDeviceType.fromMsdType(
-                    payload[0].toInt() and 0xFF,
-                    payload[1].toInt() and 0xFF,
-                )
-            } else null
-        }
-        val serviceData = record.serviceData?.entries
-            ?.map { (k, v) -> k.uuid.toString() to (v?.toHex() ?: "") }
-            ?: emptyList()
+        val payload = msdSparse.get(CoolerBleConstants.MSD_COMPANY_ID)
+        val coolerType = if (payload != null && payload.size > 1) {
+            CoolerDeviceType.fromMsdType(payload[0].toInt() and 0xFF, payload[1].toInt() and 0xFF)
+        } else null
         val entry = BleScanDiagnostic(
             address = result.device.address,
-            name = name,
+            name = record.deviceName ?: result.device.safeName(),
             rssi = result.rssi,
             msd = msd,
             serviceUuids = record.serviceUuids?.map { it.toString() } ?: emptyList(),
-            serviceData = serviceData,
+            serviceData = record.serviceData?.entries?.map { (k, v) -> k.uuid.toString() to (v?.toHex() ?: "") }
+                ?: emptyList(),
             bluetoothDevice = result.device,
             coolerType = coolerType,
         )
         if (msd.isNotEmpty() || entry.serviceUuids.isNotEmpty() || entry.serviceData.isNotEmpty()) {
-            Log.d(
-                "BleDiag",
-                "${entry.address} name=${entry.name} rssi=${entry.rssi} " +
-                    "msd=${entry.msd} uuids=${entry.serviceUuids} svcData=${entry.serviceData}",
-            )
+            Log.d("BleDiag", "${entry.address} name=${entry.name} rssi=${entry.rssi} " +
+                "msd=${entry.msd} uuids=${entry.serviceUuids} svcData=${entry.serviceData}")
         }
         _rawDevices.update { list ->
-            (list.filterNot { it.address == entry.address } + entry)
-                .sortedByDescending { it.rssi }
-                .take(120)
+            (list.filterNot { it.address == entry.address } + entry).sortedByDescending { it.rssi }.take(120)
         }
     }
 
-    /**
-     * 识别散热器型号:
-     * 1) 厂商数据 MSD(0x08CA) → [mainType, subType] 精确匹配(官方方案);
-     * 2) 回退广播名匹配(8 Pro 等 MSD 拿不到时)。
-     */
-    @SuppressLint("MissingPermission")
     private fun identify(result: ScanResult): CoolerDevice? {
-        val btDevice = result.device ?: return null
-
-        val msd = result.scanRecord?.manufacturerSpecificData
-            ?.get(CoolerBleConstants.MSD_COMPANY_ID)
-        var type: CoolerDeviceType? = null
-        var matchedByName = false
-        if (msd != null && msd.size > CoolerBleConstants.MSD_INDEX_SUB_TYPE) {
-            val main = msd[CoolerBleConstants.MSD_INDEX_MAIN_TYPE].toInt() and 0xFF
-            val sub = msd[CoolerBleConstants.MSD_INDEX_SUB_TYPE].toInt() and 0xFF
-            type = CoolerDeviceType.fromMsdType(main, sub)
-            if (type != null) Log.d(TAG, "MSD 识别: ($main, $sub) → $type")
-        }
-        if (type == null) {
-            val name = result.scanRecord?.deviceName ?: btDevice.safeName()
-            type = CoolerDeviceType.fromBleName(name)
-            if (type != null) matchedByName = true
-        }
-        if (type == null) return null
-
-        return CoolerDevice(
-            address = btDevice.address,
-            bleName = result.scanRecord?.deviceName ?: btDevice.safeName(),
-            deviceType = type,
-            rssi = result.rssi,
-            matchedByName = matchedByName,
-        )
+        val device = result.device
+        val name = result.scanRecord?.deviceName ?: device.safeName()
+        val msd = result.scanRecord?.manufacturerSpecificData?.get(CoolerBleConstants.MSD_COMPANY_ID)
+        val msdType = if (msd != null && msd.size > CoolerBleConstants.MSD_INDEX_SUB_TYPE) {
+            CoolerDeviceType.fromMsdType(
+                msd[CoolerBleConstants.MSD_INDEX_MAIN_TYPE].toInt() and 0xFF,
+                msd[CoolerBleConstants.MSD_INDEX_SUB_TYPE].toInt() and 0xFF,
+            )
+        } else null
+        val type = msdType ?: CoolerDeviceType.fromBleName(name) ?: return null
+        return CoolerDevice(device.address, name, type, result.rssi, matchedByName = msdType == null)
     }
 
-    // ──────────────────────────── 连接 ────────────────────────────
+    // All entry points share permission, address, adapter and exception handling.
+    fun connect(device: CoolerDevice) = onMain {
+        connectInternal(device.address, device.deviceType, device.displayName)
+    }
 
-    /**
-     * 打开 GATT 连接。API 37(CINNAMON_BUN)+ 走新的 [BluetoothGattConnectionSettings] API
-     * （connectGatt 的 transport 重载在 API 37 起弃用）；旧系统仍用
-     * connectGatt(…, TRANSPORT_LE) 以显式指定 LE 传输，避免双模设备走 BR/EDR 导致连接失败。
-     */
-    @SuppressLint("MissingPermission")
-    private fun openGatt(device: BluetoothDevice): BluetoothGatt? {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.CINNAMON_BUN) {
-            openGattWithSettings(device)
+    fun connectRaw(entry: BleScanDiagnostic, type: CoolerDeviceType) = onMain {
+        connectInternal(entry.address, type, entry.name)
+    }
+
+    fun connectByAddress(macAddress: String, type: CoolerDeviceType) = onMain {
+        connectInternal(macAddress, type, null)
+    }
+
+    private fun connectInternal(address: String, type: CoolerDeviceType, name: String?) {
+        stopScanInternal()
+        disconnectInternal()
+        val s = Session(++nextSessionId)
+        session = s
+        val normalizedAddress = address.trim().uppercase(java.util.Locale.ROOT)
+        _state.value = CoolerLiveState(
+            connection = ConnectionState.CONNECTING,
+            connectionSessionId = s.id,
+            deviceType = type,
+            deviceName = name ?: type.deviceName,
+            deviceAddress = normalizedAddress,
+        )
+        if (!BlePermissionManager.hasConnectPermission(context) || !isBluetoothEnabled ||
+            !BluetoothAdapter.checkBluetoothAddress(normalizedAddress)
+        ) {
+            fail(s, "Missing permission, disabled adapter or invalid address")
+            return
+        }
+        try {
+            val device = bluetoothAdapter?.getRemoteDevice(normalizedAddress)
+            if (device == null) {
+                fail(s, "Bluetooth adapter unavailable")
+                return
+            }
+            if (name == null) _state.update { it.copy(deviceName = device.safeName() ?: type.deviceName) }
+            s.gatt = openGatt(device, callbackFor(s))
+            if (s.gatt == null) {
+                fail(s, "connectGatt returned null")
+                return
+            }
+            armTimeout(s, CONNECT_TIMEOUT_MS, "Connection timed out")
+        } catch (e: Exception) {
+            Log.e(TAG, "connectGatt failed", e)
+            fail(s, "Could not open GATT")
+        }
+    }
+
+    private fun openGatt(device: BluetoothDevice, callback: BluetoothGattCallback): BluetoothGatt? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.CINNAMON_BUN) {
+            openGattWithSettings(device, callback)
         } else {
             @Suppress("DEPRECATION")
-            device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+            device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
         }
-    }
 
     @RequiresApi(Build.VERSION_CODES.CINNAMON_BUN)
-    private fun openGattWithSettings(device: BluetoothDevice): BluetoothGatt? {
+    private fun openGattWithSettings(device: BluetoothDevice, callback: BluetoothGattCallback): BluetoothGatt? {
         val settings = BluetoothGattConnectionSettings.Builder()
-            .setTransport(BluetoothDevice.TRANSPORT_LE)
-            .setAutoConnectEnabled(false)
-            .build()
-        return device.connectGatt(settings, context.mainExecutor, gattCallback)
+            .setTransport(BluetoothDevice.TRANSPORT_LE).setAutoConnectEnabled(false).build()
+        return device.connectGatt(settings, context.mainExecutor, callback)
     }
 
-    @SuppressLint("MissingPermission")
-    fun connect(device: CoolerDevice) {
-        if (!BlePermissionManager.hasConnectPermission(context)) {
-            Log.w(TAG, "无连接权限")
-            _state.update {
-                it.copy(connection = ConnectionState.FAILED, deviceType = device.deviceType)
-            }
-            return
-        }
-        stopScan()
+    fun disconnect() = onMain {
         disconnectInternal()
-        _state.value = CoolerLiveState(
-            connection = ConnectionState.CONNECTING,
-            connectionSessionId = nextConnectionSessionId.incrementAndGet(),
-            deviceType = device.deviceType,
-            deviceName = device.displayName,
-            deviceAddress = device.address,
-            rssi = null,
-        )
-        val bluetoothDevice = runCatching {
-            bluetoothAdapter?.getRemoteDevice(device.address)
-        }.getOrNull()
-        if (bluetoothDevice == null) {
-            _state.update { it.copy(connection = ConnectionState.FAILED) }
-            return
-        }
-        // TRANSPORT_LE 显式指定:避免双模手机走 BR/EDR 导致连接失败
-        gatt = openGatt(bluetoothDevice)
+        _state.value = CoolerLiveState(connection = ConnectionState.DISCONNECTED)
     }
 
-    /** 诊断模式:手动指定型号连接(不做识别检查) */
-    @SuppressLint("MissingPermission")
-    fun connectRaw(entry: BleScanDiagnostic, type: CoolerDeviceType) {
-        val btDevice = entry.bluetoothDevice
-            ?: bluetoothAdapter?.getRemoteDevice(entry.address)
-            ?: return
-        connect(
-            CoolerDevice(
-                address = btDevice.address,
-                bleName = entry.name ?: btDevice.safeName(),
-                deviceType = type,
-                rssi = entry.rssi,
-                matchedByName = true,
-            )
-        )
-    }
-
-    /** 按 MAC + 型号直连(用于自动模式恢复连接) */
-    @SuppressLint("MissingPermission")
-    fun connectByAddress(macAddress: String, type: CoolerDeviceType) {
-        val device = bluetoothAdapter?.getRemoteDevice(macAddress) ?: run {
-            _state.update { it.copy(connection = ConnectionState.FAILED, deviceType = type) }
-            return
-        }
-        stopScan()
-        disconnectInternal()
-        _state.value = CoolerLiveState(
-            connection = ConnectionState.CONNECTING,
-            connectionSessionId = nextConnectionSessionId.incrementAndGet(),
-            deviceType = type,
-            deviceName = device.safeName() ?: type.deviceName,
-            deviceAddress = macAddress,
-        )
-        gatt = openGatt(device)
-    }
-
-    @SuppressLint("MissingPermission")
-    fun disconnect() {
-        disconnectInternal()
-        _state.update { CoolerLiveState(connection = ConnectionState.DISCONNECTED) }
-    }
-
-    @SuppressLint("MissingPermission")
     private fun disconnectInternal() {
-        // 释放等待中的操作,避免协程悬挂
-        writeWaiter?.complete(BluetoothGatt.GATT_FAILURE)
-        writeWaiter = null
-        readWaiter?.complete(BluetoothGatt.GATT_FAILURE to ByteArray(0))
-        readWaiter = null
-        rssiWaiter?.complete(BluetoothGatt.GATT_FAILURE to 0)
-        rssiWaiter = null
-        descWaiter?.complete(BluetoothGatt.GATT_FAILURE)
-        descWaiter = null
-        fanJob?.cancel()
-        lightJob?.cancel()
-        autoJob?.cancel()
-        pollJob?.cancel()
-        rssiJob?.cancel()
+        val old = session
+        session = null // Must precede waiter completion, cancellation, disconnect and close.
         pendingRgb = null
-        pendingRgbRequestId = null
         _rgbWriteState.value = null
-        gatt?.let {
-            try {
-                it.disconnect()
-                it.close()
-            } catch (e: Exception) {
-                Log.e(TAG, "断开异常: ${e.message}")
-            }
+        if (old == null) return
+        val oldGatt = old.gatt
+        old.gatt = null
+        if (oldGatt != null) operations.abort(oldGatt)
+        old.discoveryJob?.cancel()
+        old.initJob?.cancel()
+        old.timeoutJob?.cancel()
+        old.pollJob?.cancel()
+        old.rssiJob?.cancel()
+        if (oldGatt != null) {
+            runCatching { oldGatt.disconnect() }.onFailure { Log.w(TAG, "disconnect failed", it) }
+            runCatching { oldGatt.close() }.onFailure { Log.w(TAG, "close failed", it) }
         }
-        gatt = null
-        fanChar = null
-        tempChar = null
-        statusChar = null
-        lightChar = null
-        autoChar = null
-        boostChar = null
-        switchChar = null
-        rpmChar = null
-        powerChar = null
-        protectChar = null
     }
 
-    private val gattCallback = object : BluetoothGattCallback() {
-        @SuppressLint("MissingPermission")
-        override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
-            if (gatt !== g) return
-            Log.d(TAG, "onConnectionStateChange status=$status newState=$newState")
+    private fun fail(s: Session, reason: String) {
+        if (session !== s) return
+        Log.w(TAG, reason)
+        val previous = _state.value
+        disconnectInternal()
+        _state.value = CoolerLiveState(
+            connection = ConnectionState.FAILED,
+            connectionSessionId = previous.connectionSessionId,
+            deviceType = previous.deviceType,
+            deviceName = previous.deviceName,
+            deviceAddress = previous.deviceAddress,
+        )
+    }
+
+    private fun armTimeout(s: Session, timeoutMs: Long, reason: String) {
+        s.timeoutJob?.cancel()
+        s.timeoutJob = scope.launch {
+            delay(timeoutMs)
+            if (owns(s)) fail(s, reason)
+        }
+    }
+
+    // Always post, even on Main: connectGatt may callback before returning its GATT.
+    private fun dispatch(s: Session, g: BluetoothGatt, block: () -> Unit) {
+        handler.post { if (owns(s) && s.gatt === g) block() }
+    }
+
+    private fun callbackFor(s: Session) = object : BluetoothGattCallback() {
+        override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) = dispatch(s, g) {
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                fail(s, "Connection callback failed: $status")
+                return@dispatch
+            }
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
+                    if (_state.value.connection != ConnectionState.CONNECTING) return@dispatch
                     _state.update { it.copy(connection = ConnectionState.DISCOVERING) }
-                    // 等待 300ms 再发现服务:部分固件连接后需要缓冲
-                    scope.launch {
+                    armTimeout(s, DISCOVERY_TIMEOUT_MS, "Service discovery timed out")
+                    s.discoveryJob = scope.launch {
                         delay(300)
-                        try {
-                            if (!g.discoverServices()) {
-                                Log.e(TAG, "discoverServices 调用失败")
-                                _state.update { it.copy(connection = ConnectionState.FAILED) }
-                            }
-                        } catch (e: Exception) {
-                            Log.e(TAG, "discoverServices 异常: ${e.message}")
-                            _state.update { it.copy(connection = ConnectionState.FAILED) }
+                        if (!owns(s)) return@launch
+                        s.discoveryRequested = true
+                        if (!runCatching { g.discoverServices() }.getOrDefault(false)) {
+                            fail(s, "Service discovery rejected")
                         }
                     }
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
-                    Log.w(TAG, "连接断开 status=$status")
-                    _state.update { it.copy(connection = ConnectionState.DISCONNECTED) }
-                    disconnectInternal()
+                    if (_state.value.isConnected) {
+                        disconnectInternal()
+                        _state.value = CoolerLiveState(connection = ConnectionState.DISCONNECTED)
+                    } else fail(s, "Disconnected before initialization completed")
                 }
             }
         }
 
-        @SuppressLint("MissingPermission")
-        override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
-            if (gatt !== g) return
-            Log.d(TAG, "onServicesDiscovered status=$status")
+        override fun onServicesDiscovered(g: BluetoothGatt, status: Int) = dispatch(s, g) {
+            if (!s.discoveryRequested || s.initializing || _state.value.connection != ConnectionState.DISCOVERING) return@dispatch
             if (status != BluetoothGatt.GATT_SUCCESS) {
-                _state.update { it.copy(connection = ConnectionState.FAILED) }
-                return
-            }
-            // 服务无关查找:遍历全部服务的全部特征(实测可用方案——
-            // 8 Pro 的服务 UUID 可能与 d52082ad 不同,不能只 getService(主服务))
-            for (svc in g.services) {
-                for (ch in svc.characteristics) {
-                    when (ch.uuid) {
-                        CoolerBleConstants.COOLING_SWITCH_UUID -> switchChar = ch
-                        CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID -> fanChar = ch
-                        CoolerBleConstants.LIGHT_CONTROL_UUID -> lightChar = ch
-                        CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID -> tempChar = ch
-                        CoolerBleConstants.STATUS_UUID -> statusChar = ch
-                        CoolerBleConstants.BOOST_CONTROL_UUID -> boostChar = ch
-                        CoolerBleConstants.AUTO_MODE_CONTROL_UUID -> autoChar = ch
-                        CoolerBleConstants.RPM_UUID -> rpmChar = ch
-                        CoolerBleConstants.POWER_UUID -> powerChar = ch
-                        CoolerBleConstants.PROTECTION_UUID -> protectChar = ch
-                    }
-                }
-            }
-            Log.d(
-                TAG,
-                "特征: switch=${switchChar != null} fan=${fanChar != null} " +
-                    "light=${lightChar != null} temp=${tempChar != null} " +
-                    "status=${statusChar != null} auto=${autoChar != null} " +
-                    "boost=${boostChar != null} rpm=${rpmChar != null} " +
-                    "power=${powerChar != null}",
-            )
-            if (fanChar == null && switchChar == null) {
-                Log.e(TAG, "未找到散热器特征值(1011/1012)")
-                _state.update { it.copy(connection = ConnectionState.FAILED) }
-                return
-            }
-
-            // 先上报已连接,初始化命令在队列中依次执行:
-            // 订阅(开关/温度/状态/转速/功率/灯光) → 写散热开(0x02!) → 读风扇 → 灯光握手 → 待写 RGB
-            _state.update { it.copy(connection = ConnectionState.CONNECTED) }
-            scope.launch { initializeAfterConnect(g) }
-        }
-
-        /** 串行初始化(全部走队列,一个完成才发起下一个) */
-        private suspend fun initializeAfterConnect(g: BluetoothGatt) {
-            switchChar?.let { ch -> enableNotification(g, ch) }
-            tempChar?.let { ch -> if (!enableNotification(g, ch)) Log.w(TAG, "订阅温度通知失败") }
-            statusChar?.let { ch -> enableNotification(g, ch) }
-            rpmChar?.let { ch -> enableNotification(g, ch) }
-            powerChar?.let { ch -> enableNotification(g, ch) }
-            protectChar?.let { ch -> enableNotification(g, ch) }
-            lightChar?.let { ch -> enableNotification(g, ch) }
-            // 关键:写散热总开关 ON(0x02)——不写它风扇不转!
-            switchChar?.let { ch ->
-                val ok = enqueueWrite(g, ch, byteArrayOf(CoolerBleConstants.COOLING_SWITCH_ON))
-                if (ok) _state.update { it.copy(coolingOn = true) } else Log.w(TAG, "散热开关写入失败")
-            }
-            fanChar?.let { ch ->
-                val v = readIfReadable(g, ch)
-                if (v != null) handleData(ch.uuid, v)
-            }
-            tempChar?.let { ch ->
-                val v = readIfReadable(g, ch)
-                if (v != null) handleData(ch.uuid, v)
-            }
-            pendingRgb?.let {
-                applyRgbInternal(it, pendingRgbRequestId)
-                pendingRgb = null
-                pendingRgbRequestId = null
-            }
-            startPollLoop(g)
-        }
-
-        override fun onReadRemoteRssi(g: BluetoothGatt, rssi: Int, status: Int) {
-            if (gatt !== g) return
-            rssiWaiter?.complete(status to rssi)
-            rssiWaiter = null
-            _state.update {
-                it.copy(rssi = if (status == BluetoothGatt.GATT_SUCCESS) rssi else null)
-            }
-        }
-
-        override fun onCharacteristicWrite(
-            g: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic,
-            status: Int,
-        ) {
-            if (gatt !== g) return
-            Log.d(TAG, "onCharacteristicWrite ${characteristic.uuid} status=$status")
-            writeWaiter?.complete(status)
-            writeWaiter = null
-        }
-
-        override fun onDescriptorWrite(g: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
-            if (gatt !== g) return
-            Log.d(TAG, "onDescriptorWrite status=$status")
-            descWaiter?.complete(status)
-            descWaiter = null
-        }
-
-        override fun onCharacteristicRead(
-            g: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic,
-            value: ByteArray,
-            status: Int,
-        ) {
-            if (gatt !== g) return
-            readWaiter?.complete(status to value)
-            readWaiter = null
-            if (status == BluetoothGatt.GATT_SUCCESS) handleRead(characteristic.uuid, value)
-        }
-
-        /** 旧重载：Android 13 以下调用 */
-        @Deprecated("旧系统(Android 13 以下)的回调重载，仅供系统调用")
-        @Suppress("DEPRECATION")
-        override fun onCharacteristicRead(
-            g: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic,
-            status: Int,
-        ) {
-            if (gatt !== g) return
-            readWaiter?.complete(status to (characteristic.value ?: ByteArray(0)))
-            readWaiter = null
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                handleRead(characteristic.uuid, characteristic.value ?: ByteArray(0))
-            }
-        }
-
-        override fun onCharacteristicChanged(
-            g: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic,
-            value: ByteArray,
-        ) {
-            if (gatt !== g) return
-            handleChanged(characteristic.uuid, value)
-        }
-
-        /** 旧重载：Android 13 以下调用 */
-        @Deprecated("旧系统(Android 13 以下)的回调重载，仅供系统调用")
-        @Suppress("DEPRECATION")
-        override fun onCharacteristicChanged(
-            g: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic,
-        ) {
-            if (gatt !== g) return
-            handleChanged(characteristic.uuid, characteristic.value ?: ByteArray(0))
-        }
-
-        private fun handleRead(uuid: UUID, value: ByteArray) {
-            this@CoolerBleManager.handleData(uuid, value)
-        }
-
-        private fun handleChanged(uuid: UUID, value: ByteArray) {
-            this@CoolerBleManager.handleData(uuid, value)
-        }
-    }
-
-    // ────────────────────── GATT 串行队列原语 ──────────────────────
-
-    /** 读回与通知的统一解析入口 */
-    private fun handleData(uuid: UUID, value: ByteArray) {
-        when (uuid) {
-            CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID -> {
-                val temp = parseTemperature(value)
-                if (temp != null) {
-                    lastTempUpdateMs = System.currentTimeMillis()
-                    _state.update { it.copy(temperatureC = temp) }
-                }
-            }
-            CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID -> handleFanValue(value)
-            CoolerBleConstants.LIGHT_CONTROL_UUID -> handleLightValue(value)
-            CoolerBleConstants.COOLING_SWITCH_UUID -> {
-                // 通知: 2=开 3=关
-                val on = value.firstOrNull()?.toInt() == 0x02
-                _state.update { it.copy(coolingOn = on) }
-            }
-            CoolerBleConstants.STATUS_UUID -> handleStatusValue(value)
-            CoolerBleConstants.RPM_UUID -> {
-                parseBigEndianShort(value)?.let { rpm ->
-                    _state.update { it.copy(fanRpm = rpm) }
-                }
-            }
-            CoolerBleConstants.POWER_UUID -> {
-                value.firstOrNull()?.let { w -> _state.update { it.copy(powerW = w.toInt()) } }
-            }
-            CoolerBleConstants.PROTECTION_UUID -> {
-                // bit2 = 过冷保护开;[2]=高阈值 [3]=低阈值(有符号)
-                if (value.isNotEmpty()) {
-                    val on = (value[0].toInt() and 0x04) != 0
-                    _state.update { it.copy(overcoldOn = on) }
-                }
-            }
-            CoolerBleConstants.BOOST_CONTROL_UUID -> {
-                if (value.isNotEmpty()) _state.update { it.copy(boostOn = value[0] == 1.toByte()) }
-            }
-            CoolerBleConstants.AUTO_MODE_CONTROL_UUID -> {
-                if (value.isNotEmpty()) _state.update { it.copy(smartOn = value[0] == 1.toByte()) }
-            }
-        }
-    }
-    private fun handleStatusValue(value: ByteArray) {
-        if (value.isEmpty()) return
-        when (value[0].toInt() and 0xFF) {
-            // 0x04 = 温度!8 Pro 通过 1015 通知包 [0x04, temp] 推送背夹温度
-            // (冰环 handleOfficial847StatusPacket → lastCoolerTemp1015C,实测可用)
-            0x04 -> parseTemperature(value)?.let { temp ->
-                lastTempUpdateMs = System.currentTimeMillis()
-                _state.update { it.copy(temperatureC = temp) }
-            }
-            0x08 -> parseBigEndianShort(value.copyOfRange(1, value.size))?.let { rpm ->
-                _state.update { it.copy(fanRpm = rpm) }
-            }
-            0x09 -> value.getOrNull(1)?.let { w ->
-                _state.update { it.copy(powerW = w.toInt() and 0xFF) }
-            }
-        }
-    }
-
-    private fun handleFanValue(value: ByteArray) {
-        val type = _state.value.deviceType ?: return
-        val raw = value.firstOrNull()?.toInt() ?: return
-        _state.update { it.copy(fanPercent = CoolerBleConstants.rawToPercentage(raw, type)) }
-    }
-
-    /** 灯光状态上报:byte0 = 当前灯效模式 */
-    private fun handleLightValue(value: ByteArray) {
-        _state.update { state ->
-            RGBConfig.fromNotification(value, state.rgb)?.let { state.copy(rgb = it) } ?: state
-        }
-    }
-
-    /** 单次写尝试 */
-    @SuppressLint("MissingPermission")
-    private suspend fun writeOnce(g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray): Boolean {
-        @Suppress("DEPRECATION")
-        ch.value = value
-        // 关键:先登记 waiter 再发起写——否则回调可能在 binder 线程抢先到达,
-        // waiter 永远等不到 → 白白超时(初始化被拖慢、订阅被误判失败)
-        val waiter = CompletableDeferred<Int>()
-        writeWaiter = waiter
-        val accepted = try {
-            @Suppress("DEPRECATION")
-            g.writeCharacteristic(ch)
-        } catch (e: Exception) {
-            Log.e(TAG, "writeCharacteristic 异常: ${e.message}")
-            false
-        }
-        if (!accepted) {
-            writeWaiter = null
-            return false
-        }
-        val status = withTimeoutOrNull(OP_TIMEOUT_MS) { waiter.await() }
-        writeWaiter = null
-        return status == BluetoothGatt.GATT_SUCCESS
-    }
-
-    /**
-     * 串行写:加锁排队,等 onCharacteristicWrite 确认,失败/超时重试一次。
-     * 必须在队列中调用——绝不可直接 gatt.writeCharacteristic。
-     */
-    @SuppressLint("MissingPermission")
-    private suspend fun enqueueWrite(g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray): Boolean =
-        gattMutex.withLock {
-            if (gatt !== g) return@withLock false
-            var ok = writeOnce(g, ch, value)
-            if (!ok) {
-                delay(120)
-                ok = writeOnce(g, ch, value)
-            }
-            if (!ok) Log.e(TAG, "写入失败(重试后) ${ch.uuid} value=${value.toHex()}")
-            delay(OP_SPACING_MS)
-            ok
-        }
-
-    /** 串行读:等待 onCharacteristicRead 携带数据返回;失败/超时重试一次 */
-    @SuppressLint("MissingPermission")
-    private suspend fun enqueueRead(g: BluetoothGatt, ch: BluetoothGattCharacteristic): ByteArray? =
-        gattMutex.withLock {
-            var result = readOnce(g, ch)
-            if (result == null) {
-                delay(120)
-                result = readOnce(g, ch)
-            }
-            if (result == null) Log.w(TAG, "读取失败(重试后) ${ch.uuid}")
-            delay(OP_SPACING_MS)
-            result
-        }
-
-    private suspend fun readOnce(g: BluetoothGatt, ch: BluetoothGattCharacteristic): ByteArray? {
-        val waiter = CompletableDeferred<Pair<Int, ByteArray>>()
-        readWaiter = waiter
-        val accepted = try {
-            g.readCharacteristic(ch)
-        } catch (e: Exception) {
-            Log.e(TAG, "readCharacteristic 异常: ${e.message}")
-            false
-        }
-        if (!accepted) {
-            readWaiter = null
-            return null
-        }
-        val (status, value) = withTimeoutOrNull(READ_TIMEOUT_MS) { waiter.await() }
-            ?: (BluetoothGatt.GATT_FAILURE to ByteArray(0))
-        readWaiter = null
-        return if (status == BluetoothGatt.GATT_SUCCESS) value else null
-    }
-
-    /**
-     * 串行订阅通知:按特征属性决定 CCCD 值(实测可用方案:冰环对 NOTIFY 用
-     * 通知值、INDICATE 用指示值,无两者属性则跳过——乱写会被设备拒收)。
-     * 先登记 waiter 再写描述符(防回调竞态),失败/超时重试一次。
-     */
-    @SuppressLint("MissingPermission")
-    private suspend fun enableNotification(g: BluetoothGatt, ch: BluetoothGattCharacteristic): Boolean =
-        gattMutex.withLock {
-            val props = ch.properties
-            val hasNotify = props and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0
-            val hasIndicate = props and BluetoothGattCharacteristic.PROPERTY_INDICATE != 0
-            if (!hasNotify && !hasIndicate) {
-                Log.d(TAG, "特征 ${ch.uuid} 无通知/指示属性,跳过订阅")
-                return@withLock true
+                fail(s, "Service discovery failed: $status")
+                return@dispatch
             }
             try {
-                g.setCharacteristicNotification(ch, true)
-            } catch (e: Exception) {
-                Log.e(TAG, "setCharacteristicNotification 异常: ${e.message}")
-            }
-            val descriptor = ch.getDescriptor(CCC_DESCRIPTOR_UUID)
-            if (descriptor == null) {
-                Log.w(TAG, "特征 ${ch.uuid} 无 CCC 描述符")
-                return@withLock false
-            }
-            var ok = subscribeOnce(g, descriptor, hasIndicate)
-            if (!ok) {
-                delay(120)
-                ok = subscribeOnce(g, descriptor, hasIndicate)
-            }
-            delay(OP_SPACING_MS)
-            if (!ok) Log.e(TAG, "订阅通知失败(重试后) ${ch.uuid}")
-            ok
-        }
-
-    private suspend fun subscribeOnce(
-        g: BluetoothGatt,
-        descriptor: BluetoothGattDescriptor,
-        useIndication: Boolean,
-    ): Boolean {
-        @Suppress("DEPRECATION")
-        descriptor.value = if (useIndication) {
-            BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
-        } else {
-            BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-        }
-        val waiter = CompletableDeferred<Int>()
-        descWaiter = waiter
-        val accepted = try {
-            @Suppress("DEPRECATION")
-            g.writeDescriptor(descriptor)
-        } catch (e: Exception) {
-            Log.e(TAG, "writeDescriptor 异常: ${e.message}")
-            false
-        }
-        if (!accepted) {
-            descWaiter = null
-            return false
-        }
-        val status = withTimeoutOrNull(OP_TIMEOUT_MS) { waiter.await() }
-        descWaiter = null
-        return status == BluetoothGatt.GATT_SUCCESS
-    }
-
-    // ──────────────────────────── 控制 ────────────────────────────
-
-    /** 仅当特征具备读属性时才读(避免读只通知特征导致队列长时间超时) */
-    @SuppressLint("MissingPermission")
-    private suspend fun readIfReadable(g: BluetoothGatt, ch: BluetoothGattCharacteristic?): ByteArray? {
-        if (ch == null) return null
-        val props = ch.properties
-        if (props and BluetoothGattCharacteristic.PROPERTY_READ == 0) return null
-        return enqueueRead(g, ch)
-    }
-
-    /**
-     * 状态轮询循环(实测可用方案):8 Pro 的温度/转速/功率不主动推送,
-     * 需周期性 readCharacteristic 拉取。每轮串行读各状态特征,间隔 500ms。
-     * 有控制写入(档位/灯光/智能)待执行时本轮让位,避免控制命令排队延迟。
-     */
-    @SuppressLint("MissingPermission")
-    private fun startPollLoop(g: BluetoothGatt) {
-        pollJob?.cancel()
-        lastTempUpdateMs = System.currentTimeMillis() // 连接时重置,给自愈 6s 宽限期
-        pollJob = scope.launch {
-            while (isActive && gatt === g) {
-                try {
-                    val controlBusy = fanJob?.isActive == true ||
-                        lightJob?.isActive == true ||
-                        autoJob?.isActive == true
-                    if (!controlBusy) {
-                        tempChar?.let { ch -> readIfReadable(g, ch)?.let { handleData(ch.uuid, it) } }
-                        statusChar?.let { ch -> readIfReadable(g, ch)?.let { handleData(ch.uuid, it) } }
-                        rpmChar?.let { ch -> readIfReadable(g, ch)?.let { handleData(ch.uuid, it) } }
-                        powerChar?.let { ch -> readIfReadable(g, ch)?.let { handleData(ch.uuid, it) } }
-                        fanChar?.let { ch -> readIfReadable(g, ch)?.let { handleData(ch.uuid, it) } }
-                        protectChar?.let { ch -> readIfReadable(g, ch)?.let { handleData(ch.uuid, it) } }
-
-                        // 自愈:温度断流超 6s(读不出+通知不来)→ 重订阅温度特征再补读。
-                        // 覆盖「订阅竞态失败后通知哑火」「读返回空」等场景。
-                        if (lastTempUpdateMs > 0 &&
-                            System.currentTimeMillis() - lastTempUpdateMs > 6000
-                        ) {
-                            Log.w(TAG, "温度断流超过 6s,尝试重订阅 + 补读")
-                            tempChar?.let { ch ->
-                                enableNotification(g, ch)
-                                readIfReadable(g, ch)?.let { handleData(ch.uuid, it) }
-                            }
-                            statusChar?.let { ch ->
-                                enableNotification(g, ch)
-                                readIfReadable(g, ch)?.let { handleData(ch.uuid, it) }
-                            }
-                            // 即便这次没读到也刷新宽限期,避免每轮都重订阅
-                            lastTempUpdateMs = System.currentTimeMillis() - 4000
-                        }
+                for (service in g.services) for (ch in service.characteristics) {
+                    s.characteristics.putIfAbsent(ch.uuid, ch)
+                }
+                if (s.characteristics[CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID] == null &&
+                    s.characteristics[CoolerBleConstants.COOLING_SWITCH_UUID] == null
+                ) {
+                    fail(s, "Missing cooler characteristics (1011/1012)")
+                    return@dispatch
+                }
+                s.initializing = true
+                armTimeout(s, INIT_TIMEOUT_MS, "Initialization timed out")
+                s.initJob = scope.launch {
+                    try {
+                        initialize(s)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Initialization failed", e)
+                        fail(s, "Initialization exception")
                     }
-                } catch (e: Exception) {
-                    // 任何解析/IO 异常都不能杀死轮询循环
-                    Log.e(TAG, "轮询轮次异常: ${e.message}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Could not inspect services", e)
+                fail(s, "Invalid services")
+            }
+        }
+
+        override fun onCharacteristicWrite(g: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) = dispatch(s, g) {
+            operations.complete(g, characteristic, GattOperationQueue.Kind.WRITE, GattOperationQueue.Result(status == BluetoothGatt.GATT_SUCCESS))
+        }
+
+        override fun onDescriptorWrite(g: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) = dispatch(s, g) {
+            operations.complete(g, descriptor, GattOperationQueue.Kind.DESCRIPTOR, GattOperationQueue.Result(status == BluetoothGatt.GATT_SUCCESS))
+        }
+
+        override fun onReadRemoteRssi(g: BluetoothGatt, rssi: Int, status: Int) = dispatch(s, g) {
+            val success = status == BluetoothGatt.GATT_SUCCESS
+            if (operations.complete(g, g, GattOperationQueue.Kind.RSSI, GattOperationQueue.Result(success, rssi = rssi))) {
+                _state.update { it.copy(rssi = rssi.takeIf { success }) }
+            }
+        }
+
+        override fun onCharacteristicRead(g: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray, status: Int) {
+            readCallback(s, g, characteristic, value.copyOf(), status)
+        }
+
+        @Deprecated("Legacy Android callback")
+        @Suppress("DEPRECATION")
+        override fun onCharacteristicRead(g: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
+            // Snapshot Binder-owned mutable bytes before posting.
+            readCallback(s, g, characteristic, characteristic.value?.copyOf() ?: byteArrayOf(), status)
+        }
+
+        override fun onCharacteristicChanged(g: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
+            notificationCallback(s, g, characteristic, value.copyOf())
+        }
+
+        @Deprecated("Legacy Android callback")
+        @Suppress("DEPRECATION")
+        override fun onCharacteristicChanged(g: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+            notificationCallback(s, g, characteristic, characteristic.value?.copyOf() ?: byteArrayOf())
+        }
+    }
+
+    private fun readCallback(s: Session, g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray, status: Int) = dispatch(s, g) {
+        val success = status == BluetoothGatt.GATT_SUCCESS
+        if (operations.complete(g, ch, GattOperationQueue.Kind.READ, GattOperationQueue.Result(success, value)) && success) {
+            handleData(s, ch.uuid, value)
+        }
+    }
+
+    private fun notificationCallback(s: Session, g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray) = dispatch(s, g) {
+        if (s.characteristics[ch.uuid] === ch) handleData(s, ch.uuid, value)
+    }
+
+    private val telemetryUuids = listOf(
+        CoolerBleConstants.COOLING_SWITCH_UUID,
+        CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID,
+        CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID,
+        CoolerBleConstants.STATUS_UUID,
+        CoolerBleConstants.RPM_UUID,
+        CoolerBleConstants.POWER_UUID,
+        CoolerBleConstants.PROTECTION_UUID,
+        CoolerBleConstants.AUTO_MODE_CONTROL_UUID,
+        CoolerBleConstants.BOOST_CONTROL_UUID,
+        CoolerBleConstants.LIGHT_CONTROL_UUID,
+    )
+
+    private suspend fun initialize(s: Session) {
+        for (uuid in telemetryUuids) {
+            if (!owns(s)) return
+            val ch = s.characteristics[uuid] ?: continue
+            val subscribed = enableNotification(s, ch)
+            if (!owns(s)) return
+            if (!subscribed) Log.w(TAG, "Optional subscription unavailable: $uuid")
+        }
+        s.characteristics[CoolerBleConstants.COOLING_SWITCH_UUID]?.let { ch ->
+            if (!owns(s)) return
+            val ok = enqueueWrite(s, ch, byteArrayOf(CoolerBleConstants.COOLING_SWITCH_ON))
+            if (!owns(s)) return
+            if (!ok) { fail(s, "Startup cooling ON failed"); return }
+            _state.update { it.copy(coolingOn = true).withFanMode() }
+        }
+        if (_state.value.deviceType?.supportsRgb == true) {
+            s.characteristics[CoolerBleConstants.LIGHT_CONTROL_UUID]?.let { ch ->
+                if (!owns(s)) return
+                val ok = enqueueWrite(s, ch, byteArrayOf(CoolerBleConstants.LIGHT_QUERY_COMMAND))
+                if (!owns(s)) return
+                if (!ok) Log.w(TAG, "Optional light query rejected")
+            }
+        }
+        for (uuid in telemetryUuids) {
+            if (!owns(s)) return
+            val ch = s.characteristics[uuid] ?: continue
+            val ok = readIfReadable(s, ch)
+            if (!owns(s)) return
+            if (!ok) Log.w(TAG, "Optional initial read unavailable: $uuid")
+        }
+        if (!owns(s)) return
+        s.timeoutJob?.cancel()
+        _state.update { it.copy(connection = ConnectionState.CONNECTED) }
+        if (!ready(s)) return
+        val rgb = pendingRgb
+        pendingRgb = null
+        if (rgb != null) applyRgb(s, rgb)
+        if (!ready(s)) return
+        startPollLoop(s)
+    }
+
+    private fun writable(ch: BluetoothGattCharacteristic): Boolean =
+        ch.properties and (BluetoothGattCharacteristic.PROPERTY_WRITE or BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE) != 0
+
+    private suspend fun enqueueWrite(
+        s: Session,
+        ch: BluetoothGattCharacteristic,
+        value: ByteArray,
+        fresh: () -> Boolean = { true },
+    ): Boolean {
+        val g = s.gatt ?: return false
+        if (!writable(ch)) return false
+        return operations.execute(g, ch, GattOperationQueue.Kind.WRITE, OP_TIMEOUT_MS,
+            isCurrent = { owns(s) && s.characteristics[ch.uuid] === ch && fresh() },
+            start = {
+                @Suppress("DEPRECATION")
+                ch.value = value
+                ch.writeType = if (ch.properties and BluetoothGattCharacteristic.PROPERTY_WRITE != 0) {
+                    BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                } else BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                @Suppress("DEPRECATION")
+                g.writeCharacteristic(ch)
+            },
+        ).success
+    }
+
+    /** Missing read property is a deliberate skip, not a failed read. Data commits only in matching callbacks. */
+    private suspend fun readIfReadable(
+        s: Session,
+        ch: BluetoothGattCharacteristic,
+        fresh: () -> Boolean = { true },
+    ): Boolean {
+        val g = s.gatt ?: return false
+        if (!owns(s) || !fresh()) return false
+        if (ch.properties and BluetoothGattCharacteristic.PROPERTY_READ == 0) return true
+        return operations.execute(g, ch, GattOperationQueue.Kind.READ, READ_TIMEOUT_MS,
+            isCurrent = { owns(s) && s.characteristics[ch.uuid] === ch && fresh() },
+            start = { g.readCharacteristic(ch) },
+        ).success
+    }
+
+    private suspend fun enableNotification(s: Session, ch: BluetoothGattCharacteristic): Boolean {
+        val g = s.gatt ?: return false
+        if (!owns(s)) return false
+        val notify = ch.properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0
+        val indicate = ch.properties and BluetoothGattCharacteristic.PROPERTY_INDICATE != 0
+        if (!notify && !indicate) return true
+        val descriptor = ch.getDescriptor(CCC_DESCRIPTOR_UUID) ?: return false
+        return operations.execute(g, descriptor, GattOperationQueue.Kind.DESCRIPTOR, OP_TIMEOUT_MS,
+            isCurrent = { owns(s) && s.characteristics[ch.uuid] === ch },
+            start = {
+                if (!g.setCharacteristicNotification(ch, true)) false else {
+                    @Suppress("DEPRECATION")
+                    descriptor.value = if (indicate) BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
+                        else BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                    @Suppress("DEPRECATION")
+                    g.writeDescriptor(descriptor)
+                }
+            },
+        ).success
+    }
+
+    private fun startPollLoop(s: Session) {
+        if (!ready(s)) return
+        s.lastTempUpdateMs = SystemClock.elapsedRealtime()
+        s.pollJob = scope.launch {
+            while (isActive && ready(s)) {
+                if (s.controls == 0) {
+                    for (uuid in telemetryUuids.filterNot { it == CoolerBleConstants.LIGHT_CONTROL_UUID }) {
+                        if (!ready(s)) return@launch
+                        val ch = s.characteristics[uuid] ?: continue
+                        readIfReadable(s, ch)
+                        if (!ready(s)) return@launch
+                    }
+                    if (SystemClock.elapsedRealtime() - s.lastTempUpdateMs > 6000) {
+                        for (uuid in listOf(CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID, CoolerBleConstants.STATUS_UUID)) {
+                            if (!ready(s)) return@launch
+                            val ch = s.characteristics[uuid] ?: continue
+                            enableNotification(s, ch)
+                            if (!ready(s)) return@launch
+                            readIfReadable(s, ch)
+                            if (!ready(s)) return@launch
+                        }
+                        s.lastTempUpdateMs = SystemClock.elapsedRealtime() - 4000
+                    }
                 }
                 delay(500)
             }
         }
-        rssiJob?.cancel()
-        rssiJob = scope.launch {
-            while (isActive && gatt === g) {
-                if (readRemoteRssi(g) == null) _state.update { it.copy(rssi = null) }
+        s.rssiJob = scope.launch {
+            while (isActive && ready(s)) {
+                val g = s.gatt ?: return@launch
+                val result = operations.execute(g, g, GattOperationQueue.Kind.RSSI, READ_TIMEOUT_MS,
+                    isCurrent = { ready(s) }, start = { g.readRemoteRssi() })
+                if (!ready(s)) return@launch
+                if (!result.success) _state.update { it.copy(rssi = null) }
                 delay(2000)
             }
         }
     }
 
-    @SuppressLint("MissingPermission")
-    private suspend fun readRemoteRssi(g: BluetoothGatt): Int? = gattMutex.withLock {
-        if (gatt !== g) return@withLock null
-        val waiter = CompletableDeferred<Pair<Int, Int>>()
-        rssiWaiter = waiter
-        val accepted = runCatching { g.readRemoteRssi() }.getOrDefault(false)
-        if (!accepted) {
-            rssiWaiter = null
-            return@withLock null
-        }
-        val (status, rssi) = withTimeoutOrNull(READ_TIMEOUT_MS) { waiter.await() }
-            ?: (BluetoothGatt.GATT_FAILURE to 0)
-        rssiWaiter = null
-        if (status == BluetoothGatt.GATT_SUCCESS) rssi else null
-    }
-
-    /**
-     * 制冷档位百分比(0–100),按型号 raw 范围换算(8 Pro: 40–80)。防抖 150ms。
-     * 滑条拖动高频触发:防抖 150ms,取最终值写一次。
-     */
-    @SuppressLint("MissingPermission")
-    fun setFanSpeed(percent: Int) {
-        val type = _state.value.deviceType ?: return
-        val clamped = percent.coerceIn(0, 100)
-        _state.update { it.copy(fanPercent = clamped) }
-        val g = gatt ?: return
-        val ch = fanChar ?: return
-        fanJob?.cancel()
-        fanJob = scope.launch {
-            delay(150)
-            val raw = CoolerBleConstants.percentageToRaw(clamped, type).toByte()
-            val ok = enqueueWrite(g, ch, byteArrayOf(raw))
-            if (ok) Log.d(TAG, "制冷档位已写入 raw=$raw ($clamped%)")
-        }
-    }
-
-    /** 兼容旧接口:按模式语义分发到独立控制 */
-    @SuppressLint("MissingPermission")
-    fun setFanMode(mode: FanMode) {
-        when (mode) {
-            FanMode.OFF -> setCooling(false)
-            FanMode.MANUAL -> { setCooling(true); setSmart(false) }
-            FanMode.AUTO -> { setCooling(true); setSmart(true) }
-        }
-    }
-
-    /** 散热总开关(1011:0x02 开/0x03 关)——独立于档位/智能 */
-    @SuppressLint("MissingPermission")
-    fun setCooling(on: Boolean) {
-        _state.update {
-            it.copy(
-                coolingOn = on,
-                fanMode = if (!on) FanMode.OFF else if (it.smartOn) FanMode.AUTO else FanMode.MANUAL,
-            )
-        }
-        val g = gatt ?: return
-        val ch = switchChar ?: return
-        autoJob?.cancel()
-        autoJob = scope.launch {
-            val cmd = if (on) CoolerBleConstants.COOLING_SWITCH_ON else CoolerBleConstants.COOLING_SWITCH_OFF
-            val ok = enqueueWrite(g, ch, byteArrayOf(cmd))
-            if (ok) Log.d(TAG, "散热开关已写入 0x%02X".format(cmd))
-        }
-    }
-
-    /** 智能温控(1018:0x01 开/0x00 关,设备自主控制) */
-    @SuppressLint("MissingPermission")
-    fun setSmart(on: Boolean) {
-        _state.update {
-            it.copy(
-                smartOn = on,
-                fanMode = if (on) FanMode.AUTO else if (it.coolingOn) FanMode.MANUAL else FanMode.OFF,
-            )
-        }
-        val g = gatt ?: return
-        val ch = autoChar ?: return
-        autoJob?.cancel()
-        autoJob = scope.launch {
-            val cmd = if (on) CoolerBleConstants.AUTO_MODE_ON else CoolerBleConstants.AUTO_MODE_OFF
-            val ok = enqueueWrite(g, ch, byteArrayOf(cmd))
-            if (ok) Log.d(TAG, "智能温控已写入 0x%02X".format(cmd))
-        }
-    }
-
-    /** 破坏神/Boost 超频(1017:0x01 开/0x00 关) */
-    @SuppressLint("MissingPermission")
-    fun setBoost(on: Boolean) {
-        _state.update { it.copy(boostOn = on) }
-        val g = gatt ?: return
-        val ch = boostChar ?: return
-        scope.launch {
-            val cmd: Byte = if (on) 0x01 else 0x00
-            val ok = enqueueWrite(g, ch, byteArrayOf(cmd))
-            if (ok) Log.d(TAG, "破坏神已写入 0x%02X".format(cmd))
-        }
-    }
-
-    /** 过冷/冷凝保护(101F:[flag,0,高阈值,低阈值],flag = (开?0x04:0)|0x03) */
-    @SuppressLint("MissingPermission")
-    fun setOvercoldProtection(on: Boolean) {
-        _state.update { it.copy(overcoldOn = on) }
-        val g = gatt ?: return
-        val ch = protectChar ?: return
-        scope.launch {
-            val payload = byteArrayOf(
-                if (on) CoolerBleConstants.PROTECTION_FLAG_ON else CoolerBleConstants.PROTECTION_FLAG_OFF,
-                0,
-                CoolerBleConstants.PROTECTION_HIGH_DEFAULT,
-                CoolerBleConstants.PROTECTION_LOW_DEFAULT,
-            )
-            val ok = enqueueWrite(g, ch, payload)
-            if (ok) Log.d(TAG, "过冷保护已写入 ${payload.toHex()}")
-        }
-    }
-
-    /** 设置 RGB 灯效(命令格式见 [RGBConfig.toCommand]),防抖 200ms */
-    @SuppressLint("MissingPermission")
-    fun setRGB(config: RGBConfig) {
-        val requestId = nextRgbRequestId.incrementAndGet()
-        _rgbWriteState.value = RgbWriteState(requestId, config, RgbWriteStatus.WRITING)
-        when (_state.value.connection) {
-            ConnectionState.CONNECTING, ConnectionState.DISCOVERING -> {
-                pendingRgb = config
-                pendingRgbRequestId = requestId
-            }
-            ConnectionState.CONNECTED -> {
-                if (gatt != null && lightChar != null) {
-                    applyRgbInternal(config, requestId)
-                } else {
-                    _rgbWriteState.update { it?.completed(requestId, success = false) }
+    private fun handleData(s: Session, uuid: UUID, value: ByteArray) {
+        if (!owns(s)) return
+        when (uuid) {
+            CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID -> updateTemperature(s, value)
+            CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID -> {
+                val type = _state.value.deviceType ?: return
+                CoolerTelemetryParser.fanPercent(value, type)?.let { percent ->
+                    _state.update { it.copy(fanPercent = percent) }
                 }
             }
-            else -> _rgbWriteState.update { it?.completed(requestId, success = false) }
+            CoolerBleConstants.LIGHT_CONTROL_UUID -> _state.update {
+                RGBConfig.fromNotification(value, it.rgb)?.let { rgb -> it.copy(rgb = rgb) } ?: it
+            }
+            CoolerBleConstants.COOLING_SWITCH_UUID -> _state.update {
+                it.copy(coolingOn = value.firstOrNull()?.toInt() == 0x02).withFanMode()
+            }
+            CoolerBleConstants.STATUS_UUID -> when (CoolerTelemetryParser.unsignedByte(value)) {
+                0x04 -> updateTemperature(s, value)
+                0x08 -> CoolerTelemetryParser.bigEndianShort(value.copyOfRange(1, value.size))?.let { rpm ->
+                    _state.update { it.copy(fanRpm = rpm) }
+                }
+                0x09 -> value.getOrNull(1)?.let { w -> _state.update { it.copy(powerW = w.toInt() and 0xFF) } }
+            }
+            CoolerBleConstants.RPM_UUID -> CoolerTelemetryParser.bigEndianShort(value)?.let { rpm ->
+                _state.update { it.copy(fanRpm = rpm) }
+            }
+            CoolerBleConstants.POWER_UUID -> CoolerTelemetryParser.unsignedByte(value)?.let { w ->
+                _state.update { it.copy(powerW = w) }
+            }
+            CoolerBleConstants.PROTECTION_UUID -> if (value.isNotEmpty()) {
+                _state.update { it.copy(overcoldOn = value[0].toInt() and 0x04 != 0) }
+            }
+            CoolerBleConstants.BOOST_CONTROL_UUID -> if (value.isNotEmpty()) {
+                _state.update { it.copy(boostOn = value[0] == 1.toByte()) }
+            }
+            CoolerBleConstants.AUTO_MODE_CONTROL_UUID -> if (value.isNotEmpty()) {
+                _state.update { it.copy(smartOn = value[0] == 1.toByte()).withFanMode() }
+            }
         }
     }
 
-    @SuppressLint("MissingPermission")
-    private fun applyRgbInternal(config: RGBConfig, requestId: Long?) {
-        if (requestId == null) return
-        val g = gatt
-        val ch = lightChar
-        if (g == null || ch == null) {
-            _rgbWriteState.update { it?.completed(requestId, success = false) }
+    private fun updateTemperature(s: Session, value: ByteArray) {
+        CoolerTelemetryParser.temperature(value)?.let { temp ->
+            s.lastTempUpdateMs = SystemClock.elapsedRealtime()
+            _state.update { it.copy(temperatureC = temp) }
+        }
+    }
+
+    private fun CoolerLiveState.withFanMode(): CoolerLiveState = copy(
+        fanMode = if (!coolingOn) FanMode.OFF else if (smartOn) FanMode.AUTO else FanMode.MANUAL,
+    )
+
+    private class Command(
+        val session: Session,
+        val characteristic: BluetoothGattCharacteristic,
+        val control: Control,
+        val generation: Long,
+    )
+
+    private fun command(control: Control, uuid: UUID): Command? {
+        val s = session ?: return null
+        if (!ready(s)) return null
+        val ch = s.characteristics[uuid]?.takeIf(::writable) ?: return null
+        val generation = (s.generations[control] ?: 0) + 1
+        s.generations[control] = generation
+        return Command(s, ch, control, generation)
+    }
+
+    private fun fresh(command: Command): Boolean = ready(command.session) &&
+        command.session.generations[command.control] == command.generation
+
+    /** No optimistic state: a failed write leaves the last reported/acknowledged value intact. */
+    private suspend fun executeCommand(
+        command: Command,
+        value: ByteArray,
+        debounceMs: Long = 0,
+        commit: (CoolerLiveState) -> CoolerLiveState,
+    ): Boolean {
+        val s = command.session
+        s.controls++
+        try {
+            if (debounceMs > 0) delay(debounceMs)
+            if (!fresh(command)) return false
+            val ok = enqueueWrite(s, command.characteristic, value) { fresh(command) }
+            if (!fresh(command)) return false
+            if (ok) {
+                _state.update(commit)
+            } else {
+                // No optimistic value to roll back. Where supported, reconcile the actual
+                // device value after explicit failure (timeouts already fail the session).
+                readIfReadable(s, command.characteristic) { fresh(command) }
+                if (!fresh(command)) return false
+            }
+            return ok
+        } finally {
+            s.controls--
+        }
+    }
+
+    fun setFanSpeed(percent: Int) = onMain {
+        val command = command(Control.FAN, CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID) ?: return@onMain
+        val type = _state.value.deviceType ?: return@onMain
+        val clamped = percent.coerceIn(0, 100)
+        val raw = CoolerBleConstants.percentageToRaw(clamped, type).toByte()
+        _state.update { it.copy(pendingFanPercent = clamped) }
+        scope.launch {
+            try {
+                executeCommand(command, byteArrayOf(raw), 150) { it.copy(fanPercent = clamped) }
+            } finally {
+                if (fresh(command)) _state.update { it.copy(pendingFanPercent = null) }
+            }
+        }    }
+
+    fun setCooling(on: Boolean) = onMain {
+        val command = command(Control.COOLING, CoolerBleConstants.COOLING_SWITCH_UUID) ?: return@onMain
+        val value = if (on) CoolerBleConstants.COOLING_SWITCH_ON else CoolerBleConstants.COOLING_SWITCH_OFF
+        scope.launch { executeCommand(command, byteArrayOf(value)) { it.copy(coolingOn = on).withFanMode() } }
+    }
+
+    fun setSmart(on: Boolean) = onMain { startSmart(on) }
+
+    /**
+     * True only for a successful GATT callback in the same ready session and latest smart intent.
+     * False when unavailable, superseded or failed. This does not assert firmware readback.
+     * Caller cancellation stops waiting, never cancels the manager-owned command/accepted write.
+     */
+    suspend fun setSmartAndAwait(on: Boolean): Boolean = withContext(Dispatchers.Main.immediate) {
+        startSmart(on)?.await() ?: false
+    }
+
+    private fun startSmart(on: Boolean) = command(Control.SMART, CoolerBleConstants.AUTO_MODE_CONTROL_UUID)?.let { command ->
+        scope.async {
+            val value = if (on) CoolerBleConstants.AUTO_MODE_ON else CoolerBleConstants.AUTO_MODE_OFF
+            executeCommand(command, byteArrayOf(value)) { it.copy(smartOn = on).withFanMode() }
+        }
+    }
+
+    fun setBoost(on: Boolean) = onMain {
+        val command = command(Control.BOOST, CoolerBleConstants.BOOST_CONTROL_UUID) ?: return@onMain
+        scope.launch { executeCommand(command, byteArrayOf(if (on) 1 else 0)) { it.copy(boostOn = on) } }
+    }
+
+    fun setOvercoldProtection(on: Boolean) = onMain {
+        val command = command(Control.PROTECTION, CoolerBleConstants.PROTECTION_UUID) ?: return@onMain
+        val value = byteArrayOf(
+            if (on) CoolerBleConstants.PROTECTION_FLAG_ON else CoolerBleConstants.PROTECTION_FLAG_OFF,
+            0, CoolerBleConstants.PROTECTION_HIGH_DEFAULT, CoolerBleConstants.PROTECTION_LOW_DEFAULT,
+        )
+        scope.launch { executeCommand(command, value) { it.copy(overcoldOn = on) } }
+    }
+
+    fun setRGB(config: RGBConfig) = onMain {
+        val request = RgbWriteState(++nextRgbRequestId, config, RgbWriteStatus.WRITING)
+        _rgbWriteState.value = request
+        when (_state.value.connection) {
+            ConnectionState.CONNECTING, ConnectionState.DISCOVERING -> pendingRgb = request
+            ConnectionState.CONNECTED -> session?.let { applyRgb(it, request) }
+            else -> _rgbWriteState.update { it?.completed(request.requestId, false) }
+        }
+    }
+
+    private fun applyRgb(s: Session, request: RgbWriteState) {
+        if (!ready(s) || _rgbWriteState.value?.requestId != request.requestId) return
+        val command = command(Control.RGB, CoolerBleConstants.LIGHT_CONTROL_UUID)
+        if (command == null) {
+            _rgbWriteState.update { it?.completed(request.requestId, false) }
             return
         }
-        val sessionId = _state.value.connectionSessionId
-        // Superseded debounce jobs exit by request id. Do not cancel an in-flight GATT
-        // write: its late callback could otherwise acknowledge the next queued write.
-        lightJob = scope.launch {
-            delay(200)
-            if (gatt !== g || _rgbWriteState.value?.requestId != requestId) return@launch
-            val cmd = config.toCommand()
-            val ok = enqueueWrite(g, ch, cmd)
-            // A delayed completion must not overwrite a newer draft/connection's result.
-            if (!isActive || gatt !== g || _rgbWriteState.value?.requestId != requestId) return@launch
-            if (ok) {
-                _state.update {
-                    if (it.isConnected && it.connectionSessionId == sessionId) it.copy(rgb = config)
-                    else it
-                }
-                Log.d(TAG, "灯效已写入 ${cmd.toHex()}")
-            } else {
-                Log.w(TAG, "灯效写入失败 ${cmd.toHex()}")
-            }
-            _rgbWriteState.update { it?.completed(requestId, success = ok) }
+        scope.launch {
+            val ok = executeCommand(command, request.config.toCommand(), 200) { it.copy(rgb = request.config) }
+            if (!fresh(command) || _rgbWriteState.value?.requestId != request.requestId) return@launch
+            _rgbWriteState.update { it?.completed(request.requestId, ok) }
         }
     }
 
-    // ──────────────────────────── 工具 ────────────────────────────
+    private fun BluetoothDevice.safeName(): String? = try { name } catch (_: SecurityException) { null }
 
-    /** 大端 16 位无符号解析(payload 长度≥2) */
-    private fun parseBigEndianShort(data: ByteArray): Int? {
-        if (data.size < 2) return null
-        return ((data[0].toInt() and 0xFF) shl 8) or (data[1].toInt() and 0xFF)
-    }
-
-    /**
-     * 解析 1014 温度(多格式兜底,对齐冰环实测方案):
-     * - 单字节:直接就是有符号 °C
-     * - [0x04, temp]:固件 8.4.7 状态包
-     * - [0x08, hi, lo] / 双字节:16 位大端——可能是开尔文也可能是补码 °C,
-     *   两种都试,落在物理合理区间者胜
-     * 最后统一应用官方 App 的显示校准:显示值 = raw − 6。
-     */
-    private fun parseTemperature(data: ByteArray): Float? {
-        val raw = parseTemperatureRaw(data) ?: return null
-        return raw - CoolerBleConstants.TEMPERATURE_OFFSET
-    }
-
-    private fun parseTemperatureRaw(data: ByteArray): Float? {
-        if (data.isEmpty()) return null
-        // 单字节:有符号 °C
-        if (data.size == 1) {
-            return data[0].toFloat().takeIf { it in -40f..80f }
-        }
-        val b0 = data[0].toInt() and 0xFF
-        // [0x04, temp]:官方 8.4.7 状态温度包
-        if (b0 == 0x04) {
-            return data.getOrNull(1)?.toInt()?.toFloat()?.takeIf { it in -40f..80f }
-        }
-        // 16 位大端(tag 0x08 或裸双字节):开尔文 / 补码两种解释
-        if (data.size >= 2) {
-            val be16 = parseBigEndianShort(data)?.let { raw16 ->
-                when {
-                    // 开尔文合理区间 233..353K(−40..80°C)
-                    raw16 in 233..353 -> (raw16 - 273).toFloat()
-                    raw16 in 40..80 -> raw16.toFloat()
-                    else -> null
-                }
-            }
-            if (be16 != null) return be16
-            // 有符号 16 位补码
-            val signed = ((data[0].toInt() shl 8) or (data[1].toInt() and 0xFF)).toShort().toInt()
-            if (signed in -40..80) return signed.toFloat()
-        }
-        // 兜底:首字节按有符号处理
-        return data[0].toInt().toFloat().takeIf { it in -40f..80f }
-    }
-
-    private fun BluetoothDevice.safeName(): String? =
-        try { name } catch (_: SecurityException) { null }
-
-    /** 释放资源(Service 销毁时调用) */
-    fun release() {
-        stopScan()
+    /** Reset transport and published state without destroying the reusable process scope. */
+    fun release() = onMain {
+        stopScanInternal()
         disconnectInternal()
+        _state.value = CoolerLiveState(connection = ConnectionState.DISCONNECTED)
     }
 }
