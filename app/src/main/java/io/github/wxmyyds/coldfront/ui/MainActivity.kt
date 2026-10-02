@@ -9,7 +9,6 @@ import android.content.IntentFilter
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
-import androidx.activity.BackEventCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -49,18 +48,18 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.scaleOut
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -70,6 +69,7 @@ import androidx.navigation.compose.rememberNavController
 import io.github.wxmyyds.coldfront.ble.BlePermissionManager
 import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.ui.component.AppMotion
+import io.github.wxmyyds.coldfront.ui.component.navigationMotionKind
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 import io.github.wxmyyds.coldfront.ui.i18n.rememberStrings
 import io.github.wxmyyds.coldfront.ui.theme.RedmagicCoolerTheme
@@ -192,6 +192,10 @@ private fun routeOrder(route: String?): Int = when (route) {
     else -> 5
 }
 
+private fun routeIsSelected(current: NavDestination?, route: String): Boolean =
+    current?.hierarchy?.any { it.route == route } == true ||
+        (current?.route == Routes.ABOUT && route == Routes.SETTINGS)
+
 private object Routes {
     const val HOME = "home"
     const val DEVICES = "devices"
@@ -247,10 +251,13 @@ private fun AppNav(vm: CoolerViewModel) {
             containerColor = MaterialTheme.colorScheme.background,
             contentWindowInsets = WindowInsets(left = 0.dp, top = 0.dp, right = 0.dp, bottom = 0.dp),
             bottomBar = {
-                if (!useRail && current?.route != Routes.ABOUT) {
+                AnimatedVisibility(
+                    visible = !useRail,
+                    enter = AppMotion.navigationBarEnter(motionScheme),
+                    exit = AppMotion.navigationBarExit(motionScheme),
+                ) {
                     NavigationBar(
-                        modifier = Modifier
-                            .semantics { isTraversalGroup = true },
+                        modifier = Modifier.semantics { isTraversalGroup = true },
                         containerColor = MaterialTheme.colorScheme.background,
                         tonalElevation = 0.dp,
                         windowInsets = WindowInsets.navigationBars.union(
@@ -259,7 +266,7 @@ private fun AppNav(vm: CoolerViewModel) {
                     ) {
                         items.forEach { (route, icon, label) ->
                             NavigationBarItem(
-                                selected = current?.hierarchy?.any { it.route == route } == true,
+                                selected = routeIsSelected(current, route),
                                 onClick = { navigateToTab(route) },
                                 // Label + native selectable semantics announce the destination once.
                                 icon = { Icon(icon, contentDescription = null) },
@@ -278,7 +285,7 @@ private fun AppNav(vm: CoolerViewModel) {
                     // see only remaining insets. The bar uses the real navigation inset, at least 12dp.
                     .consumeWindowInsets(inner),
             ) {
-                if (useRail && current?.route != Routes.ABOUT) {
+                if (useRail) {
                     NavigationRail(
                         modifier = Modifier
                             .fillMaxHeight()
@@ -294,7 +301,7 @@ private fun AppNav(vm: CoolerViewModel) {
                         ) {
                             items.forEach { (route, icon, label) ->
                                 NavigationRailItem(
-                                    selected = current?.hierarchy?.any { it.route == route } == true,
+                                    selected = routeIsSelected(current, route),
                                     onClick = { navigateToTab(route) },
                                     icon = { Icon(icon, contentDescription = null) },
                                     label = { Text(label()) },
@@ -311,36 +318,65 @@ private fun AppNav(vm: CoolerViewModel) {
                         navController = nav,
                         startDestination = Routes.HOME,
                         enterTransition = {
-                            val forward = routeOrder(targetState.destination.route) >= routeOrder(initialState.destination.route)
-                            AppMotion.pageEnter(forward = forward, motionScheme = motionScheme)
+                            val initialRoute = initialState.destination.route
+                            val targetRoute = targetState.destination.route
+                            val kind = navigationMotionKind(
+                                initialIsSecondary = isSecondaryRoute(initialRoute),
+                                targetIsSecondary = isSecondaryRoute(targetRoute),
+                            )
+                            AppMotion.pageEnter(
+                                kind = kind,
+                                forward = routeOrder(targetRoute) >= routeOrder(initialRoute),
+                                motionScheme = motionScheme,
+                            )
                         },
                         exitTransition = {
-                            val forward = routeOrder(targetState.destination.route) >= routeOrder(initialState.destination.route)
-                            AppMotion.pageExit(forward = forward, motionScheme = motionScheme)
+                            val initialRoute = initialState.destination.route
+                            val targetRoute = targetState.destination.route
+                            val kind = navigationMotionKind(
+                                initialIsSecondary = isSecondaryRoute(initialRoute),
+                                targetIsSecondary = isSecondaryRoute(targetRoute),
+                            )
+                            AppMotion.pageExit(
+                                kind = kind,
+                                forward = routeOrder(targetRoute) >= routeOrder(initialRoute),
+                                motionScheme = motionScheme,
+                            )
                         },
                         popEnterTransition = {
-                            if (predictiveBack && isSecondaryRoute(initialState.destination.route)) {
-                                val forward = routeOrder(targetState.destination.route) >= routeOrder(initialState.destination.route)
-                                AppMotion.pageEnter(forward = forward, motionScheme = motionScheme)
-                            } else EnterTransition.None
+                            val initialRoute = initialState.destination.route
+                            val targetRoute = targetState.destination.route
+                            val kind = navigationMotionKind(
+                                initialIsSecondary = isSecondaryRoute(initialRoute),
+                                targetIsSecondary = isSecondaryRoute(targetRoute),
+                            )
+                            AppMotion.pageEnter(
+                                kind = kind,
+                                forward = routeOrder(targetRoute) >= routeOrder(initialRoute),
+                                motionScheme = motionScheme,
+                            )
                         },
                         popExitTransition = {
-                            if (predictiveBack && isSecondaryRoute(initialState.destination.route)) {
-                                val forward = routeOrder(targetState.destination.route) >= routeOrder(initialState.destination.route)
-                                AppMotion.pageExit(forward = forward, motionScheme = motionScheme)
-                            } else ExitTransition.None
+                            val initialRoute = initialState.destination.route
+                            val targetRoute = targetState.destination.route
+                            val kind = navigationMotionKind(
+                                initialIsSecondary = isSecondaryRoute(initialRoute),
+                                targetIsSecondary = isSecondaryRoute(targetRoute),
+                            )
+                            AppMotion.pageExit(
+                                kind = kind,
+                                forward = routeOrder(targetRoute) >= routeOrder(initialRoute),
+                                motionScheme = motionScheme,
+                            )
                         },
-                        predictivePopEnterTransition = { EnterTransition.None },
+                        predictivePopEnterTransition = {
+                            if (predictiveBack && isSecondaryRoute(initialState.destination.route)) {
+                                AppMotion.predictivePopEnter(motionScheme)
+                            } else EnterTransition.None
+                        },
                         predictivePopExitTransition = { swipeEdge ->
                             if (predictiveBack && isSecondaryRoute(initialState.destination.route)) {
-                                scaleOut(
-                                    animationSpec = motionScheme.defaultSpatialSpec(),
-                                    targetScale = 0.93f,
-                                    transformOrigin = TransformOrigin(
-                                        pivotFractionX = if (swipeEdge == BackEventCompat.EDGE_LEFT) 0f else 1f,
-                                        pivotFractionY = 0.5f,
-                                    ),
-                                )
+                                AppMotion.predictivePopExit(swipeEdge, motionScheme)
                             } else ExitTransition.None
                         },
                         // Constrain the child, not the weighted slot: retain centering on wide windows.
