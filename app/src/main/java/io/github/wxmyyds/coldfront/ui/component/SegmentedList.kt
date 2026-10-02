@@ -3,16 +3,19 @@
 package io.github.wxmyyds.coldfront.ui.component
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
@@ -47,9 +50,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.round
 
 /**
  * MD3E 分段选项列表 —— ColdFront 自有实现。
@@ -392,8 +398,9 @@ fun SegmentedSwitchRow(
  * 下拉选择行：整行点击弹菜单，trailing 显示当前值 + 下拉箭头。
  *
  * 菜单用 MD3E 表达性组件栈（[DropdownMenuPopup] + [DropdownMenuGroup] +
- * [SelectableDropdownMenuItem]）：选项呈 2dp 间隔的独立胶囊，选中项带原生勾选图标，
- * 形状/间距/选中色/状态层都由 Material 组件负责，不再手写 Row 拼装。
+ * [SelectableDropdownMenuItem]），并参考 KernelSU 的设置下拉交互：选项连成一体
+ * （分段形状、无间隙），选中项以展开动画的勾选图标强调；菜单锚定在手指按下的
+ * 位置展开，选项从按压点生长出来。
  */
 @Composable
 fun <T> SegmentedDropdownRow(
@@ -410,10 +417,21 @@ fun <T> SegmentedDropdownRow(
     leadingContent: (@Composable () -> Unit)? = null,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var pressPosition by remember { mutableStateOf(IntOffset.Zero) }
     val haptic = LocalHapticFeedback.current
     val selectedLabel = options.firstOrNull { it == selected }?.let(optionLabel).orEmpty()
 
-    Box(modifier = modifier) {
+    Box(
+        modifier = modifier
+            // 只观察手指落点（不消费事件，不影响行的点击/涟漪），
+            // 让菜单从按压位置展开，而不是固定在行首。
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    pressPosition = down.position.round()
+                }
+            }
+    ) {
         SegmentedRow(
             title = title,
             enabled = enabled,
@@ -436,21 +454,31 @@ fun <T> SegmentedDropdownRow(
                 )
             },
         )
-        SingleChoiceDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            options = options,
-            selected = selected,
-            onSelect = onSelect,
-            optionLabel = optionLabel,
-            haptic = haptic,
-        )
+        // 零尺寸锚点：偏移到按压位置，弹窗据此定位
+        Box(
+            modifier = Modifier.offset { IntOffset(pressPosition.x, pressPosition.y) },
+        ) {
+            SingleChoiceDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                options = options,
+                selected = selected,
+                onSelect = onSelect,
+                optionLabel = optionLabel,
+                haptic = haptic,
+            )
+        }
     }
 }
 
 /**
- * MD3E 单选下拉菜单：选项按 2dp 间隔排成独立胶囊行，选中项显示勾选图标。
- * 容器色/形状/阴影/动势全部使用 [DropdownMenuPopup] 的 Material 默认值。
+ * MD3E 单选下拉菜单，参考 KernelSU 的设置菜单项设计：
+ *
+ * - 选项连成一体：组容器负责外圆角，项用分段形状（首尾圆角、中间贴合），无间隙；
+ * - 选中项：默认 selectable 配色（容器轻微着色 + 文字转强调色），勾选图标带
+ *   横向展开 + 淡入动画，作为选中强调；
+ * - 按压反馈、涟漪、文字垂直居中、左右内边距与行高全部由 M3 组件默认值提供，
+ *   并自动适配本项目的浅色/深色/动态取色 ColorScheme。
  */
 @Composable
 private fun <T> SingleChoiceDropdownMenu(
@@ -466,11 +494,12 @@ private fun <T> SingleChoiceDropdownMenu(
         expanded = expanded,
         onDismissRequest = onDismissRequest,
     ) {
-        DropdownMenuGroup(shapes = MenuDefaults.groupShape(0, 1)) {
+        DropdownMenuGroup(
+            shapes = MenuDefaults.groupShape(0, 1),
+            // 长菜单可滚动，避免选项溢出屏幕
+            modifier = Modifier.verticalScroll(rememberScrollState()),
+        ) {
             options.forEachIndexed { index, option ->
-                if (index > 0) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                }
                 SelectableDropdownMenuItem(
                     selected = option == selected,
                     onClick = {
@@ -479,8 +508,16 @@ private fun <T> SingleChoiceDropdownMenu(
                         onSelect(option)
                     },
                     text = { Text(optionLabel(option)) },
-                    // 项间有 2dp 间隔，每项是独立胶囊，用 standalone 形状
-                    shapes = MenuDefaults.itemShape(0, 1),
+                    // 连续分段形状：首尾项外圆角，中间项内角贴合
+                    shapes = MenuDefaults.itemShape(index, options.size),
+                    // 选中勾选图标：组件自带 expandHorizontally + fadeIn 动画
+                    selectedLeadingIcon = {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(MenuDefaults.LeadingIconSize),
+                        )
+                    },
                 )
             }
         }
