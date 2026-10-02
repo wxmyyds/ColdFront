@@ -1,8 +1,9 @@
 package io.github.wxmyyds.coldfront.ble
 
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleObserver
 import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.LifecycleRegistry
 import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -28,48 +29,63 @@ class BackgroundResumeTest {
         }
     }
 
-    private class FakeOwner : LifecycleOwner {
-        val registry = LifecycleRegistry(this)
-        override val lifecycle: Lifecycle get() = registry
+    /** Plain JVM Lifecycle: no main-thread check, so LifecycleRegistry cannot be used here. */
+    private class FakeLifecycle : Lifecycle() {
+        private val observers = mutableListOf<LifecycleObserver>()
+        override val currentState: State get() = State.CREATED
+        override fun addObserver(observer: LifecycleObserver) {
+            if (observer !in observers) observers += observer
+        }
+
+        override fun removeObserver(observer: LifecycleObserver) {
+            observers -= observer
+        }
+
+        fun dispatch(event: Event) {
+            val owner = object : LifecycleOwner {
+                override val lifecycle: Lifecycle get() = this@FakeLifecycle
+            }
+            observers.forEach { (it as? LifecycleEventObserver)?.onStateChanged(owner, event) }
+        }
     }
 
     @Test
     fun `first start only arms, later start resumes a stored loss exactly once`() = runTest {
-        val owner = FakeOwner()
+        val lifecycle = FakeLifecycle()
         val store = FakeStore(BackgroundLinkLoss(TEST_MAC, CoolerDeviceType.JACKET_8_PRO))
         val dialed = mutableListOf<Pair<String, CoolerDeviceType>>()
         val resume = BackgroundResume(
-            lifecycle = owner.lifecycle, scope = this, store = store,
+            lifecycle = lifecycle, scope = this, store = store,
             hasRunningSession = { false },
             connect = { address, type -> dialed += address to type },
         )
-        resume.attach(owner)
+        resume.attach()
 
-        owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_START) // process creation: arm only
+        lifecycle.dispatch(Lifecycle.Event.ON_START) // process creation: arm only
         assertEquals(0, dialed.size)
         assertEquals(0, store.consumed)
 
-        owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_START) // real background return
+        lifecycle.dispatch(Lifecycle.Event.ON_START) // real background return
         assertEquals(listOf(TEST_MAC to CoolerDeviceType.JACKET_8_PRO), dialed)
         assertEquals(1, store.consumed)
 
-        owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_START) // no second dial
+        lifecycle.dispatch(Lifecycle.Event.ON_START) // no second dial
         assertEquals(1, dialed.size)
     }
 
     @Test
     fun `resume is skipped when a session is already running and record is cleared`() = runTest {
-        val owner = FakeOwner()
+        val lifecycle = FakeLifecycle()
         val store = FakeStore(BackgroundLinkLoss(TEST_MAC, CoolerDeviceType.JACKET_8_PRO))
         val dialed = mutableListOf<Pair<String, CoolerDeviceType>>()
         val resume = BackgroundResume(
-            lifecycle = owner.lifecycle, scope = this, store = store,
+            lifecycle = lifecycle, scope = this, store = store,
             hasRunningSession = { true },
             connect = { address, type -> dialed += address to type },
         )
-        resume.attach(owner)
-        owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_START)
-        owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+        resume.attach()
+        lifecycle.dispatch(Lifecycle.Event.ON_START)
+        lifecycle.dispatch(Lifecycle.Event.ON_START)
         assertEquals(0, dialed.size)
         assertEquals(1, store.cleared)
         assertTrue(store.consumed > 0)
@@ -77,35 +93,35 @@ class BackgroundResumeTest {
 
     @Test
     fun `explicit clear prevents any resume`() = runTest {
-        val owner = FakeOwner()
+        val lifecycle = FakeLifecycle()
         val store = FakeStore(BackgroundLinkLoss(TEST_MAC, CoolerDeviceType.JACKET_8_PRO))
         var dialed = false
         val resume = BackgroundResume(
-            lifecycle = owner.lifecycle, scope = this, store = store,
+            lifecycle = lifecycle, scope = this, store = store,
             hasRunningSession = { false },
             connect = { _, _ -> dialed = true },
         )
         store.clearLinkLoss()
-        resume.attach(owner)
-        owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_START)
-        owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+        resume.attach()
+        lifecycle.dispatch(Lifecycle.Event.ON_START)
+        lifecycle.dispatch(Lifecycle.Event.ON_START)
         assertFalse(dialed)
     }
 
     @Test
     fun `detach stops observing lifecycle`() = runTest {
-        val owner = FakeOwner()
+        val lifecycle = FakeLifecycle()
         val store = FakeStore(BackgroundLinkLoss(TEST_MAC, CoolerDeviceType.JACKET_8_PRO))
         var dialed = false
         val resume = BackgroundResume(
-            lifecycle = owner.lifecycle, scope = this, store = store,
+            lifecycle = lifecycle, scope = this, store = store,
             hasRunningSession = { false },
             connect = { _, _ -> dialed = true },
         )
-        resume.attach(owner)
-        owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_START)
-        resume.detach(owner)
-        owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+        resume.attach()
+        lifecycle.dispatch(Lifecycle.Event.ON_START)
+        resume.detach()
+        lifecycle.dispatch(Lifecycle.Event.ON_START)
         assertFalse(dialed)
     }
 
