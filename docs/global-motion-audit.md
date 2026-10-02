@@ -22,7 +22,7 @@ References:
 | Scan/About back | Pop motion was disabled when the predictive-back preference was off | Normal pop always uses the symmetric detail return; the preference only gates predictive gesture transforms |
 | Predictive Back | Incoming page was static and outgoing page only scaled | Navigation Compose owns the gesture progress; the previous page reveals shallowly and the outgoing page follows the active edge with restrained scale |
 | Bottom navigation | About removed the navigation surface immediately, changing the content viewport | Keep the global navigation surface present; animate its visibility for compact/rail layout changes and keep Settings selected while About is open |
-| Large to small title | Page shell did not explicitly retain the top-app-bar state/behavior objects | Keep one `LargeFlexibleTopAppBar` title slot and its built-in position/type/height morph; remember the saveable app-bar state and behavior across recompositions |
+| Large to small title | Page shell did not explicitly retain the top-app-bar state/behavior objects | Keep one `LargeFlexibleTopAppBar` title slot and its built-in position/type/height morph; use a remembered saveable app-bar state as the stable input to the scroll behavior. |
 | Dialogs, menus, switches, sliders | Material already owns motion; extra wrappers risk double feedback | Keep native Material motion; do not layer custom transitions |
 | BLE values and sorted scan results | Frequent updates could continually retarget animations | Keep readings, slider drag values, and scan ordering immediate |
 | Home connection / device empty state | Discrete content replacement can jump | Retain state-targeted `AnimatedContent`; its targets are coarse UI states, not high-frequency telemetry |
