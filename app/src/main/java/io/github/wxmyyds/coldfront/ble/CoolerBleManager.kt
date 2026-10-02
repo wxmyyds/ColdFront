@@ -631,7 +631,11 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         ).success
     }
 
-    private suspend fun enableNotification(s: Session, ch: BluetoothGattCharacteristic): Boolean {
+    private suspend fun enableNotification(
+        s: Session,
+        ch: BluetoothGattCharacteristic,
+        poisonOnTimeout: Boolean = true,
+    ): Boolean {
         val g = s.gatt ?: return false
         if (!owns(s)) return false
         val notify = ch.properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0
@@ -649,6 +653,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                     g.writeDescriptor(descriptor)
                 }
             },
+            poisonOnTimeout = poisonOnTimeout,
         ).success
     }
 
@@ -706,7 +711,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             for (uuid in listOf(CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID, CoolerBleConstants.STATUS_UUID)) {
                 if (!ready(s)) return accepted
                 val ch = s.characteristics[uuid] ?: continue
-                enableNotification(s, ch)
+                enableNotification(s, ch, poisonOnTimeout = false)
                 if (!ready(s)) return accepted
                 if (readIfReadable(s, ch, poisonOnTimeout = false)) accepted = true
                 if (!ready(s)) return accepted
@@ -815,7 +820,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             } else {
                 // No optimistic value to roll back. Where supported, reconcile the actual
                 // device value after explicit failure (timeouts already fail the session).
-                readIfReadable(s, command.characteristic) { fresh(command) }
+                readIfReadable(s, command.characteristic, fresh = { fresh(command) })
                 if (!fresh(command)) return false
             }
             return ok
