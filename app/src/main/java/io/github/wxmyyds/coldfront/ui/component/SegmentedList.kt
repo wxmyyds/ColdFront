@@ -2,17 +2,23 @@
 
 package io.github.wxmyyds.coldfront.ui.component
 
-import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -50,6 +56,7 @@ import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -247,8 +254,10 @@ fun SegmentedGroup(
     title: String? = null,
     content: SegmentedGroupScope.() -> Unit,
 ) {
-    val visible = SegmentedGroupScope().apply(content).entries.filter { it.visible }
-    if (visible.isEmpty()) return
+    val entries = SegmentedGroupScope().apply(content).entries
+    val visibleCount = entries.count { it.visible }
+    if (visibleCount == 0) return
+    val motionScheme = MaterialTheme.motionScheme
 
     Column(modifier = modifier) {
         if (!title.isNullOrEmpty()) {
@@ -259,18 +268,58 @@ fun SegmentedGroup(
                 modifier = Modifier.padding(start = 16.dp, bottom = 8.dp),
             )
         }
-        Column(
-            modifier = Modifier.animateContentSize(
-                MaterialTheme.motionScheme.defaultSpatialSpec<IntSize>(),
-            ),
-            verticalArrangement = Arrangement.spacedBy(SegmentedRowGap),
-        ) {
-            visible.forEachIndexed { index, entry ->
+        Column {
+            entries.forEachIndexed { index, entry ->
+                val visibleIndex = entries.take(index).count { it.visible }
+                val topSpacing by animateDpAsState(
+                    targetValue = if (entry.visible && visibleIndex > 0) SegmentedRowGap else 0.dp,
+                    animationSpec = motionScheme.defaultSpatialSpec(),
+                    label = "segmentedRowSpacing",
+                )
+                val topRadius by animateDpAsState(
+                    targetValue = if (visibleIndex == 0) 16.dp else 4.dp,
+                    animationSpec = motionScheme.defaultSpatialSpec(),
+                    label = "segmentedRowTopRadius",
+                )
+                val bottomRadius by animateDpAsState(
+                    targetValue = if (visibleIndex == visibleCount - 1) 16.dp else 4.dp,
+                    animationSpec = motionScheme.defaultSpatialSpec(),
+                    label = "segmentedRowBottomRadius",
+                )
+                val rowShape = RoundedCornerShape(
+                    topStart = topRadius,
+                    topEnd = topRadius,
+                    bottomStart = bottomRadius,
+                    bottomEnd = bottomRadius,
+                )
+                val morphEnabled = segmentedGroupPressMorph(visibleCount)
+                val rowShapes = ListItemDefaults.shapes(
+                    shape = rowShape,
+                    selectedShape = rowShape,
+                    pressedShape = if (morphEnabled) MaterialTheme.shapes.large else rowShape,
+                    focusedShape = if (morphEnabled) MaterialTheme.shapes.large else rowShape,
+                    hoveredShape = if (morphEnabled) MaterialTheme.shapes.medium else rowShape,
+                )
                 key(entry.key) {
-                    CompositionLocalProvider(
-                        LocalSegmentedShapes provides segmentedRowShapes(index, visible.size),
+                    AnimatedVisibility(
+                        visible = entry.visible,
+                        enter = expandVertically(
+                            animationSpec = motionScheme.defaultSpatialSpec<IntSize>(),
+                        ) + fadeIn(
+                            animationSpec = motionScheme.defaultEffectsSpec<Float>(),
+                        ),
+                        exit = shrinkVertically(
+                            animationSpec = motionScheme.defaultSpatialSpec<IntSize>(),
+                        ) + fadeOut(
+                            animationSpec = motionScheme.defaultEffectsSpec<Float>(),
+                        ),
                     ) {
-                        entry.content()
+                        Column {
+                            Spacer(Modifier.height(topSpacing))
+                            CompositionLocalProvider(LocalSegmentedShapes provides rowShapes) {
+                                entry.content()
+                            }
+                        }
                     }
                 }
             }

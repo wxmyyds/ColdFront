@@ -5,18 +5,98 @@ import org.junit.Test
 
 class NavigationMotionKindTest {
     @Test
-    fun rootToSecondaryUsesDetailPush() {
+    fun pushToSecondaryUsesDetailPush() {
         assertEquals(
             NavigationMotionKind.PushDetail,
-            navigationMotionKind(initialIsSecondary = false, targetIsSecondary = true),
+            navigationMotionKind(
+                isPop = false,
+                initialIsSecondary = false,
+                targetIsSecondary = true,
+            ),
         )
     }
 
     @Test
-    fun secondaryToRootUsesReverseDetailPop() {
+    fun popFromSecondaryUsesReverseDetailMotion() {
         assertEquals(
             NavigationMotionKind.PopDetail,
-            navigationMotionKind(initialIsSecondary = true, targetIsSecondary = false),
+            navigationMotionKind(
+                isPop = true,
+                initialIsSecondary = true,
+                targetIsSecondary = false,
+            ),
+        )
+    }
+
+    @Test
+    fun navigatingFromDetailToRootIsNotMisclassifiedAsPop() {
+        assertEquals(
+            NavigationMotionKind.TopLevel,
+            navigationMotionKind(
+                isPop = false,
+                initialIsSecondary = true,
+                targetIsSecondary = false,
+            ),
+        )
+    }
+
+    @Test
+    fun predictiveBackRequiresASecondaryCurrentDestinationAndTopLevelParent() {
+        val roots = setOf("home", "devices", "rgb", "settings")
+
+        assertEquals(
+            true,
+            shouldUsePredictivePop(
+                predictiveBackEnabled = true,
+                currentRoute = "about",
+                previousRoute = "settings",
+                topLevelRoutes = roots,
+            ),
+        )
+        assertEquals(
+            true,
+            shouldUsePredictivePop(
+                predictiveBackEnabled = true,
+                currentRoute = "scan",
+                previousRoute = "devices",
+                topLevelRoutes = roots,
+            ),
+        )
+        assertEquals(
+            false,
+            shouldUsePredictivePop(
+                predictiveBackEnabled = true,
+                currentRoute = "about",
+                previousRoute = "scan",
+                topLevelRoutes = roots,
+            ),
+        )
+        assertEquals(
+            false,
+            shouldUsePredictivePop(
+                predictiveBackEnabled = true,
+                currentRoute = "settings",
+                previousRoute = "home",
+                topLevelRoutes = roots,
+            ),
+        )
+        assertEquals(
+            false,
+            shouldUsePredictivePop(
+                predictiveBackEnabled = true,
+                currentRoute = "home",
+                previousRoute = null,
+                topLevelRoutes = roots,
+            ),
+        )
+        assertEquals(
+            false,
+            shouldUsePredictivePop(
+                predictiveBackEnabled = false,
+                currentRoute = "about",
+                previousRoute = "settings",
+                topLevelRoutes = roots,
+            ),
         )
     }
 
@@ -24,11 +104,64 @@ class NavigationMotionKindTest {
     fun transitionsWithinSameLayerUseTopLevelMotion() {
         assertEquals(
             NavigationMotionKind.TopLevel,
-            navigationMotionKind(initialIsSecondary = false, targetIsSecondary = false),
+            navigationMotionKind(
+                isPop = false,
+                initialIsSecondary = false,
+                targetIsSecondary = false,
+            ),
         )
         assertEquals(
             NavigationMotionKind.TopLevel,
-            navigationMotionKind(initialIsSecondary = true, targetIsSecondary = true),
+            navigationMotionKind(
+                isPop = true,
+                initialIsSecondary = true,
+                targetIsSecondary = true,
+            ),
         )
     }
+
+    @Test
+    fun destinationLayerComesFromTheTopLevelNavigationSet() {
+        val topLevelRoutes = setOf("home", "devices", "rgb", "settings")
+
+        assertEquals(true, isTopLevelDestination("settings", topLevelRoutes))
+        assertEquals(false, isSecondaryDestination("settings", topLevelRoutes))
+        assertEquals(true, isSecondaryDestination("about", topLevelRoutes))
+        assertEquals(false, isTopLevelDestination("about", topLevelRoutes))
+        assertEquals(false, isSecondaryDestination(null, topLevelRoutes))
+    }
+
+    @Test
+    fun detailPushAndPopUseReverseSpatialOffsets() {
+        val width = 1000
+
+        assertEquals(200, navigationOffset(NavigationMotionKind.PushDetail, true, true, width))
+        assertEquals(-200, navigationOffset(NavigationMotionKind.PushDetail, false, true, width))
+        assertEquals(-200, navigationOffset(NavigationMotionKind.PopDetail, true, false, width))
+        assertEquals(200, navigationOffset(NavigationMotionKind.PopDetail, false, false, width))
+    }
+
+    @Test
+    fun topLevelTravelUsesTheParentRouteForSecondaryDestinations() {
+        val roots = listOf("home", "devices", "rgb", "settings")
+
+        assertEquals(3, topLevelRouteDistance("about", "home", roots))
+        assertEquals(false, isForwardTopLevelTransition("about", "home", roots))
+        assertEquals(1, topLevelRouteDistance("about", "settings", roots))
+        assertEquals(true, isForwardTopLevelTransition("about", "settings", roots))
+    }
+
+    @Test
+    fun topLevelTravelKeepsDistanceTimingAndDirection() {
+        val roots = listOf("home", "devices", "rgb", "settings")
+
+        assertEquals(1, topLevelRouteDistance("home", "devices", roots))
+        assertEquals(3, topLevelRouteDistance("settings", "home", roots))
+        assertEquals(200, topLevelPageDuration(1))
+        assertEquals(400, topLevelPageDuration(3))
+        assertEquals(500, topLevelPageDuration(8))
+        assertEquals(true, isForwardTopLevelTransition("home", "settings", roots))
+        assertEquals(false, isForwardTopLevelTransition("settings", "home", roots))
+    }
+
 }

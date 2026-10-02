@@ -47,7 +47,7 @@ fun PageScaffold(
                 actions = actions,
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = background,
-                    scrolledContainerColor = background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
                 ),
                 scrollBehavior = scrollBehavior,
             )

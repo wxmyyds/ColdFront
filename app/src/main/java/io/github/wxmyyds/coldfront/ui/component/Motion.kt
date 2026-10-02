@@ -13,19 +13,18 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.tween
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MotionScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
-import androidx.compose.animation.scaleOut
-import androidx.activity.BackEventCompat
 
 internal enum class NavigationMotionKind {
     TopLevel,
@@ -34,37 +33,107 @@ internal enum class NavigationMotionKind {
 }
 
 internal fun navigationMotionKind(
+    isPop: Boolean,
     initialIsSecondary: Boolean,
     targetIsSecondary: Boolean,
 ): NavigationMotionKind = when {
-    !initialIsSecondary && targetIsSecondary -> NavigationMotionKind.PushDetail
-    initialIsSecondary && !targetIsSecondary -> NavigationMotionKind.PopDetail
+    isPop && initialIsSecondary && !targetIsSecondary -> NavigationMotionKind.PopDetail
+    !isPop && !initialIsSecondary && targetIsSecondary -> NavigationMotionKind.PushDetail
     else -> NavigationMotionKind.TopLevel
 }
 
-/** Shared transitions for app navigation; timing and physics always come from MaterialTheme.motionScheme. */
+internal fun navigationOffset(
+    kind: NavigationMotionKind,
+    entering: Boolean,
+    forward: Boolean,
+    width: Int,
+): Int = when (kind) {
+    NavigationMotionKind.TopLevel -> if (entering) {
+        if (forward) width else -width
+    } else {
+        if (forward) -width else width
+    }
+    NavigationMotionKind.PushDetail -> if (entering) width / 5 else -width / 5
+    NavigationMotionKind.PopDetail -> if (entering) -width / 5 else width / 5
+}
+
+internal fun isSecondaryDestination(route: String?, topLevelRoutes: Set<String>): Boolean =
+    route != null && route !in topLevelRoutes
+
+internal fun isTopLevelDestination(route: String?, topLevelRoutes: Set<String>): Boolean =
+    route != null && route in topLevelRoutes
+
+internal fun topLevelRouteDistance(
+    initialRoute: String?,
+    targetRoute: String?,
+    topLevelRoutes: List<String>,
+): Int {
+    val initialIndex = topLevelIndex(initialRoute, topLevelRoutes)
+    val targetIndex = topLevelIndex(targetRoute, topLevelRoutes)
+    return if (initialIndex < 0 || targetIndex < 0) 1
+    else kotlin.math.abs(targetIndex - initialIndex).coerceAtLeast(1)
+}
+
+internal fun isForwardTopLevelTransition(
+    initialRoute: String?,
+    targetRoute: String?,
+    topLevelRoutes: List<String>,
+): Boolean {
+    val initialIndex = topLevelIndex(initialRoute, topLevelRoutes)
+    val targetIndex = topLevelIndex(targetRoute, topLevelRoutes)
+    return initialIndex < 0 || targetIndex < 0 || targetIndex >= initialIndex
+}
+
+private fun topLevelIndex(route: String?, routes: List<String>): Int {
+    val rootRoute = when (route) {
+        "about" -> "settings"
+        else -> route
+    }
+    return rootRoute?.let(routes::indexOf) ?: -1
+}
+
+internal fun topLevelPageDuration(routeDistance: Int): Int =
+    100 * (routeDistance.coerceIn(1, 4) + 1)
+
+internal fun shouldUsePredictivePop(
+    predictiveBackEnabled: Boolean,
+    currentRoute: String?,
+    previousRoute: String?,
+    topLevelRoutes: Set<String>,
+): Boolean = predictiveBackEnabled &&
+    isSecondaryDestination(currentRoute, topLevelRoutes) &&
+    isTopLevelDestination(previousRoute, topLevelRoutes)
+
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 internal object AppMotion {
     fun pageEnter(
         kind: NavigationMotionKind,
         forward: Boolean,
         motionScheme: MotionScheme,
+        routeDistance: Int,
     ): EnterTransition {
-        val offset: (Int) -> Int = when (kind) {
-            NavigationMotionKind.TopLevel -> { width -> if (forward) width / 12 else -width / 12 }
-            NavigationMotionKind.PushDetail -> { width -> width / 5 }
-            NavigationMotionKind.PopDetail -> { width -> -width / 32 }
+        val offset: (Int) -> Int = { width ->
+            navigationOffset(kind, entering = true, forward = forward, width = width)
         }
         val effects = when (kind) {
-            NavigationMotionKind.PushDetail,
-            NavigationMotionKind.TopLevel -> fadeIn(
+            NavigationMotionKind.PushDetail -> fadeIn(
                 animationSpec = motionScheme.defaultEffectsSpec<Float>(),
                 initialAlpha = 0.94f,
             )
+            NavigationMotionKind.TopLevel -> fadeIn(
+                animationSpec = tween(topLevelPageDuration(routeDistance), easing = FastOutSlowInEasing),
+                initialAlpha = 0.96f,
+            )
             NavigationMotionKind.PopDetail -> EnterTransition.None
         }
+        val spatialSpec = when (kind) {
+            NavigationMotionKind.TopLevel ->
+                tween<IntOffset>(topLevelPageDuration(routeDistance), easing = FastOutSlowInEasing)
+            NavigationMotionKind.PushDetail -> motionScheme.slowSpatialSpec<IntOffset>()
+            NavigationMotionKind.PopDetail -> motionScheme.defaultSpatialSpec<IntOffset>()
+        }
         return slideInHorizontally(
-            animationSpec = motionScheme.slowSpatialSpec<IntOffset>(),
+            animationSpec = spatialSpec,
             initialOffsetX = offset,
         ) + effects
     }
@@ -73,54 +142,29 @@ internal object AppMotion {
         kind: NavigationMotionKind,
         forward: Boolean,
         motionScheme: MotionScheme,
+        routeDistance: Int,
     ): ExitTransition {
-        val offset: (Int) -> Int = when (kind) {
-            NavigationMotionKind.TopLevel -> { width -> if (forward) -width / 12 else width / 12 }
-            NavigationMotionKind.PushDetail -> { width -> -width / 32 }
-            NavigationMotionKind.PopDetail -> { width -> width / 5 }
+        val offset: (Int) -> Int = { width ->
+            navigationOffset(kind, entering = false, forward = forward, width = width)
         }
         val effects = when (kind) {
-            NavigationMotionKind.PopDetail,
+            NavigationMotionKind.PopDetail -> ExitTransition.None
             NavigationMotionKind.TopLevel -> fadeOut(
-                animationSpec = motionScheme.defaultEffectsSpec<Float>(),
-                targetAlpha = 0.94f,
+                animationSpec = tween(topLevelPageDuration(routeDistance), easing = FastOutSlowInEasing),
+                targetAlpha = 0.96f,
             )
             NavigationMotionKind.PushDetail -> ExitTransition.None
         }
+        val spatialSpec = when (kind) {
+            NavigationMotionKind.TopLevel ->
+                tween<IntOffset>(topLevelPageDuration(routeDistance), easing = FastOutSlowInEasing)
+            NavigationMotionKind.PushDetail -> motionScheme.slowSpatialSpec<IntOffset>()
+            NavigationMotionKind.PopDetail -> motionScheme.defaultSpatialSpec<IntOffset>()
+        }
         return slideOutHorizontally(
-            animationSpec = motionScheme.slowSpatialSpec<IntOffset>(),
+            animationSpec = spatialSpec,
             targetOffsetX = offset,
         ) + effects
-    }
-
-    /** Predictive progress reveals the previous page with the same shallow depth used by a normal pop. */
-    fun predictivePopEnter(motionScheme: MotionScheme): EnterTransition =
-        slideInHorizontally(
-            animationSpec = motionScheme.defaultSpatialSpec<IntOffset>(),
-            initialOffsetX = { -it / 32 },
-        )
-
-    /** The outgoing detail follows the active gesture edge while shrinking only slightly. */
-    fun predictivePopExit(
-        swipeEdge: Int,
-        motionScheme: MotionScheme,
-    ): ExitTransition {
-        val fromLeft = swipeEdge == BackEventCompat.EDGE_LEFT
-        val origin = TransformOrigin(
-            pivotFractionX = if (fromLeft) 0f else 1f,
-            pivotFractionY = 0.5f,
-        )
-        return slideOutHorizontally(
-            animationSpec = motionScheme.defaultSpatialSpec<IntOffset>(),
-            targetOffsetX = { if (fromLeft) it / 5 else -it / 5 },
-        ) + scaleOut(
-            animationSpec = motionScheme.defaultSpatialSpec<Float>(),
-            targetScale = 0.96f,
-            transformOrigin = origin,
-        ) + fadeOut(
-            animationSpec = motionScheme.defaultEffectsSpec<Float>(),
-            targetAlpha = 0.96f,
-        )
     }
 
     fun navigationBarEnter(motionScheme: MotionScheme) =

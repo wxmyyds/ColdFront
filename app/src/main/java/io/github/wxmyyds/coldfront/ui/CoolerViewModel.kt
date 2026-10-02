@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -58,7 +59,11 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
         true
     }.stateIn(viewModelScope, SharingStarted.Eagerly, initial)
 
-    val profiles = profileRepo.profiles.uiState(emptyList())
+    private val _profilesLoaded = MutableStateFlow(false)
+    val profilesLoaded: StateFlow<Boolean> = _profilesLoaded.asStateFlow()
+    val profiles = profileRepo.profiles
+        .onEach { _profilesLoaded.value = true }
+        .uiState(emptyList())
     private val backgroundResume = BackgroundResume(
         lifecycle = ProcessLifecycleOwner.get().lifecycle,
         scope = viewModelScope,

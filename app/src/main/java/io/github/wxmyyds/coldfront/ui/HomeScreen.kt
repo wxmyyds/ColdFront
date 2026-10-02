@@ -89,7 +89,8 @@ fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
         ConnectionState.FAILED -> HomeContentState.Failed
         else -> HomeContentState.Idle
     }
-    val contentScrollState = rememberScrollState()
+    val connectedScrollState = rememberScrollState()
+    val statusScrollState = rememberScrollState()
     val motionScheme = MaterialTheme.motionScheme
 
     PageScaffold(title = strings.homeTitle) { inner ->
@@ -109,7 +110,7 @@ fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(inner)
-                        .verticalScroll(contentScrollState)
+                        .verticalScroll(connectedScrollState)
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
@@ -122,7 +123,7 @@ fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
                         .fillMaxSize()
                         .padding(inner)
                         .padding(horizontal = 24.dp)
-                        .verticalScroll(contentScrollState)
+                        .verticalScroll(statusScrollState)
                         .padding(vertical = 24.dp),
                     contentAlignment = Alignment.Center,
                 ) {

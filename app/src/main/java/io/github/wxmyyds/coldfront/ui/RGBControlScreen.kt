@@ -67,6 +67,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.wxmyyds.coldfront.domain.LightEffect
 import io.github.wxmyyds.coldfront.domain.RGBConfig
@@ -86,6 +87,9 @@ import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 private val PreviewStage = Color.Black
 private val PreviewStageContent = Color.White
 private val PreviewLedOff = Color(0xFF101418)
+private val FullColorBreathPalette = listOf(
+    Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta,
+)
 
 /**
  * RGB 灯效页(MD3E):
@@ -99,6 +103,11 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
     val strings = LocalStrings.current
     val state by vm.liveState.collectAsStateWithLifecycle()
     val writeState by vm.rgbWriteState.collectAsStateWithLifecycle()
+    var previewActive by remember(vm) { mutableStateOf(false) }
+    LifecycleResumeEffect(vm) {
+        previewActive = true
+        onPauseOrDispose { previewActive = false }
+    }
 
     // Save the draft across rotation/tab restoration, but validate the connection identity
     // before rendering so a restored draft can never leak to another device/session.
@@ -170,7 +179,14 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
                                     color = PreviewStageContent,
                                 )
                             }
-                            LightPreview(effect, r, g, b, Modifier.fillMaxWidth().height(112.dp))
+                            LightPreview(
+                                effect,
+                                r,
+                                g,
+                                b,
+                                Modifier.fillMaxWidth().height(112.dp),
+                                active = previewActive,
+                            )
                         }
                     }
 
@@ -299,9 +315,16 @@ private val RgbEditorSaver = listSaver<RgbEditorState, Any>(
 // ───────────────────────── 动态预览 ─────────────────────────
 
 @Composable
-private fun LightPreview(effect: LightEffect, r: Int, g: Int, b: Int, modifier: Modifier = Modifier) {
+private fun LightPreview(
+    effect: LightEffect,
+    r: Int,
+    g: Int,
+    b: Int,
+    modifier: Modifier = Modifier,
+    active: Boolean,
+) {
     val color = Color(r / 255f, g / 255f, b / 255f)
-    val breathAlpha = if (effect == LightEffect.BREATH_SINGLE || effect == LightEffect.BREATH_FULLCOLOR) {
+    val breathAlpha = if (active && (effect == LightEffect.BREATH_SINGLE || effect == LightEffect.BREATH_FULLCOLOR)) {
         rememberInfiniteTransition(label = "light-breath").animateFloat(
             initialValue = 0.15f,
             targetValue = 1f,
@@ -309,7 +332,7 @@ private fun LightPreview(effect: LightEffect, r: Int, g: Int, b: Int, modifier: 
             label = "breath",
         )
     } else null
-    val hueShift = if (effect == LightEffect.COLORFUL) {
+    val hueShift = if (active && effect == LightEffect.COLORFUL) {
         rememberInfiniteTransition(label = "light-hue").animateFloat(
             initialValue = 0f,
             targetValue = 1f,
@@ -323,13 +346,14 @@ private fun LightPreview(effect: LightEffect, r: Int, g: Int, b: Int, modifier: 
             LightEffect.OFF -> drawRect(PreviewLedOff)
             LightEffect.COLORFUL -> {
                 // 彩虹流动渐变
-                val hues = FloatArray(8) { ((it / 8f) + (hueShift?.value ?: 0f)) % 1f }
-                val colors = hues.map { h -> Color(android.graphics.Color.HSVToColor(floatArrayOf(h * 360f, 0.9f, 1f))) }
+                val phase = hueShift?.value ?: 0f
+                val colors = List(8) { index ->
+                    Color.hsv(((index / 8f + phase) % 1f) * 360f, 0.9f, 1f)
+                }
                 drawRect(Brush.horizontalGradient(colors))
             }
             LightEffect.BREATH_FULLCOLOR -> {
-                val colors = listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta)
-                drawRect(Brush.horizontalGradient(colors), alpha = breathAlpha?.value ?: 1f)
+                drawRect(Brush.horizontalGradient(FullColorBreathPalette), alpha = breathAlpha?.value ?: 1f)
             }
             LightEffect.BREATH_SINGLE -> {
                 val alpha = breathAlpha?.value ?: 1f

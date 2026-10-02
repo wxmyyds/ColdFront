@@ -145,6 +145,7 @@ class CoolerService : Service() {
                     ?: target?.macAddress ?: profiles.loadServiceProfile()?.macAddress
                 stopping = true
                 activation?.cancel()
+                ble.clearLinkLoss()
                 profiles.setServiceProfile(null)
                 if (intent.action == ACTION_SWITCH_TO_MANUAL) {
                     val state = ble.state.value

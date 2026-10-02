@@ -62,6 +62,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+private enum class SavedDevicesContent { Loading, Empty, List }
+
 /**
  * 设备页(MD3E):
  * - 主操作「添加设备」放在 [ExtendedFloatingActionButton](战术 6:主行动用 FAB)
@@ -72,6 +74,7 @@ import java.util.Locale
 fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
     val strings = LocalStrings.current
     val profiles by vm.profiles.collectAsStateWithLifecycle()
+    val profilesLoaded by vm.profilesLoaded.collectAsStateWithLifecycle()
     val state by vm.liveState.collectAsStateWithLifecycle()
     var profileToDelete by remember { mutableStateOf<CoolerProfile?>(null) }
     val listState = rememberLazyListState()
@@ -87,7 +90,11 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
         },
     ) { inner ->
         AnimatedContent(
-            targetState = profiles.isEmpty(),
+            targetState = when {
+                !profilesLoaded -> SavedDevicesContent.Loading
+                profiles.isEmpty() -> SavedDevicesContent.Empty
+                else -> SavedDevicesContent.List
+            },
             transitionSpec = {
                 AppMotion.contentChange(motionScheme).using(
                     SizeTransform(clip = false) { _, _ ->
@@ -96,14 +103,16 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
                 )
             },
             label = "savedDevicesContent",
-        ) { isEmpty ->
-            if (isEmpty) {
-                EmptyState(
-                    strings,
-                    Modifier.padding(inner),
-                )
-            } else {
-                LazyColumn(
+        ) { content ->
+            when (content) {
+                SavedDevicesContent.Loading -> Box(
+                    modifier = Modifier.fillMaxSize().padding(inner),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    LoadingIndicator()
+                }
+                SavedDevicesContent.Empty -> EmptyState(strings, Modifier.padding(inner))
+                SavedDevicesContent.List -> LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(inner)
