@@ -132,7 +132,27 @@ class NavigationMotionKindTest {
     }
 
     @Test
-    fun topLevelTravelControlsDurationAndDirection() {
+    fun detailPushAndPopUseReverseSpatialOffsets() {
+        val width = 1000
+
+        assertEquals(200, navigationOffset(NavigationMotionKind.PushDetail, true, true, width))
+        assertEquals(-200, navigationOffset(NavigationMotionKind.PushDetail, false, true, width))
+        assertEquals(-200, navigationOffset(NavigationMotionKind.PopDetail, true, false, width))
+        assertEquals(200, navigationOffset(NavigationMotionKind.PopDetail, false, false, width))
+    }
+
+    @Test
+    fun topLevelTravelUsesTheParentRouteForSecondaryDestinations() {
+        val roots = listOf("home", "devices", "rgb", "settings")
+
+        assertEquals(3, topLevelRouteDistance("about", "home", roots))
+        assertEquals(false, isForwardTopLevelTransition("about", "home", roots))
+        assertEquals(1, topLevelRouteDistance("about", "settings", roots))
+        assertEquals(true, isForwardTopLevelTransition("about", "settings", roots))
+    }
+
+    @Test
+    fun topLevelTravelKeepsDistanceTimingAndDirection() {
         val roots = listOf("home", "devices", "rgb", "settings")
 
         assertEquals(1, topLevelRouteDistance("home", "devices", roots))
@@ -143,4 +163,11 @@ class NavigationMotionKindTest {
         assertEquals(true, isForwardTopLevelTransition("home", "settings", roots))
         assertEquals(false, isForwardTopLevelTransition("settings", "home", roots))
     }
+
+        val roots = listOf("home", "devices", "rgb", "settings")
+
+        assertEquals(1, topLevelRouteDistance(null, "home", roots))
+        assertEquals(true, isForwardTopLevelTransition(null, "home", roots))
+    }
+
 }

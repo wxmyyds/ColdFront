@@ -113,6 +113,36 @@ class GattOperationQueueTest {
     }
 
     @Test
+    fun `optional read timeout quarantines late callback and blocks ambiguous retry`() = runTest {
+        val owner = Any()
+        val target = Any()
+        var starts = 0
+        val queue = GattOperationQueue(onTimeout = { error("Optional timeout must not poison owner") })
+        val first = async {
+            queue.execute(
+                owner, target, GattOperationQueue.Kind.READ, 100,
+                isCurrent = { true }, poisonOnTimeout = false,
+            ) { starts++; true }
+        }
+        runCurrent()
+        advanceTimeBy(100)
+        runCurrent()
+        assertFalse(first.await().success)
+        assertEquals(1, starts)
+        assertFalse(queue.complete(owner, target, GattOperationQueue.Kind.READ, success))
+
+        val next = async {
+            queue.execute(
+                owner, target, GattOperationQueue.Kind.READ, 100,
+                isCurrent = { true }, poisonOnTimeout = false,
+            ) { starts++; true }
+        }
+        runCurrent()
+        assertFalse(next.await().success)
+        assertEquals(1, starts)
+    }
+
+    @Test
     fun `accepted timeout invalidates session without retry or next start`() = runTest {
         val owner = Any()
         val target = Any()
@@ -137,6 +167,7 @@ class GattOperationQueueTest {
         assertFalse(next.await().success)
         assertFalse(queue.complete(owner, target, GattOperationQueue.Kind.READ, success))
     }
+
 
     @Test
     fun `explicit failure retries only after callback and rejection may retry`() = runTest {
