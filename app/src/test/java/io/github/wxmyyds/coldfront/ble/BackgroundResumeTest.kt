@@ -5,6 +5,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -49,13 +51,16 @@ class BackgroundResumeTest {
         }
     }
 
+    private val scope: CoroutineScope
+        get() = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+
     @Test
     fun `first start only arms, later start resumes a stored loss exactly once`() = runTest {
         val lifecycle = FakeLifecycle()
         val store = FakeStore(BackgroundLinkLoss(TEST_MAC, CoolerDeviceType.JACKET_8_PRO))
         val dialed = mutableListOf<Pair<String, CoolerDeviceType>>()
         val resume = BackgroundResume(
-            lifecycle = lifecycle, scope = this, store = store,
+            lifecycle = lifecycle, scope = scope, store = store,
             hasRunningSession = { false },
             connect = { address, type -> dialed += address to type },
         )
@@ -79,7 +84,7 @@ class BackgroundResumeTest {
         val store = FakeStore(BackgroundLinkLoss(TEST_MAC, CoolerDeviceType.JACKET_8_PRO))
         val dialed = mutableListOf<Pair<String, CoolerDeviceType>>()
         val resume = BackgroundResume(
-            lifecycle = lifecycle, scope = this, store = store,
+            lifecycle = lifecycle, scope = scope, store = store,
             hasRunningSession = { true },
             connect = { address, type -> dialed += address to type },
         )
@@ -97,7 +102,7 @@ class BackgroundResumeTest {
         val store = FakeStore(BackgroundLinkLoss(TEST_MAC, CoolerDeviceType.JACKET_8_PRO))
         var dialed = false
         val resume = BackgroundResume(
-            lifecycle = lifecycle, scope = this, store = store,
+            lifecycle = lifecycle, scope = scope, store = store,
             hasRunningSession = { false },
             connect = { _, _ -> dialed = true },
         )
@@ -114,7 +119,7 @@ class BackgroundResumeTest {
         val store = FakeStore(BackgroundLinkLoss(TEST_MAC, CoolerDeviceType.JACKET_8_PRO))
         var dialed = false
         val resume = BackgroundResume(
-            lifecycle = lifecycle, scope = this, store = store,
+            lifecycle = lifecycle, scope = scope, store = store,
             hasRunningSession = { false },
             connect = { _, _ -> dialed = true },
         )
