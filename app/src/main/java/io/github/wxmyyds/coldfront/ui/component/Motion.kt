@@ -25,7 +25,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.animation.scaleOut
-import androidx.activity.BackEventCompat
 
 internal enum class NavigationMotionKind {
     TopLevel,
@@ -43,7 +42,12 @@ internal fun navigationMotionKind(
     else -> NavigationMotionKind.TopLevel
 }
 
-/** Shared transitions for app navigation; timing and physics always come from MaterialTheme.motionScheme. */
+internal fun shouldUsePredictivePop(
+    predictiveBackEnabled: Boolean,
+    initialIsSecondary: Boolean,
+    targetIsTopLevel: Boolean,
+): Boolean = predictiveBackEnabled && initialIsSecondary && targetIsTopLevel
+
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 internal object AppMotion {
     fun pageEnter(
@@ -107,36 +111,6 @@ internal object AppMotion {
             },
             targetOffsetX = offset,
         ) + effects
-    }
-
-    /** Predictive progress reveals the previous page with the same shallow depth used by a normal pop. */
-    fun predictivePopEnter(motionScheme: MotionScheme): EnterTransition =
-        slideInHorizontally(
-            animationSpec = motionScheme.defaultSpatialSpec<IntOffset>(),
-            initialOffsetX = { -it / 32 },
-        )
-
-    /** The outgoing detail follows the active gesture edge while shrinking only slightly. */
-    fun predictivePopExit(
-        swipeEdge: Int,
-        motionScheme: MotionScheme,
-    ): ExitTransition {
-        val fromLeft = swipeEdge == BackEventCompat.EDGE_LEFT
-        val origin = TransformOrigin(
-            pivotFractionX = if (fromLeft) 0f else 1f,
-            pivotFractionY = 0.5f,
-        )
-        return slideOutHorizontally(
-            animationSpec = motionScheme.defaultSpatialSpec<IntOffset>(),
-            targetOffsetX = { if (fromLeft) it / 5 else -it / 5 },
-        ) + scaleOut(
-            animationSpec = motionScheme.defaultSpatialSpec<Float>(),
-            targetScale = 0.96f,
-            transformOrigin = origin,
-        ) + fadeOut(
-            animationSpec = motionScheme.defaultEffectsSpec<Float>(),
-            targetAlpha = 0.96f,
-        )
     }
 
     fun navigationBarEnter(motionScheme: MotionScheme) =

@@ -62,6 +62,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.compose.DefaultNavTransitions
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -70,6 +71,7 @@ import io.github.wxmyyds.coldfront.ble.BlePermissionManager
 import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.ui.component.AppMotion
 import io.github.wxmyyds.coldfront.ui.component.navigationMotionKind
+import io.github.wxmyyds.coldfront.ui.component.shouldUsePredictivePop
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 import io.github.wxmyyds.coldfront.ui.i18n.rememberStrings
 import io.github.wxmyyds.coldfront.ui.theme.RedmagicCoolerTheme
@@ -182,6 +184,11 @@ class MainActivity : ComponentActivity() {
 
 private fun isSecondaryRoute(route: String?): Boolean =
     route == Routes.SCAN || route == Routes.ABOUT
+
+private fun isTopLevelRoute(route: String?): Boolean = when (route) {
+    Routes.HOME, Routes.DEVICES, Routes.RGB, Routes.SETTINGS -> true
+    else -> false
+}
 
 private fun routeOrder(route: String?): Int = when (route) {
     Routes.HOME -> 0
@@ -373,14 +380,24 @@ private fun AppNav(vm: CoolerViewModel) {
                                 motionScheme = motionScheme,
                             )
                         },
-                        predictivePopEnterTransition = {
-                            if (predictiveBack && isSecondaryRoute(initialState.destination.route)) {
-                                AppMotion.predictivePopEnter(motionScheme)
+                        predictivePopEnterTransition = { swipeEdge ->
+                            if (shouldUsePredictivePop(
+                                    predictiveBackEnabled = predictiveBack,
+                                    initialIsSecondary = isSecondaryRoute(initialState.destination.route),
+                                    targetIsTopLevel = isTopLevelRoute(targetState.destination.route),
+                                )
+                            ) {
+                                DefaultNavTransitions.predictivePopEnterTransition.invoke(this, swipeEdge)
                             } else EnterTransition.None
                         },
                         predictivePopExitTransition = { swipeEdge ->
-                            if (predictiveBack && isSecondaryRoute(initialState.destination.route)) {
-                                AppMotion.predictivePopExit(swipeEdge, motionScheme)
+                            if (shouldUsePredictivePop(
+                                    predictiveBackEnabled = predictiveBack,
+                                    initialIsSecondary = isSecondaryRoute(initialState.destination.route),
+                                    targetIsTopLevel = isTopLevelRoute(targetState.destination.route),
+                                )
+                            ) {
+                                DefaultNavTransitions.predictivePopExitTransition.invoke(this, swipeEdge)
                             } else ExitTransition.None
                         },
                         // Constrain the child, not the weighted slot: retain centering on wide windows.

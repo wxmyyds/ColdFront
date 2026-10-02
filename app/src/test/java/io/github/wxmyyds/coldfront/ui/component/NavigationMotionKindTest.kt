@@ -41,6 +41,42 @@ class NavigationMotionKindTest {
     }
 
     @Test
+    fun predictiveBackIsOnlyUsedFromSecondaryToTopLevel() {
+        assertEquals(
+            true,
+            shouldUsePredictivePop(
+                predictiveBackEnabled = true,
+                initialIsSecondary = true,
+                targetIsTopLevel = true,
+            ),
+        )
+        assertEquals(
+            false,
+            shouldUsePredictivePop(
+                predictiveBackEnabled = true,
+                initialIsSecondary = false,
+                targetIsTopLevel = true,
+            ),
+        )
+        assertEquals(
+            false,
+            shouldUsePredictivePop(
+                predictiveBackEnabled = true,
+                initialIsSecondary = true,
+                targetIsTopLevel = false,
+            ),
+        )
+        assertEquals(
+            false,
+            shouldUsePredictivePop(
+                predictiveBackEnabled = false,
+                initialIsSecondary = true,
+                targetIsTopLevel = true,
+            ),
+        )
+    }
+
+    @Test
     fun transitionsWithinSameLayerUseTopLevelMotion() {
         assertEquals(
             NavigationMotionKind.TopLevel,
