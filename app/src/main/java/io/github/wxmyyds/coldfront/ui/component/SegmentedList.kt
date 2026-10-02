@@ -190,7 +190,8 @@ private fun currentRowShapes(explicit: ListItemShapes?): ListItemShapes =
  * - 1 项（含独立单行）→ false，不做缩放形变，只留涟漪/状态层；
  * - ≥ 2 项 → true，统一启用 M3E 按压形变。
  *
- * 纯函数、可单测；调用方不得按页面、名称或 ID 另写判断。
+ * 纯函数、可单测；调用方不得按页面、名称或 ID 另写判断。[SegmentedGroup]
+ * 只收可交互行与静态配置面板，状态卡/空态/按钮本来就不进分组。
  */
 internal fun segmentedGroupPressMorph(itemCount: Int): Boolean = itemCount >= 2
 
@@ -235,6 +236,10 @@ class SegmentedGroupScope {
  * 形状/按压规则只看 [SegmentedGroupScope] 里实际可见的项数：1 项用静态形状
  * （无按压形变），≥ 2 项用统一的表达性按压形状。调用方不要再按页面或名称
  * 另行判断。
+ *
+ * [SegmentedGroup] 只收可交互行与 [SegmentedContainer] 这类静态配置面板；状态卡、
+ * 空态、按钮不进分组计数，因此这里的“项数”天然等于可交互选项数，不需要再按
+ * onClick 是否为空二次过滤。
  */
 @Composable
 fun SegmentedGroup(
