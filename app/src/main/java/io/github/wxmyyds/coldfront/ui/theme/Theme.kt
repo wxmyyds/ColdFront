@@ -16,6 +16,7 @@ import com.materialkolor.scheme.SchemeNeutral
 import com.materialkolor.scheme.SchemeTonalSpot
 import com.materialkolor.scheme.SchemeVibrant
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -37,26 +38,9 @@ fun RedmagicCoolerTheme(
         val systemScheme = if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         systemScheme.primary.toArgb()
     } else 0xFF595A9E.toInt()
-    val scheme = when (palette) {
-        "neutral" -> SchemeNeutral(Hct.fromInt(seed), darkTheme, 0.0)
-        "vibrant" -> SchemeVibrant(Hct.fromInt(seed), darkTheme, 0.0)
-        else -> SchemeTonalSpot(Hct.fromInt(seed), darkTheme, 0.0)
+    val colorScheme = remember(seed, darkTheme, palette) {
+        appColorScheme(seed, darkTheme, palette)
     }
-    val baseColorScheme = paletteColorScheme(scheme, if (darkTheme) DarkColorScheme else LightColorScheme)
-    val pageColor = if (darkTheme) PageBackgroundDark else PageBackgroundLight
-    val optionColor = if (darkTheme) OptionSurfaceDark else OptionSurfaceLight
-    val colorScheme = baseColorScheme.copy(
-        background = pageColor,
-        surface = optionColor,
-        surfaceVariant = optionColor,
-        surfaceBright = optionColor,
-        surfaceDim = pageColor,
-        surfaceContainer = optionColor,
-        surfaceContainerHigh = optionColor,
-        surfaceContainerHighest = optionColor,
-        surfaceContainerLow = optionColor,
-        surfaceContainerLowest = optionColor,
-    )
     MaterialExpressiveTheme(
         // 切深浅/开关动态取色时整套角色色平滑过渡，而非瞬时跳变（MD3E 动效表达因果）
         colorScheme = animateColorScheme(colorScheme),
@@ -67,11 +51,30 @@ fun RedmagicCoolerTheme(
     )
 }
 
-/**
- * 主题切换（深浅模式/动态取色开关）时对全部 48 个角色色做颜色补间，
- * 让整界面颜色渐变而不是瞬间替换。只动画颜色值，不改变角色语义。
- */
-@Composable
+/** Pure, testable palette generation; neutral surfaces deliberately stay independent of the seed. */
+internal fun appColorScheme(seed: Int, darkTheme: Boolean, palette: String): ColorScheme {
+    val scheme = when (palette) {
+        "neutral" -> SchemeNeutral(Hct.fromInt(seed), darkTheme, 0.0)
+        "vibrant" -> SchemeVibrant(Hct.fromInt(seed), darkTheme, 0.0)
+        else -> SchemeTonalSpot(Hct.fromInt(seed), darkTheme, 0.0)
+    }
+    val base = paletteColorScheme(scheme, if (darkTheme) DarkColorScheme else LightColorScheme)
+    val page = if (darkTheme) PageBackgroundDark else PageBackgroundLight
+    val option = if (darkTheme) OptionSurfaceDark else OptionSurfaceLight
+    return base.copy(
+        background = page,
+        surface = option,
+        surfaceVariant = option,
+        surfaceBright = option,
+        surfaceDim = page,
+        surfaceContainer = option,
+        surfaceContainerHigh = option,
+        surfaceContainerHighest = option,
+        surfaceContainerLow = option,
+        surfaceContainerLowest = option,
+    )
+}
+
 private fun paletteColorScheme(scheme: DynamicScheme, base: ColorScheme): ColorScheme {
     val roles = MaterialDynamicColors()
     fun color(role: com.materialkolor.dynamiccolor.DynamicColor): Color =
@@ -81,7 +84,7 @@ private fun paletteColorScheme(scheme: DynamicScheme, base: ColorScheme): ColorS
         onPrimary = color(roles.onPrimary()),
         primaryContainer = color(roles.primaryContainer()),
         onPrimaryContainer = color(roles.onPrimaryContainer()),
-        inversePrimary = color(roles.primary()),
+        inversePrimary = color(roles.inversePrimary()),
         secondary = color(roles.secondary()),
         onSecondary = color(roles.onSecondary()),
         secondaryContainer = color(roles.secondaryContainer()),
@@ -91,9 +94,22 @@ private fun paletteColorScheme(scheme: DynamicScheme, base: ColorScheme): ColorS
         tertiaryContainer = color(roles.tertiaryContainer()),
         onTertiaryContainer = color(roles.onTertiaryContainer()),
         surfaceTint = color(roles.primary()),
+        primaryFixed = color(roles.primaryFixed()),
+        primaryFixedDim = color(roles.primaryFixedDim()),
+        onPrimaryFixed = color(roles.onPrimaryFixed()),
+        onPrimaryFixedVariant = color(roles.onPrimaryFixedVariant()),
+        secondaryFixed = color(roles.secondaryFixed()),
+        secondaryFixedDim = color(roles.secondaryFixedDim()),
+        onSecondaryFixed = color(roles.onSecondaryFixed()),
+        onSecondaryFixedVariant = color(roles.onSecondaryFixedVariant()),
+        tertiaryFixed = color(roles.tertiaryFixed()),
+        tertiaryFixedDim = color(roles.tertiaryFixedDim()),
+        onTertiaryFixed = color(roles.onTertiaryFixed()),
+        onTertiaryFixedVariant = color(roles.onTertiaryFixedVariant()),
     )
 }
 
+/** Animate role values only; keep the existing theme transition and role semantics. */
 @Composable
 private fun animateColorScheme(target: ColorScheme): ColorScheme {
     val spec = tween<Color>(durationMillis = 400)

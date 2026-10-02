@@ -5,13 +5,15 @@ package io.github.wxmyyds.coldfront.ui.component
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -38,24 +40,35 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
+import kotlinx.coroutines.flow.collect
 
 /**
  * MD3E 分段选项列表 —— ColdFront 自有实现。
@@ -292,6 +305,7 @@ fun SegmentedRow(
     leadingContent: (@Composable () -> Unit)? = null,
     trailingContent: (@Composable () -> Unit)? = null,
     supportingContent: (@Composable () -> Unit)? = null,
+    interactionSource: MutableInteractionSource? = null,
 ) {
     val haptic = LocalHapticFeedback.current
     val rowShapes = currentRowShapes(shapes)
@@ -330,6 +344,7 @@ fun SegmentedRow(
             overlineContent = overlineSlot,
             supportingContent = supporting,
             verticalAlignment = Alignment.CenterVertically,
+            interactionSource = interactionSource,
         ) {
             Text(title)
         }
@@ -367,7 +382,7 @@ fun SegmentedSwitchRow(
             onCheckedChange(it)
         },
         shapes = currentRowShapes(shapes),
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().semantics { role = Role.Switch },
         enabled = enabled,
         colors = colors,
         leadingContent = leadingContent,
@@ -416,26 +431,54 @@ fun <T> SegmentedDropdownRow(
     colors: ListItemColors = segmentedRowColors(),
     leadingContent: (@Composable () -> Unit)? = null,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    var pressPosition by remember { mutableStateOf(IntOffset.Zero) }
+    val canExpand = enabled && options.isNotEmpty()
+    var expanded by remember(canExpand) { mutableStateOf(false) }
+    val anchor = remember(canExpand) { DropdownPressAnchor() }
+    val interactionSource = remember(canExpand) { MutableInteractionSource() }
+    var rowSize by remember { mutableStateOf(IntSize.Zero) }
+    val layoutDirection = LocalLayoutDirection.current
     val haptic = LocalHapticFeedback.current
     val selectedLabel = options.firstOrNull { it == selected }?.let(optionLabel).orEmpty()
 
-    Box(
-        modifier = modifier
-            // 只观察手指落点（不消费事件，不影响行的点击/涟漪），
-            // 让菜单从按压位置展开，而不是固定在行首。
-            .pointerInput(Unit) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    pressPosition = down.position.round()
-                }
+    LaunchedEffect(interactionSource, anchor) {
+        interactionSource.interactions.collect { interaction ->
+            when (interaction) {
+                is PressInteraction.Press -> anchor.press(interaction)
+                is PressInteraction.Release -> anchor.release(interaction.press)
+                is PressInteraction.Cancel -> anchor.cancel(interaction.press)
             }
-    ) {
+        }
+    }
+    val dismiss = {
+        expanded = false
+        anchor.clearPending()
+    }
+
+    Box(modifier = modifier) {
         SegmentedRow(
             title = title,
-            enabled = enabled,
-            onClick = { expanded = true },
+            modifier = Modifier
+                .onSizeChanged { rowSize = it }
+                // Observe only input origin. Native Release, not the down event, validates a click.
+                // No consuming gesture detector or overlay: scrolling/ripples remain native.
+                .pointerInput(anchor) {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        anchor.beginPointer()
+                    }
+                }
+                .onPreviewKeyEvent {
+                    anchor.clearPending()
+                    false
+                },
+            enabled = canExpand,
+            onClick = {
+                if (canExpand) {
+                    anchor.click()
+                    expanded = true
+                }
+            },
+            interactionSource = interactionSource,
             shapes = shapes,
             colors = colors,
             leadingContent = leadingContent,
@@ -454,13 +497,17 @@ fun <T> SegmentedDropdownRow(
                 )
             },
         )
-        // 零尺寸锚点：偏移到按压位置，弹窗据此定位
+        // Pointer positions are physical pixels. Do not mirror either the zero-size anchor's
+        // alignment or its offset in RTL; the native popup still handles direction/screen bounds.
         Box(
-            modifier = Modifier.offset { IntOffset(pressPosition.x, pressPosition.y) },
+            modifier = Modifier
+                .align(AbsoluteAlignment.TopLeft)
+                .absoluteOffset { anchor.position ?: dropdownFallbackAnchor(rowSize, layoutDirection) }
+                .size(0.dp),
         ) {
             SingleChoiceDropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
+                expanded = expanded && canExpand,
+                onDismissRequest = dismiss,
                 options = options,
                 selected = selected,
                 onSelect = onSelect,
@@ -470,6 +517,61 @@ fun <T> SegmentedDropdownRow(
         }
     }
 }
+
+/** A click and its matching native release may arrive in either coroutine order. */
+internal class DropdownPressAnchor {
+    var position: IntOffset? by mutableStateOf(null)
+        private set
+    private var pointer = false
+    private var pressed: PressInteraction.Press? = null
+    private var releasedPosition: IntOffset? = null
+    private var awaitingRelease = false
+
+    fun beginPointer() {
+        clearPending()
+        pointer = true
+    }
+
+    fun press(press: PressInteraction.Press) {
+        if (pointer) pressed = press
+    }
+
+    fun release(press: PressInteraction.Press) {
+        if (!pointer || pressed !== press) return
+        pressed = null
+        val point = press.pressPosition
+        if (!point.x.isFinite() || !point.y.isFinite()) {
+            clearPending()
+            return
+        }
+        if (awaitingRelease) {
+            position = point.round()
+            clearPending()
+        } else {
+            releasedPosition = point.round()
+        }
+    }
+
+    fun cancel(press: PressInteraction.Press) {
+        if (pressed === press) clearPending()
+    }
+
+    fun click() {
+        position = releasedPosition
+        if (releasedPosition != null) clearPending() else awaitingRelease = pointer
+    }
+
+    // Keep the last anchor during the popup's exit animation, but never reuse it on the next click.
+    fun clearPending() {
+        pointer = false
+        pressed = null
+        releasedPosition = null
+        awaitingRelease = false
+    }
+}
+
+internal fun dropdownFallbackAnchor(size: IntSize, direction: LayoutDirection): IntOffset =
+    IntOffset(if (direction == LayoutDirection.Rtl) size.width else 0, size.height)
 
 /**
  * MD3E 单选下拉菜单，参考 KernelSU 的设置菜单项设计：

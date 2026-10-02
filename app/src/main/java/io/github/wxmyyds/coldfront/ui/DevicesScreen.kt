@@ -41,6 +41,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -152,7 +153,9 @@ private fun SavedDeviceCard(
     onConnect: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    val locale = LocalConfiguration.current.locales[0] ?: Locale.ROOT
     val connected = state.isConnected && state.deviceAddress == profile.macAddress
+    val failed = state.connection == ConnectionState.FAILED && state.deviceAddress == profile.macAddress
     val connecting = state.connection in listOf(
         ConnectionState.CONNECTING, ConnectionState.DISCOVERING,
     ) && state.deviceAddress == profile.macAddress
@@ -193,11 +196,18 @@ private fun SavedDeviceCard(
             if (profile.lastConnectedAtMs > 0) {
                 Text(
                     strings.devicesLastSeen.format(
-                        SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+                        SimpleDateFormat("yyyy-MM-dd HH:mm", locale)
                             .format(Date(profile.lastConnectedAtMs))
                     ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (failed) {
+                Text(
+                    strings.homeConnectionFailed,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
                 )
             }
             FlowRow(

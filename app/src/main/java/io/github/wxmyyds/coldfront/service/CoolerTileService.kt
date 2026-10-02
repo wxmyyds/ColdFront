@@ -1,32 +1,42 @@
 package io.github.wxmyyds.coldfront.service
 
 import android.content.Intent
-import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.util.Log
-import androidx.annotation.RequiresApi
+import android.widget.Toast
+import io.github.wxmyyds.coldfront.ble.BleManagerHolder
+import io.github.wxmyyds.coldfront.ble.BlePermissionManager
 import io.github.wxmyyds.coldfront.data.ProfileRepository
+import io.github.wxmyyds.coldfront.data.SettingsRepository
+import io.github.wxmyyds.coldfront.ui.i18n.stringsFor
+import java.util.Locale
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 
-private const val TAG = "CoolerTile"
-
-/**
- * 快捷设置磁贴：点击切换自动模式开关。
- * 需要 API 24+（TileService 自 API 24 起可用）。
- */
-@RequiresApi(Build.VERSION_CODES.N)
+/** Quick Settings auto-mode toggle; state follows the service, not an optimistic local flag. */
 class CoolerTileService : TileService() {
-
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val ble by lazy { BleManagerHolder.get(applicationContext) }
+    private var listening: Job? = null
+    private var click: Job? = null
 
     override fun onStartListening() {
         super.onStartListening()
-        refresh()
+        listening?.cancel()
+        listening = scope.launch { ble.state.collect { refresh() } }
+    }
+
+    override fun onStopListening() {
+        listening?.cancel()
+        listening = null
+        super.onStopListening()
     }
 
     override fun onTileAdded() {
@@ -36,44 +46,64 @@ class CoolerTileService : TileService() {
 
     override fun onClick() {
         super.onClick()
-        val active = qsTile?.state == Tile.STATE_ACTIVE
-        if (active) {
-            // 停止
-            startService(Intent(this, CoolerService::class.java).apply {
-                action = CoolerService.ACTION_STOP
-            })
-            qsTile?.state = Tile.STATE_INACTIVE
-            qsTile?.updateTile()
-        } else {
-            // 启动自动模式（用激活档案；TileService 本身是 Service，用自持协程作用域）
-            scope.launch {
-                try {
+        if (click?.isActive == true) return
+        click = scope.launch {
+            try {
+                if (!BlePermissionManager.hasConnectPermission(this@CoolerTileService)) {
+                    showUnavailable()
+                    return@launch
+                }
+                val current = ble.state.value
+                if (current.isConnected && current.smartOn) {
+                    // Unlike notification Close, this is advertised as auto-mode OFF.
+                    CoolerService.start(this@CoolerTileService, Intent(this@CoolerTileService, CoolerService::class.java).apply {
+                        action = CoolerService.ACTION_SWITCH_TO_MANUAL
+                        putExtra(CoolerService.EXTRA_CONTROL_ADDRESS, current.deviceAddress)
+                    })
+                } else {
                     val profile = ProfileRepository(applicationContext).loadActiveProfile()
-                    if (profile == null) {
-                        Log.w(TAG, "无激活档案，无法从磁贴启动")
+                    if (profile == null || !profile.deviceType.supportsAutoMode) {
+                        showUnavailable()
                         return@launch
                     }
-                    CoolerService.startForProfile(applicationContext, profile)
-                    qsTile?.state = Tile.STATE_ACTIVE
-                    qsTile?.updateTile()
-                } catch (e: Exception) {
-                    Log.e(TAG, "磁贴启动失败: ${e.message}")
+                    CoolerService.startForProfile(this@CoolerTileService, profile)
                 }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("CoolerTile", "Tile action failed", e)
+                showUnavailable()
+            } finally {
+                refresh()
             }
+        }
+    }
+
+    private suspend fun showUnavailable() {
+        val language = try {
+            SettingsRepository(applicationContext).appLanguage.first()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            "system"
+        }
+        Toast.makeText(this, stringsFor(Locale.getDefault(), language).serviceUnavailable, Toast.LENGTH_LONG).show()
+    }
+
+    private fun refresh() {
+        qsTile?.apply {
+            state = when {
+                !BlePermissionManager.hasConnectPermission(this@CoolerTileService) -> Tile.STATE_UNAVAILABLE
+                ble.state.value.isConnected && ble.state.value.smartOn -> Tile.STATE_ACTIVE
+                else -> Tile.STATE_INACTIVE
+            }
+            label = "ColdFront"
+            updateTile()
         }
     }
 
     override fun onDestroy() {
         scope.cancel()
         super.onDestroy()
-    }
-
-    private fun refresh() {
-        qsTile?.apply {
-            // 通过是否已有 CoolerService 实例判断运行状态
-            state = if (CoolerService.getInstance() != null) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-            label = "ColdFront"
-            updateTile()
-        }
     }
 }

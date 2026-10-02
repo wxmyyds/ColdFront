@@ -5,10 +5,12 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import io.github.wxmyyds.coldfront.data.ProfileRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 
 private const val TAG = "BootReceiver"
 
@@ -22,11 +24,18 @@ class BootReceiver : BroadcastReceiver() {
         val pending = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
             try {
-                val profile = ProfileRepository(context).loadActiveProfile()
+                // An active device alone is not consent to start background auto mode.
+                val profile = withTimeout(8_000) { ProfileRepository(context).loadServiceProfile() }
                 if (profile != null) {
-                    CoolerService.startForProfile(context, profile)
+                    // Recovery is not a fresh opt-in: the service rechecks current persisted intent.
+                    CoolerService.start(context, Intent(context, CoolerService::class.java).apply {
+                        action = CoolerService.ACTION_RECONNECT
+                    })
                     Log.i(TAG, "开机恢复自动模式：${profile.displayName}")
                 }
+            } catch (e: CancellationException) {
+                Log.w(TAG, "开机恢复取消或超时", e)
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "开机恢复失败: ${e.message}")
             } finally {

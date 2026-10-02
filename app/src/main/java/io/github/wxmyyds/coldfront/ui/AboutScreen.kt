@@ -1,7 +1,9 @@
 package io.github.wxmyyds.coldfront.ui
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.net.Uri
+import androidx.core.net.toUri
+import android.widget.Toast
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -42,6 +44,13 @@ fun AboutScreen(onBack: () -> Unit) {
     val strings = LocalStrings.current
     val context = LocalContext.current
     val contentScrollState = rememberScrollState()
+    fun openLink(url: String) {
+        try {
+            context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(context, strings.aboutOpenLinkFailed, Toast.LENGTH_LONG).show()
+        }
+    }
     PageScaffold(
         title = strings.settingsAbout,
         navigationIcon = {
@@ -99,12 +108,7 @@ fun AboutScreen(onBack: () -> Unit) {
                                 Icon(Icons.Filled.ChevronRight, contentDescription = null)
                             },
                             onClick = {
-                                context.startActivity(
-                                    Intent(
-                                        Intent.ACTION_VIEW,
-                                        Uri.parse("https://github.com/wxmyyds/ColdFront/issues/new"),
-                                    ),
-                                )
+                                openLink("https://github.com/wxmyyds/ColdFront/issues/new")
                             },
                         )
                     }
@@ -116,12 +120,7 @@ fun AboutScreen(onBack: () -> Unit) {
                                 Icon(Icons.Filled.ChevronRight, contentDescription = null)
                             },
                             onClick = {
-                                context.startActivity(
-                                    Intent(
-                                        Intent.ACTION_VIEW,
-                                        Uri.parse("https://github.com/wxmyyds/ColdFront"),
-                                    ),
-                                )
+                                openLink("https://github.com/wxmyyds/ColdFront")
                             },
                         )
                     }

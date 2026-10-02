@@ -49,8 +49,15 @@ internal data class RgbEditorState(
                 explicitApplyRequestId = null,
             )
         }
-        return if (currentWrite(write)?.status == RgbWriteStatus.SENT && received == config) {
-            copy(dirty = false)
+        return if (currentWrite(write)?.status == RgbWriteStatus.SENT) {
+            // StateFlow may conflate the matching readback with a subsequent device update.
+            // The matching send releases this draft even when we first observe a newer value.
+            if (received == config) copy(dirty = false) else copy(
+                config = received,
+                dirty = false,
+                submittedRequestId = null,
+                explicitApplyRequestId = null,
+            )
         } else this
     }
 

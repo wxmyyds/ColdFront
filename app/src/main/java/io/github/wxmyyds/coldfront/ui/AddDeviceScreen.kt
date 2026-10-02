@@ -1,5 +1,6 @@
 package io.github.wxmyyds.coldfront.ui
 
+import androidx.core.net.toUri
 import android.content.Intent
 import android.os.Build
 import android.provider.Settings
@@ -188,7 +189,7 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
                             context.startActivity(
                                 Intent(
                                     Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                                    android.net.Uri.parse("package:${context.packageName}"),
+                                    "package:${context.packageName}".toUri(),
                                 )
                             )
                         },
@@ -204,8 +205,13 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
                         strings = strings,
                         connection = state.connection,
                         deviceName = connectionRequest?.name ?: state.deviceName,
-                        retryEnabled = canConnect && connectionRequest != null,
-                        onRetry = { connectionRequest?.let { connect(it) } },
+                        retryEnabled = canConnect,
+                        retryLabel = if (connectionRequest != null) strings.retry else strings.scanRescan,
+                        onRetry = {
+                            // The callback is intentionally not saveable; after rotation rescan instead.
+                            val request = connectionRequest
+                            if (request != null) connect(request) else rescan()
+                        },
                     )
                 }
             }
@@ -299,6 +305,7 @@ private fun ConnectionStatusCard(
     deviceName: String?,
     retryEnabled: Boolean,
     onRetry: () -> Unit,
+    retryLabel: String = strings.retry,
 ) {
     val connecting = connection == ConnectionState.CONNECTING || connection == ConnectionState.DISCOVERING
     val failed = !connecting && connection != ConnectionState.CONNECTED
@@ -318,7 +325,7 @@ private fun ConnectionStatusCard(
             if (failed) {
                 Text(strings.homeRetryHint, style = MaterialTheme.typography.bodyMedium)
                 OutlinedButton(onClick = onRetry, enabled = retryEnabled, shapes = ButtonDefaults.shapes()) {
-                    Text(strings.retry)
+                    Text(retryLabel)
                 }
             }
         }
