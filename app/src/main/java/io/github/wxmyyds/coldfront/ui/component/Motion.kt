@@ -78,9 +78,12 @@ internal fun topLevelPageDuration(routeDistance: Int): Int =
 
 internal fun shouldUsePredictivePop(
     predictiveBackEnabled: Boolean,
-    initialIsSecondary: Boolean,
-    targetIsTopLevel: Boolean,
-): Boolean = predictiveBackEnabled && initialIsSecondary && targetIsTopLevel
+    currentRoute: String?,
+    previousRoute: String?,
+    topLevelRoutes: Set<String>,
+): Boolean = predictiveBackEnabled &&
+    isSecondaryDestination(currentRoute, topLevelRoutes) &&
+    isTopLevelDestination(previousRoute, topLevelRoutes)
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 internal object AppMotion {

@@ -41,37 +41,52 @@ class NavigationMotionKindTest {
     }
 
     @Test
-    fun predictiveBackIsOnlyUsedFromSecondaryToTopLevel() {
+    fun predictiveBackRequiresASecondaryCurrentDestinationAndTopLevelParent() {
+        val roots = setOf("home", "devices", "rgb", "settings")
+
         assertEquals(
             true,
             shouldUsePredictivePop(
                 predictiveBackEnabled = true,
-                initialIsSecondary = true,
-                targetIsTopLevel = true,
+                currentRoute = "about",
+                previousRoute = "settings",
+                topLevelRoutes = roots,
+            ),
+        )
+        assertEquals(
+            true,
+            shouldUsePredictivePop(
+                predictiveBackEnabled = true,
+                currentRoute = "scan",
+                previousRoute = "devices",
+                topLevelRoutes = roots,
             ),
         )
         assertEquals(
             false,
             shouldUsePredictivePop(
                 predictiveBackEnabled = true,
-                initialIsSecondary = false,
-                targetIsTopLevel = true,
+                currentRoute = "settings",
+                previousRoute = "home",
+                topLevelRoutes = roots,
             ),
         )
         assertEquals(
             false,
             shouldUsePredictivePop(
                 predictiveBackEnabled = true,
-                initialIsSecondary = true,
-                targetIsTopLevel = false,
+                currentRoute = "home",
+                previousRoute = null,
+                topLevelRoutes = roots,
             ),
         )
         assertEquals(
             false,
             shouldUsePredictivePop(
                 predictiveBackEnabled = false,
-                initialIsSecondary = true,
-                targetIsTopLevel = true,
+                currentRoute = "about",
+                previousRoute = "settings",
+                topLevelRoutes = roots,
             ),
         )
     }

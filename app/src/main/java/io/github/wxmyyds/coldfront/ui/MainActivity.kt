@@ -232,6 +232,12 @@ private fun AppNav(vm: CoolerViewModel) {
     // Top-level destinations are exactly the primary navigation destinations in this NavHost.
     val topLevelRoutes = remember(items) { items.map { it.first } }
     val topLevelRouteSet = remember(topLevelRoutes) { topLevelRoutes.toSet() }
+    val predictivePopEligible = shouldUsePredictivePop(
+        predictiveBackEnabled = predictiveBack,
+        currentRoute = backStack?.destination?.route,
+        previousRoute = nav.previousBackStackEntry?.destination?.route,
+        topLevelRoutes = topLevelRouteSet,
+    )
 
     val navigateToTab: (String) -> Unit = { route ->
         nav.navigate(route) {
@@ -377,33 +383,25 @@ private fun AppNav(vm: CoolerViewModel) {
                             )
                         },
                         predictivePopEnterTransition = { swipeEdge ->
-                            if (shouldUsePredictivePop(
-                                    predictiveBackEnabled = predictiveBack,
-                                    initialIsSecondary = isSecondaryDestination(
-                                        initialState.destination.route,
-                                        topLevelRouteSet,
-                                    ),
-                                    targetIsTopLevel = isTopLevelDestination(
+                            if (
+                                predictivePopEligible &&
+                                    initialState.destination.route == backStack?.destination?.route &&
+                                    isTopLevelDestination(
                                         targetState.destination.route,
                                         topLevelRouteSet,
-                                    ),
-                                )
+                                    )
                             ) {
                                 DefaultNavTransitions.predictivePopEnterTransition.invoke(this, swipeEdge)
                             } else EnterTransition.None
                         },
                         predictivePopExitTransition = { swipeEdge ->
-                            if (shouldUsePredictivePop(
-                                    predictiveBackEnabled = predictiveBack,
-                                    initialIsSecondary = isSecondaryDestination(
-                                        initialState.destination.route,
-                                        topLevelRouteSet,
-                                    ),
-                                    targetIsTopLevel = isTopLevelDestination(
+                            if (
+                                predictivePopEligible &&
+                                    initialState.destination.route == backStack?.destination?.route &&
+                                    isTopLevelDestination(
                                         targetState.destination.route,
                                         topLevelRouteSet,
-                                    ),
-                                )
+                                    )
                             ) {
                                 DefaultNavTransitions.predictivePopExitTransition.invoke(this, swipeEdge)
                             } else ExitTransition.None
