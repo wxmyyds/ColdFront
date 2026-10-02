@@ -454,4 +454,4 @@ val LocalStrings = staticCompositionLocalOf<AppStrings> { error("AppStrings not 
 
 @Composable
 fun rememberStrings(override: String? = null): AppStrings =
-    stringsFor(LocalConfiguration.current.locales[0] ?: Locale.getDefault(), override)
+    stringsFor(LocalConfiguration.current.locales[0] ?: Locale.ROOT, override)

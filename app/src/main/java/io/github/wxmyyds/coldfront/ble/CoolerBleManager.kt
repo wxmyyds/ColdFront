@@ -88,6 +88,7 @@ class CoolerBleManager(private val context: Context) {
         var discoveryRequested = false
         var initializing = false
         var controls = 0
+        val telemetryRevision = mutableMapOf<UUID, Long>()
         var lastTempUpdateMs = 0L
     }
 
@@ -633,6 +634,7 @@ class CoolerBleManager(private val context: Context) {
 
     private fun handleData(s: Session, uuid: UUID, value: ByteArray) {
         if (!owns(s)) return
+        s.telemetryRevision[uuid] = (s.telemetryRevision[uuid] ?: 0L) + 1
         when (uuid) {
             CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID -> updateTemperature(s, value)
             CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID -> {
@@ -714,10 +716,15 @@ class CoolerBleManager(private val context: Context) {
         try {
             if (debounceMs > 0) delay(debounceMs)
             if (!fresh(command)) return false
+            val revision = s.telemetryRevision[command.characteristic.uuid] ?: 0L
             val ok = enqueueWrite(s, command.characteristic, value) { fresh(command) }
             if (!fresh(command)) return false
             if (ok) {
-                _state.update(commit)
+                // A device report during this command is more authoritative than our fallback
+                // echo, including notifications delivered during the queue's spacing delay.
+                if ((s.telemetryRevision[command.characteristic.uuid] ?: 0L) == revision) {
+                    _state.update(commit)
+                }
             } else {
                 // No optimistic value to roll back. Where supported, reconcile the actual
                 // device value after explicit failure (timeouts already fail the session).

@@ -152,6 +152,5 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
     override fun onCleared() {
         BleManagerHolder.release(this)
         storageErrors.close()
-        super.onCleared()
     }
 }
