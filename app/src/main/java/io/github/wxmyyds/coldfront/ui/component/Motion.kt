@@ -74,6 +74,9 @@ internal fun topLevelRouteDistance(
     else kotlin.math.abs(targetIndex - initialIndex).coerceAtLeast(1)
 }
 
+internal fun topLevelPageIndex(route: String?, topLevelRoutes: List<String>): Int =
+    topLevelIndex(route, topLevelRoutes)
+
 internal fun isForwardTopLevelTransition(
     initialRoute: String?,
     targetRoute: String?,
@@ -92,8 +95,10 @@ private fun topLevelIndex(route: String?, routes: List<String>): Int {
     return rootRoute?.let(routes::indexOf) ?: -1
 }
 
-internal fun topLevelPageDuration(routeDistance: Int): Int =
-    100 * (routeDistance.coerceIn(1, 4) + 1)
+internal const val TOP_LEVEL_PAGE_DURATION_MS = 300
+
+@Suppress("UNUSED_PARAMETER")
+internal fun topLevelPageDuration(routeDistance: Int): Int = TOP_LEVEL_PAGE_DURATION_MS
 
 internal fun shouldUsePredictivePop(
     predictiveBackEnabled: Boolean,
