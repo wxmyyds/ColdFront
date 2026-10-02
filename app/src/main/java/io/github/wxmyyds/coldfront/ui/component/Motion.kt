@@ -94,7 +94,7 @@ internal object AppMotion {
         val offset: (Int) -> Int = when (kind) {
             NavigationMotionKind.TopLevel -> { width -> if (forward) width else -width }
             NavigationMotionKind.PushDetail -> { width -> width / 5 }
-            NavigationMotionKind.PopDetail -> { 0 }
+            NavigationMotionKind.PopDetail -> { _ -> 0 }
         }
         val effects = when (kind) {
             NavigationMotionKind.PushDetail -> fadeIn(
