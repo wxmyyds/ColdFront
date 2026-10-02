@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.DropdownMenuGroup
@@ -63,6 +62,8 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
@@ -76,10 +77,13 @@ import kotlinx.coroutines.flow.collect
  * 全部基于 androidx 原生原语（[SegmentedListItem] / [ListItemDefaults.segmentedShapes] /
  * [ListItemDefaults.segmentedColors]），观感对齐 Material 3 Expressive 列表规格：
  *
- * - 分组外角 16dp、内角 4dp，由 segmentedShapes(index, count) 生成；选中/按下不做圆角形变
- *   （在紧凑分组里会把整组撑散），反馈交给状态层与涟漪；
+ * - 分组外角 16dp、内角 4dp，由 segmentedShapes(index, count) 生成；按压形变只属于
+ *   可见项 ≥ 2 的分组（pressed/focused 取 large 16dp，由组件按主题 motionScheme 补间），
+ *   单项分组与独立单行全取 large 16dp、即无形变——反馈只留涟漪与状态层；
  * - 行间留分段缝隙；
  * - 行容器用 surfaceContainerHighest，页面用 background —— 靠明度分层，不靠阴影；
+ * - 下拉行 trailing 直接显示当前值（bodyMedium + onSurfaceVariant，单行省略），不再放
+ *   下三角图标；整行仍是点击区域，菜单逻辑不变；
  * - 组标题 titleSmall + primary；
  * - 整行可点，勾选/选中带 VirtualKey 触感；
  * - 尾随 Switch 只做视觉指示（onCheckedChange = null），图标色由组件按 SwitchTokens 注入。
@@ -136,22 +140,9 @@ fun segmentedRowColors(): ListItemColors {
 }
 
 /**
- * 独立单行：静止态四角 16dp（比 segmentedShapes 基形的 4dp 更“成块”，单独一行不显方）。
- *
- * 按下/聚焦形状取 extraLarge(28dp)：官方 token 的跳档幅度是 4dp → CornerLarge 16dp（+12dp），
- * 独立行静止态已经是 16dp，按同样 +12dp 幅度取 28dp，才能保留 M3E 的按压形变；
- * 若 pressed 也取 16dp 就等于没有形变。hovered 维持静止形状（触屏上几乎不出现，
- * 且 token 的 CornerMedium 12dp 比本行静止态更小，放大再缩小反而别扭）。
+ * 独立单行 / 单项分组：四角 large 16dp，且 pressed/focused/hovered 全部保持 16dp——
+ * 按全局规则，1 个可交互选项的分组不用按压缩放形变，只留涟漪与状态层。
  */
-@Composable
-fun standaloneRowShapes(): ListItemShapes = ListItemDefaults.shapes(
-    shape = MaterialTheme.shapes.large,
-    selectedShape = MaterialTheme.shapes.large,
-    pressedShape = MaterialTheme.shapes.extraLarge,
-    focusedShape = MaterialTheme.shapes.extraLarge,
-    hoveredShape = MaterialTheme.shapes.large,
-)
-
 @Composable
 fun staticStandaloneRowShapes(): ListItemShapes = ListItemDefaults.shapes(
     shape = MaterialTheme.shapes.large,
@@ -164,9 +155,13 @@ fun staticStandaloneRowShapes(): ListItemShapes = ListItemDefaults.shapes(
 /**
  * 分组中第 [index] 行（共 [count] 行）：外角 16dp、内角 4dp。
  *
- * pressed / focused / hovered 保留官方表达性形状（CornerLarge 16dp / CornerLarge 16dp /
- * CornerMedium 12dp）—— [SegmentedListItem] 会用主题 motionScheme 的 FastSpatial 弹簧动画
- * 在这些形状间补间，按下时内角 4dp 弹到 16dp，就是 M3E 列表的按压形变。
+ * [count] 必须是分组实际可见的可交互项数（[SegmentedGroup] 已过滤 visible=false
+ * 的行；LazyColumn 手写处调用方自行保证）：
+ * - count <= 1（含独立单行）→ [staticStandaloneRowShapes]，无按压形变；
+ * - count >= 2 → pressed / focused 取 large 16dp、hovered 取 medium 12dp，
+ *   [SegmentedListItem] 会用主题 motionScheme 的空间动画在这些形状间补间，
+ *   按下时内角 4dp 弹到 16dp，就是 M3E 列表的按压形变。
+ * 判断只看分组实际可见项数，不看页面、名称或 ID。
  *
  * 只把 selected 压回基准形状：本项目的选中/开启态由行内 Switch、下拉勾选表达，
  * 容器在静止态不再额外形变，否则“开着的开关”那一行会长期顶着 16dp 圆角与邻行的
@@ -174,7 +169,7 @@ fun staticStandaloneRowShapes(): ListItemShapes = ListItemDefaults.shapes(
  */
 @Composable
 fun segmentedRowShapes(index: Int, count: Int): ListItemShapes {
-    if (count <= 1) return standaloneRowShapes()
+    if (!segmentedGroupPressMorph(count)) return staticStandaloneRowShapes()
     val base = ListItemDefaults.segmentedShapes(index = index, count = count)
     return ListItemDefaults.shapes(
         shape = base.shape,
@@ -187,7 +182,17 @@ fun segmentedRowShapes(index: Int, count: Int): ListItemShapes {
 
 @Composable
 private fun currentRowShapes(explicit: ListItemShapes?): ListItemShapes =
-    explicit ?: LocalSegmentedShapes.current ?: standaloneRowShapes()
+    explicit ?: LocalSegmentedShapes.current ?: staticStandaloneRowShapes()
+
+/**
+ * 按压形变的唯一判断依据：分组实际可见的可交互项数。
+ *
+ * - 1 项（含独立单行）→ false，不做缩放形变，只留涟漪/状态层；
+ * - ≥ 2 项 → true，统一启用 M3E 按压形变。
+ *
+ * 纯函数、可单测；调用方不得按页面、名称或 ID 另写判断。
+ */
+internal fun segmentedGroupPressMorph(itemCount: Int): Boolean = itemCount >= 2
 
 /** 行首图标：24dp + onSurfaceVariant（M3E 列表 leading icon 规格）。 */
 @Composable
@@ -226,6 +231,10 @@ class SegmentedGroupScope {
 /**
  * 一组选项行。[title] 非空时在组上方渲染 titleSmall + primary 的小标题。
  * 行的增减会让整组高度以 motionScheme 的空间动画过渡。
+ *
+ * 形状/按压规则只看 [SegmentedGroupScope] 里实际可见的项数：1 项用静态形状
+ * （无按压形变），≥ 2 项用统一的表达性按压形状。调用方不要再按页面或名称
+ * 另行判断。
  */
 @Composable
 fun SegmentedGroup(
@@ -410,7 +419,8 @@ fun SegmentedSwitchRow(
 }
 
 /**
- * 下拉选择行：整行点击弹菜单，trailing 显示当前值 + 下拉箭头。
+ * 下拉选择行：整行点击弹菜单，trailing 直接显示当前值（[SegmentedTrailingValue]），
+ * supporting 只放可选的 [summary] 说明。
  *
  * 菜单用 MD3E 表达性组件栈（[DropdownMenuPopup] + [DropdownMenuGroup] +
  * [SelectableDropdownMenuItem]），并参考 KernelSU 的设置下拉交互：选项连成一体
@@ -438,7 +448,7 @@ fun <T> SegmentedDropdownRow(
     var rowSize by remember { mutableStateOf(IntSize.Zero) }
     val layoutDirection = LocalLayoutDirection.current
     val haptic = LocalHapticFeedback.current
-    val selectedLabel = options.firstOrNull { it == selected }?.let(optionLabel).orEmpty()
+    val selectedLabel = dropdownSelectedLabel(options, selected, optionLabel)
 
     LaunchedEffect(interactionSource, anchor) {
         interactionSource.interactions.collect { interaction ->
@@ -482,20 +492,8 @@ fun <T> SegmentedDropdownRow(
             shapes = shapes,
             colors = colors,
             leadingContent = leadingContent,
-            // Let the selected value wrap below the title; a long trailing label can leave
-            // the headline with zero width at large font scales or in translated layouts.
-            supportingContent = {
-                Column {
-                    Text(selectedLabel)
-                    summary?.let { Text(it) }
-                }
-            },
-            trailingContent = {
-                Icon(
-                    imageVector = Icons.Filled.ArrowDropDown,
-                    contentDescription = null,
-                )
-            },
+            supportingContent = summary?.let { text -> { Text(text) } },
+            trailingContent = { SegmentedTrailingValue(selectedLabel) },
         )
         // Pointer positions are physical pixels. Do not mirror either the zero-size anchor's
         // alignment or its offset in RTL; the native popup still handles direction/screen bounds.
@@ -517,6 +515,36 @@ fun <T> SegmentedDropdownRow(
         }
     }
 }
+
+/**
+ * 列表项 trailing 标准当前值：bodyMedium + onSurfaceVariant，层级弱于标题但保持可读；
+ * 单行省略、右对齐，垂直居中由行内 verticalAlignment 保证；颜色取当前 ColorScheme，
+ * 浅色/深色/动态取色自动适配。整行仍是点击区域，不要单独给它加点击。
+ */
+@Composable
+fun SegmentedTrailingValue(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text = text,
+        // 只定最小可读宽度、不定最大宽度：标题与 trailing 的空间分配交给
+        // ListItem 内部 Row（标题 weight=1、trailing 不挤标题），此处不参与分栏。
+        modifier = modifier.padding(start = 16.dp),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.End,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+/**
+ * 下拉行显示值：优先取选项表中的当前选中；选中值不在表内时回退到对选中值本身的
+ * 文案映射，保证行内永远显示实际生效状态，不出现空白。
+ */
+internal fun <T> dropdownSelectedLabel(
+    options: List<T>,
+    selected: T,
+    optionLabel: (T) -> String,
+): String = options.firstOrNull { it == selected }?.let(optionLabel) ?: optionLabel(selected)
 
 /** A click and its matching native release may arrive in either coroutine order. */
 internal class DropdownPressAnchor {
