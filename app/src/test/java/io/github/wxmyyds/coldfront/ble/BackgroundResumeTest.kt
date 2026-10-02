@@ -5,7 +5,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -51,16 +50,14 @@ class BackgroundResumeTest {
         }
     }
 
-    private val scope: CoroutineScope
-        get() = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
-
     @Test
-    fun `first start only arms, later start resumes a stored loss exactly once`() = runTest {
+    fun `first start only arms, later start resumes a stored loss exactly once`() =
+        runTest(UnconfinedTestDispatcher()) {
         val lifecycle = FakeLifecycle()
         val store = FakeStore(BackgroundLinkLoss(TEST_MAC, CoolerDeviceType.JACKET_8_PRO))
         val dialed = mutableListOf<Pair<String, CoolerDeviceType>>()
         val resume = BackgroundResume(
-            lifecycle = lifecycle, scope = scope, store = store,
+            lifecycle = lifecycle, scope = this, store = store,
             hasRunningSession = { false },
             connect = { address, type -> dialed += address to type },
         )
@@ -79,12 +76,13 @@ class BackgroundResumeTest {
     }
 
     @Test
-    fun `resume is skipped when a session is already running and record is cleared`() = runTest {
+    fun `resume is skipped when a session is already running and record is cleared`() =
+        runTest(UnconfinedTestDispatcher()) {
         val lifecycle = FakeLifecycle()
         val store = FakeStore(BackgroundLinkLoss(TEST_MAC, CoolerDeviceType.JACKET_8_PRO))
         val dialed = mutableListOf<Pair<String, CoolerDeviceType>>()
         val resume = BackgroundResume(
-            lifecycle = lifecycle, scope = scope, store = store,
+            lifecycle = lifecycle, scope = this, store = store,
             hasRunningSession = { true },
             connect = { address, type -> dialed += address to type },
         )
@@ -97,12 +95,13 @@ class BackgroundResumeTest {
     }
 
     @Test
-    fun `explicit clear prevents any resume`() = runTest {
+    fun `explicit clear prevents any resume`() =
+        runTest(UnconfinedTestDispatcher()) {
         val lifecycle = FakeLifecycle()
         val store = FakeStore(BackgroundLinkLoss(TEST_MAC, CoolerDeviceType.JACKET_8_PRO))
         var dialed = false
         val resume = BackgroundResume(
-            lifecycle = lifecycle, scope = scope, store = store,
+            lifecycle = lifecycle, scope = this, store = store,
             hasRunningSession = { false },
             connect = { _, _ -> dialed = true },
         )
@@ -114,12 +113,13 @@ class BackgroundResumeTest {
     }
 
     @Test
-    fun `detach stops observing lifecycle`() = runTest {
+    fun `detach stops observing lifecycle`() =
+        runTest(UnconfinedTestDispatcher()) {
         val lifecycle = FakeLifecycle()
         val store = FakeStore(BackgroundLinkLoss(TEST_MAC, CoolerDeviceType.JACKET_8_PRO))
         var dialed = false
         val resume = BackgroundResume(
-            lifecycle = lifecycle, scope = scope, store = store,
+            lifecycle = lifecycle, scope = this, store = store,
             hasRunningSession = { false },
             connect = { _, _ -> dialed = true },
         )
