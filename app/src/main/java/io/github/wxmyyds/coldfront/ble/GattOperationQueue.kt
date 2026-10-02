@@ -11,7 +11,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 /**
  * Main-confined GATT queue. Owner and target are compared by identity, not UUID/equality.
  * An accepted operation owns the lane until its callback or session teardown. A timeout
- * poisons the session: retrying on that GATT could consume the previous operation's callback.
+ * poisons the session by default: retrying on that GATT could consume the previous
+ * operation's callback. Telemetry-only callers pass [poisonOnTimeout] = false so a stale
+ * optional read in the background cannot close an otherwise healthy session.
  */
 internal class GattOperationQueue(
     private val onTimeout: (owner: Any) -> Unit,
@@ -61,6 +63,7 @@ internal class GattOperationQueue(
         timeoutMs: Long,
         isCurrent: () -> Boolean,
         start: () -> Boolean,
+        poisonOnTimeout: Boolean = true,
     ): Result = mutex.withLock {
         if (!isCurrent()) return@withLock Result(false)
         // Cancellation must not free a lane that Android has already accepted. The owner
@@ -82,7 +85,9 @@ internal class GattOperationQueue(
                     clear(operation)
                     if (callback == null) {
                         // No retry, even if isCurrent has become false due to a newer intent.
-                        onTimeout(owner)
+                        // Optional telemetry opts out: a delayed background callback must not
+                        // invalidate the session, the next poll simply observes the next value.
+                        if (poisonOnTimeout) onTimeout(owner)
                         return@withContext Result(false)
                     }
                     result = callback

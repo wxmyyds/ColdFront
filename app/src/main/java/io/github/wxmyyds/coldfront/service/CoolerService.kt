@@ -169,6 +169,9 @@ class CoolerService : Service() {
     }
 
     private fun activate(profile: CoolerProfile) {
+        // The service owns this connection intent; a stale UI link-loss record must not
+        // outlive it and resume a second session after the service already connected.
+        ble.clearLinkLoss()
         stopping = false
         activation?.cancel()
         target = profile
