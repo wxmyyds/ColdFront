@@ -133,6 +133,14 @@ internal object AppPredictiveBack {
     internal const val INCOMING_FADE_START = 0.72f
 
     /**
+     * Edge used once a pop is no longer interactive. A released gesture and a back-button pop both
+     * have no live edge, so the non-predictive transition reuses the predictive motion with this
+     * placeholder. Sharing the motion is the point: defining it twice is what let one return show
+     * two different animations.
+     */
+    internal const val DEFAULT_EDGE = EDGE_LEFT
+
+    /**
      * Direction the outgoing page travels for a given swipe edge, in Compose's left-to-right
      * coordinate space: a gesture from the right edge pushes the page left, and vice versa.
      */
@@ -156,6 +164,41 @@ internal fun shouldUsePredictivePop(
 ): Boolean = predictiveBackEnabled &&
     isSecondaryDestination(currentRoute, topLevelRoutes) &&
     isTopLevelDestination(previousRoute, topLevelRoutes)
+
+/**
+ * Whether a detail pop should play the predictive-back motion at all, for any of the four
+ * NavHost callbacks that can cover it.
+ *
+ * All four must agree. When the gesture callbacks and the commit callbacks decided independently,
+ * a single return could run two different motions — the first gesture took the interactive branch,
+ * a later one took the commit branch. They also have to agree about *disabling*: if the gesture
+ * branch opted out while the commit branch still animated, releasing the gesture would jump.
+ */
+internal fun detailPopMotionEnabled(
+    predictiveBackEnabled: Boolean,
+    kind: NavigationMotionKind,
+): Boolean = predictiveBackEnabled && kind == NavigationMotionKind.PopDetail
+
+/**
+ * Whether the predictive *gesture* callbacks should drive this pop.
+ *
+ * On top of the shared rule this keeps the destination guard: the gesture callbacks fire for any
+ * edge swipe, including one that is not a pop out of a detail page, so they must check that the
+ * pop they are attached to is the detail pop. Reusing [shouldUsePredictivePop] keeps the
+ * destination test in one place instead of restating it at the call site.
+ */
+internal fun predictiveGestureMotionEnabled(
+    predictiveBackEnabled: Boolean,
+    currentRoute: String?,
+    previousRoute: String?,
+    topLevelRoutes: Set<String>,
+): Boolean = detailPopMotionEnabled(predictiveBackEnabled, NavigationMotionKind.PopDetail) &&
+    shouldUsePredictivePop(
+        predictiveBackEnabled = predictiveBackEnabled,
+        currentRoute = currentRoute,
+        previousRoute = previousRoute,
+        topLevelRoutes = topLevelRoutes,
+    )
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 internal object AppMotion {

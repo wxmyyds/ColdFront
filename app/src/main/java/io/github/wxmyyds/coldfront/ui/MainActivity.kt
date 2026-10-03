@@ -82,6 +82,9 @@ import androidx.navigation.compose.rememberNavController
 import io.github.wxmyyds.coldfront.ble.BlePermissionManager
 import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.ui.component.AppMotion
+import io.github.wxmyyds.coldfront.ui.component.AppPredictiveBack
+import io.github.wxmyyds.coldfront.ui.component.detailPopMotionEnabled
+import io.github.wxmyyds.coldfront.ui.component.predictiveGestureMotionEnabled
 import io.github.wxmyyds.coldfront.ui.component.NavigationMotionKind
 import io.github.wxmyyds.coldfront.ui.component.isForwardTopLevelTransition
 import io.github.wxmyyds.coldfront.ui.component.isSecondaryDestination
@@ -486,12 +489,22 @@ private fun AppNav(vm: CoolerViewModel) {
                                 initialIsSecondary = isSecondaryDestination(initialRoute, topLevelRouteSet),
                                 targetIsSecondary = isSecondaryDestination(targetRoute, topLevelRouteSet),
                             )
-                            AppMotion.pageEnter(
-                                kind = kind,
-                                forward = isForwardTopLevelTransition(initialRoute, targetRoute, topLevelRoutes),
-                                motionScheme = motionScheme,
-                                routeDistance = topLevelRouteDistance(initialRoute, targetRoute, topLevelRoutes),
-                            )
+                            if (detailPopMotionEnabled(predictiveBack, kind)) {
+                                // A detail pop and its predictive counterpart must be the same
+                                // motion. When these were defined separately the first gesture took
+                                // one branch and a later one took the other, so a single return could
+                                // show two different animations. The predictive variant is chosen
+                                // purely for its shape; the edge is irrelevant once the gesture has
+                                // been released and the pop is no longer interactive.
+                                AppMotion.predictivePopEnter(AppPredictiveBack.DEFAULT_EDGE)
+                            } else {
+                                AppMotion.pageEnter(
+                                    kind = kind,
+                                    forward = isForwardTopLevelTransition(initialRoute, targetRoute, topLevelRoutes),
+                                    motionScheme = motionScheme,
+                                    routeDistance = topLevelRouteDistance(initialRoute, targetRoute, topLevelRoutes),
+                                )
+                            }
                         },
                         popExitTransition = {
                             val initialRoute = initialState.destination.route
@@ -501,15 +514,19 @@ private fun AppNav(vm: CoolerViewModel) {
                                 initialIsSecondary = isSecondaryDestination(initialRoute, topLevelRouteSet),
                                 targetIsSecondary = isSecondaryDestination(targetRoute, topLevelRouteSet),
                             )
-                            AppMotion.pageExit(
-                                kind = kind,
-                                forward = isForwardTopLevelTransition(initialRoute, targetRoute, topLevelRoutes),
-                                motionScheme = motionScheme,
-                                routeDistance = topLevelRouteDistance(initialRoute, targetRoute, topLevelRoutes),
-                            )
+                            if (detailPopMotionEnabled(predictiveBack, kind)) {
+                                AppMotion.predictivePopExit(AppPredictiveBack.DEFAULT_EDGE)
+                            } else {
+                                AppMotion.pageExit(
+                                    kind = kind,
+                                    forward = isForwardTopLevelTransition(initialRoute, targetRoute, topLevelRoutes),
+                                    motionScheme = motionScheme,
+                                    routeDistance = topLevelRouteDistance(initialRoute, targetRoute, topLevelRoutes),
+                                )
+                            }
                         },
                         predictivePopEnterTransition = { swipeEdge ->
-                            if (shouldUsePredictivePop(
+                            if (predictiveGestureMotionEnabled(
                                     predictiveBackEnabled = predictiveBack,
                                     currentRoute = initialState.destination.route,
                                     previousRoute = targetState.destination.route,
@@ -520,7 +537,7 @@ private fun AppNav(vm: CoolerViewModel) {
                             } else EnterTransition.None
                         },
                         predictivePopExitTransition = { swipeEdge ->
-                            if (shouldUsePredictivePop(
+                            if (predictiveGestureMotionEnabled(
                                     predictiveBackEnabled = predictiveBack,
                                     currentRoute = initialState.destination.route,
                                     previousRoute = targetState.destination.route,

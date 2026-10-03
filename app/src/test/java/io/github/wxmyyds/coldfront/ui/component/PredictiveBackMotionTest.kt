@@ -66,4 +66,82 @@ class PredictiveBackMotionTest {
         assertEquals(1f, AppPredictiveBack.outgoingDirection(EDGE_NONE), 0f)
         assertEquals(1f, AppPredictiveBack.outgoingDirection(-1), 0f)
     }
+
+    @Test
+    fun everyDetailPopCallbackDecidesTheSameWay() {
+        // The regression: the commit and gesture callbacks used to pick their motion separately, so
+        // one return could play the gesture branch first and the commit branch afterwards. Any
+        // disagreement here reintroduces two animations for a single pop.
+        val roots = setOf("home", "devices", "rgb", "settings")
+
+        for (enabled in listOf(true, false)) {
+            assertEquals(
+                "gesture and commit disagreed with predictive back $enabled",
+                detailPopMotionEnabled(enabled, NavigationMotionKind.PopDetail),
+                predictiveGestureMotionEnabled(
+                    predictiveBackEnabled = enabled,
+                    currentRoute = "about",
+                    previousRoute = "settings",
+                    topLevelRoutes = roots,
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun disablingPredictiveBackSilencesBothHalves() {
+        // If only the gesture branch opted out, releasing a gesture would jump: the page would
+        // stop tracking the finger and then snap into the commit animation.
+        assertEquals(
+            false,
+            detailPopMotionEnabled(false, NavigationMotionKind.PopDetail),
+        )
+        assertEquals(
+            false,
+            predictiveGestureMotionEnabled(
+                predictiveBackEnabled = false,
+                currentRoute = "about",
+                previousRoute = "settings",
+                topLevelRoutes = setOf("home", "devices", "rgb", "settings"),
+            ),
+        )
+    }
+
+    @Test
+    fun otherKindsKeepTheirExistingMotion() {
+        // Only a detail pop moves to the predictive motion; top-level paging must be untouched.
+        assertEquals(
+            false,
+            detailPopMotionEnabled(true, NavigationMotionKind.TopLevel),
+        )
+        assertEquals(
+            false,
+            detailPopMotionEnabled(true, NavigationMotionKind.PushDetail),
+        )
+    }
+
+    @Test
+    fun theGestureKeepsItsDestinationGuard() {
+        val roots = setOf("home", "devices", "rgb", "settings")
+
+        // Popping into another detail page is not the detail pop this motion is defined for.
+        assertEquals(
+            false,
+            predictiveGestureMotionEnabled(
+                predictiveBackEnabled = true,
+                currentRoute = "about",
+                previousRoute = "scan",
+                topLevelRoutes = roots,
+            ),
+        )
+        assertEquals(
+            true,
+            predictiveGestureMotionEnabled(
+                predictiveBackEnabled = true,
+                currentRoute = "scan",
+                previousRoute = "devices",
+                topLevelRoutes = roots,
+            ),
+        )
+    }
 }
