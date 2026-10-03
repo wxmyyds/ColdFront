@@ -92,7 +92,11 @@ import io.github.wxmyyds.coldfront.ui.component.topLevelPageIndex
 import io.github.wxmyyds.coldfront.ui.component.TOP_LEVEL_PAGE_DURATION_MS
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 import io.github.wxmyyds.coldfront.ui.i18n.rememberStrings
+import io.github.wxmyyds.coldfront.ui.theme.BrandSeed
 import io.github.wxmyyds.coldfront.ui.theme.RedmagicCoolerTheme
+import io.github.wxmyyds.coldfront.ui.theme.ThemeSeed
+import io.github.wxmyyds.coldfront.ui.theme.colorSchemeFromSeed
+import io.github.wxmyyds.coldfront.ui.theme.pageLayerScheme
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -157,18 +161,22 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * 冷启动占位层：设置还没从 DataStore 读完时不渲染真实界面，只铺一层主题底色。
-     * 它套自己的主题（仅跟随系统深浅模式），因此底色来自 surface 角色而非写死 hex，
-     * 深浅切换时也不会闪白。用户看不到任何内容，也就看不到错误的主题色。
+     * 冷启动占位层：设置还没从 DataStore 读完时不渲染真实界面，只铺一层底色。
+     *
+     * 底色刻意用与动态取色最终态相同的种子与算法（而非品牌色），因为种子是同步可读的框架
+     * 资源，不依赖 DataStore——真正需要异步读盘的只有 dynamicColor 开关本身。若占位层用品牌色，
+     * 动态取色用户会先看到一帧品牌紫再跳到壁纸色，正是这里要消除的闪烁。
      */
     @Composable
     private fun StartupPlaceholder() {
-        RedmagicCoolerTheme(
-            darkTheme = androidx.compose.foundation.isSystemInDarkTheme(),
-            dynamicColor = false,
-        ) {
-            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface))
+        val dark = androidx.compose.foundation.isSystemInDarkTheme()
+        val seed = if (ThemeSeed.supportsDynamic()) {
+            androidx.compose.ui.res.colorResource(ThemeSeed.dynamicResourceId())
+        } else {
+            BrandSeed
         }
+        val scheme = pageLayerScheme(colorSchemeFromSeed(seed, dark))
+        Box(Modifier.fillMaxSize().background(scheme.background))
     }
 
     @Composable

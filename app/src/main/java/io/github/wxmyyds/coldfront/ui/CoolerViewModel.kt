@@ -89,9 +89,7 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
         // The shared DataStore snapshot is the readiness signal; the setting flows above
         // all default to a placeholder until it arrives.
         viewModelScope.launch {
-            val t0 = android.os.SystemClock.elapsedRealtime()
             settingsRepo.snapshotLoaded.first()
-            android.util.Log.i("ColdFrontStartup", "settingsLoaded after ${android.os.SystemClock.elapsedRealtime() - t0}ms")
             _settingsLoaded.value = true
         }
     }
