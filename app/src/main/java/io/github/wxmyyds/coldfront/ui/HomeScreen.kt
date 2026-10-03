@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -337,6 +338,9 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
             // 尺寸/展开类动画统一从主题取 spec，不在业务代码里硬编码 spring
             .animateContentSize(MaterialTheme.motionScheme.defaultSpatialSpec<IntSize>()),
         shape = MaterialTheme.shapes.large,
+        // 与其他选项行使用同一档容器色；Card 默认会用 surfaceContainerHigh，
+        // 两者不一致会让档位区域在页面里显得深一块。
+        colors = CardDefaults.cardColors(containerColor = optionContainerColor(MaterialTheme.colorScheme)),
     ) {
         Column(
             Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
