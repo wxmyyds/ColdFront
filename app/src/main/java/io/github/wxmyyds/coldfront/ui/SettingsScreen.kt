@@ -38,6 +38,7 @@ import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
 import io.github.wxmyyds.coldfront.ui.component.SegmentedRow
 import io.github.wxmyyds.coldfront.ui.component.SegmentedSwitchRow
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
+import io.github.wxmyyds.coldfront.ui.theme.PaletteStyles
 
 /**
  * 设置页(MD3E 分段选项列表):
@@ -105,12 +106,18 @@ fun SettingsScreen(vm: CoolerViewModel, onAbout: () -> Unit) {
                 item(key = "palette") {
                     SegmentedDropdownRow(
                         title = strings.settingsPalette,
-                        options = listOf("tonal_spot", "neutral", "vibrant"),
+                        options = PaletteStyles.all,
                         selected = palette,
                         onSelect = vm::setPalette,
                         optionLabel = { value -> when (value) {
-                            "neutral" -> strings.settingsPaletteNeutral
-                            "vibrant" -> strings.settingsPaletteVibrant
+                            PaletteStyles.NEUTRAL -> strings.settingsPaletteNeutral
+                            PaletteStyles.VIBRANT -> strings.settingsPaletteVibrant
+                            PaletteStyles.EXPRESSIVE -> strings.settingsPaletteExpressive
+                            PaletteStyles.RAINBOW -> strings.settingsPaletteRainbow
+                            PaletteStyles.FRUIT_SALAD -> strings.settingsPaletteFruitSalad
+                            PaletteStyles.MONOCHROME -> strings.settingsPaletteMonochrome
+                            PaletteStyles.FIDELITY -> strings.settingsPaletteFidelity
+                            PaletteStyles.CONTENT -> strings.settingsPaletteContent
                             else -> strings.settingsPaletteTonalSpot
                         } },
                         leadingContent = { RowIcon(Icons.Filled.Palette) },

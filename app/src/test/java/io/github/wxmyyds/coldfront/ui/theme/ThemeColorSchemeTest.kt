@@ -8,35 +8,113 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ThemeColorSchemeTest {
+    private val seeds = listOf(BrandSeed, Color(0xFF008800), Color(0xFFCC6600))
+
     @Test
-    fun `all palettes and seeds retain fixed surfaces in both modes`() {
+    fun `generated scheme is readable for every seed and palette in both modes`() {
         for (dark in listOf(false, true)) {
-            for (palette in listOf("tonal_spot", "neutral", "vibrant")) {
-                for (seed in listOf(0xFF595A9E.toInt(), 0xFF008800.toInt(), 0xFFCC6600.toInt())) {
-                    val scheme = appColorScheme(seed, dark, palette)
-                    val page = if (dark) PageBackgroundDark else PageBackgroundLight
-                    val option = if (dark) OptionSurfaceDark else OptionSurfaceLight
-                    assertEquals(page, scheme.background)
-                    assertEquals(page, scheme.surfaceDim)
-                    listOf(scheme.surface, scheme.surfaceVariant, scheme.surfaceBright,
-                        scheme.surfaceContainer, scheme.surfaceContainerLow, scheme.surfaceContainerLowest,
-                        scheme.surfaceContainerHigh, scheme.surfaceContainerHighest,
-                    ).forEach { assertEquals(option, it) }
-                    assertTrue(contrast(scheme.onSurface, option) >= 4.5f)
-                    assertTrue(contrast(scheme.onBackground, page) >= 4.5f)
-                    assertTrue(contrast(scheme.inversePrimary, scheme.inverseSurface) >= 4.5f)
+            for (palette in PaletteStyles.all) {
+                for (seed in seeds) {
+                    val scheme = pageLayerScheme(colorSchemeFromSeed(seed, dark, palette))
+                    val tag = "$palette $seed dark=$dark"
+                    assertTrue(tag, contrast(scheme.onSurface, scheme.surface) >= 4.5f)
+                    assertTrue(tag, contrast(scheme.onBackground, scheme.background) >= 4.5f)
+                    assertTrue(tag, contrast(scheme.onPrimary, scheme.primary) >= 4.5f)
+                    assertTrue(tag, contrast(scheme.onSurface, optionContainerColor(scheme)) >= 4.5f)
                 }
             }
         }
     }
 
     @Test
-    fun `inverse and fixed accents use selected palette not static purple`() {
-        val purple = appColorScheme(0xFF595A9E.toInt(), false, "vibrant")
-        val green = appColorScheme(0xFF008800.toInt(), false, "vibrant")
-        assertNotEquals(green.primary, green.inversePrimary)
-        assertNotEquals(purple.primaryFixed, green.primaryFixed)
-        assertEquals(green.primaryFixed, appColorScheme(0xFF008800.toInt(), true, "vibrant").primaryFixed)
+    fun `page background uses surfaceContainer, not surface or lowest`() {
+        // SPEC_2025 remaps background onto surface (tone 98/4), which is too close to the
+        // card level. surfaceContainerLowest is chroma 0 (pure white/black). The page floor
+        // must be surfaceContainer (tone 94/9).
+        for (dark in listOf(false, true)) {
+            val scheme = pageLayerScheme(colorSchemeFromSeed(BrandSeed, dark))
+            assertEquals(scheme.surfaceContainer, scheme.background)
+            assertNotEquals(scheme.surface, scheme.background)
+            assertNotEquals(scheme.surfaceContainerLowest, scheme.background)
+        }
+    }
+
+    @Test
+    fun `option container sits one step above the page background`() {
+        // surfaceBright (tone 98/18) must read lighter than surfaceContainer (94/9) in light
+        // mode and lighter in dark mode too, otherwise rows vanish into the page.
+        for (dark in listOf(false, true)) {
+            val scheme = pageLayerScheme(colorSchemeFromSeed(BrandSeed, dark))
+            val option = optionContainerColor(scheme).luminance()
+            val page = scheme.background.luminance()
+            assertTrue("dark=$dark", option > page)
+        }
+    }
+
+    @Test
+    fun `dynamic color reaches surfaces and not only accents`() {
+        for (dark in listOf(false, true)) {
+            val purple = pageLayerScheme(colorSchemeFromSeed(BrandSeed, dark))
+            val green = pageLayerScheme(colorSchemeFromSeed(Color(0xFF008800), dark))
+            assertNotEquals(purple.primary, green.primary)
+            assertNotEquals(purple.background, green.background)
+            assertNotEquals(optionContainerColor(purple), optionContainerColor(green))
+        }
+    }
+
+    @Test
+    fun `page background and option containers are derived, not fixed constants`() {
+        // Regression guard for the retired overrides. A generated tone may legitimately
+        // coincide with a specific hex value, so assert the property instead: the containers
+        // must come from the generated scheme and vary with the seed.
+        for (dark in listOf(false, true)) {
+            val brand = pageLayerScheme(colorSchemeFromSeed(BrandSeed, dark))
+            val green = pageLayerScheme(colorSchemeFromSeed(Color(0xFF008800), dark))
+            assertEquals(brand.surfaceContainer, brand.background)
+            assertEquals(brand.surfaceBright, optionContainerColor(brand))
+            assertNotEquals(green.background, brand.background)
+            assertNotEquals(optionContainerColor(green), optionContainerColor(brand))
+        }
+    }
+
+    @Test
+    fun `palette choices produce distinguishable schemes`() {
+        val schemes = PaletteStyles.all.associateWith {
+            colorSchemeFromSeed(BrandSeed, false, it)
+        }
+        // Rainbow/FruitSalad/Content keep the seed's primary tone by design and only rotate
+        // hues downstream, so distinguish them through the secondary role instead.
+        assertTrue(schemes.values.map { it.secondary }.toSet().size > 1)
+        assertNotEquals(
+            schemes.getValue(PaletteStyles.TONAL_SPOT).secondary,
+            schemes.getValue(PaletteStyles.RAINBOW).secondary,
+        )
+        assertNotEquals(
+            colorSchemeFromSeed(BrandSeed, false, PaletteStyles.TONAL_SPOT).primary,
+            colorSchemeFromSeed(BrandSeed, true, PaletteStyles.TONAL_SPOT).primary,
+        )
+    }
+
+    @Test
+    fun `spec 2025 is only requested for the styles that define it`() {
+        val supports2025 = setOf(
+            PaletteStyles.TONAL_SPOT,
+            PaletteStyles.NEUTRAL,
+            PaletteStyles.VIBRANT,
+            PaletteStyles.EXPRESSIVE,
+        )
+        PaletteStyles.all.forEach { palette ->
+            val expected = if (palette in supports2025) "SPEC_2025" else "SPEC_2021"
+            assertEquals(palette, expected, paletteSpecVersion(palette).name)
+        }
+    }
+
+    @Test
+    fun `unknown stored palette keys fall back to tonal spot`() {
+        assertEquals("TonalSpot", paletteStyle("future_palette").name)
+        assertEquals("TonalSpot", paletteStyle(PaletteStyles.DEFAULT).name)
+        assertTrue(PaletteStyles.isValid(PaletteStyles.CONTENT))
+        assertTrue(!PaletteStyles.isValid("future_palette"))
     }
 
     private fun contrast(a: Color, b: Color): Float {

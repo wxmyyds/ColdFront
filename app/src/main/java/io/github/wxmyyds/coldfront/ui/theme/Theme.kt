@@ -1,44 +1,41 @@
 package io.github.wxmyyds.coldfront.ui.theme
 
-import android.os.Build
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MotionScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import com.materialkolor.dynamiccolor.MaterialDynamicColors
-import com.materialkolor.hct.Hct
-import com.materialkolor.scheme.DynamicScheme
-import com.materialkolor.scheme.SchemeNeutral
-import com.materialkolor.scheme.SchemeTonalSpot
-import com.materialkolor.scheme.SchemeVibrant
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.colorResource
 
 /**
  * MD3E 主题：[MaterialExpressiveTheme] + 弹簧动效 [MotionScheme.expressive]。
- * 默认使用应用紫灰色板；开启动态取色后，Android 12+ 跟随系统壁纸，深色模式可跟随系统/强制。
+ *
+ * 取色种子：开启动态取色时取系统动态色板的 accent 资源，关闭时用品牌紫灰。
+ * 两者都交给同一个生成器（[colorSchemeFromSeed]），变体由设置中的调色板决定，
+ * 因此所有 surface 角色都由种子推导，没有写死的常量。
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun RedmagicCoolerTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = false,
-    palette: String = "tonal_spot",
+    palette: String = PaletteStyles.DEFAULT,
     content: @Composable () -> Unit,
 ) {
-    val context = LocalContext.current
-    val seed = if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        val systemScheme = if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        systemScheme.primary.toArgb()
-    } else 0xFF595A9E.toInt()
-    val colorScheme = remember(seed, darkTheme, palette) {
-        appColorScheme(seed, darkTheme, palette)
+    // 读取放在版本判断之后：Android 12 以下不存在该资源。
+    // 用 Compose 的 colorResource 而非 Context.getColor：前者是配置感知的，
+    // 壁纸或深浅模式变化时会重新读取。
+    val dynamicSeed = if (dynamicColor && ThemeSeed.supportsDynamic()) {
+        colorResource(ThemeSeed.dynamicResourceId())
+    } else {
+        null
+    }
+    val colorScheme = remember(dynamicSeed, darkTheme, palette) {
+        // 页面底色落到 surfaceContainer，SPEC_2025 下 background 已被重映射到 surface。
+        pageLayerScheme(colorSchemeFromSeed(dynamicSeed ?: BrandSeed, darkTheme, palette))
     }
     val motionScheme = MotionScheme.expressive()
     MaterialExpressiveTheme(
@@ -48,64 +45,6 @@ fun RedmagicCoolerTheme(
         typography = AppTypography,
         shapes = AppShapes,
         content = content,
-    )
-}
-
-/** Pure, testable palette generation; neutral surfaces deliberately stay independent of the seed. */
-internal fun appColorScheme(seed: Int, darkTheme: Boolean, palette: String): ColorScheme {
-    val scheme = when (palette) {
-        "neutral" -> SchemeNeutral(Hct.fromInt(seed), darkTheme, 0.0)
-        "vibrant" -> SchemeVibrant(Hct.fromInt(seed), darkTheme, 0.0)
-        else -> SchemeTonalSpot(Hct.fromInt(seed), darkTheme, 0.0)
-    }
-    val base = paletteColorScheme(scheme, if (darkTheme) DarkColorScheme else LightColorScheme)
-    val page = if (darkTheme) PageBackgroundDark else PageBackgroundLight
-    val option = if (darkTheme) OptionSurfaceDark else OptionSurfaceLight
-    return base.copy(
-        background = page,
-        surface = option,
-        surfaceVariant = option,
-        surfaceBright = option,
-        surfaceDim = page,
-        surfaceContainer = option,
-        surfaceContainerHigh = option,
-        surfaceContainerHighest = option,
-        surfaceContainerLow = option,
-        surfaceContainerLowest = option,
-    )
-}
-
-private fun paletteColorScheme(scheme: DynamicScheme, base: ColorScheme): ColorScheme {
-    val roles = MaterialDynamicColors()
-    fun color(role: com.materialkolor.dynamiccolor.DynamicColor): Color =
-        Color(role.getArgb(scheme))
-    return base.copy(
-        primary = color(roles.primary()),
-        onPrimary = color(roles.onPrimary()),
-        primaryContainer = color(roles.primaryContainer()),
-        onPrimaryContainer = color(roles.onPrimaryContainer()),
-        inversePrimary = color(roles.inversePrimary()),
-        secondary = color(roles.secondary()),
-        onSecondary = color(roles.onSecondary()),
-        secondaryContainer = color(roles.secondaryContainer()),
-        onSecondaryContainer = color(roles.onSecondaryContainer()),
-        tertiary = color(roles.tertiary()),
-        onTertiary = color(roles.onTertiary()),
-        tertiaryContainer = color(roles.tertiaryContainer()),
-        onTertiaryContainer = color(roles.onTertiaryContainer()),
-        surfaceTint = color(roles.primary()),
-        primaryFixed = color(roles.primaryFixed()),
-        primaryFixedDim = color(roles.primaryFixedDim()),
-        onPrimaryFixed = color(roles.onPrimaryFixed()),
-        onPrimaryFixedVariant = color(roles.onPrimaryFixedVariant()),
-        secondaryFixed = color(roles.secondaryFixed()),
-        secondaryFixedDim = color(roles.secondaryFixedDim()),
-        onSecondaryFixed = color(roles.onSecondaryFixed()),
-        onSecondaryFixedVariant = color(roles.onSecondaryFixedVariant()),
-        tertiaryFixed = color(roles.tertiaryFixed()),
-        tertiaryFixedDim = color(roles.tertiaryFixedDim()),
-        onTertiaryFixed = color(roles.onTertiaryFixed()),
-        onTertiaryFixedVariant = color(roles.onTertiaryFixedVariant()),
     )
 }
 

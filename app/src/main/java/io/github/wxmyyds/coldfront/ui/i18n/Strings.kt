@@ -63,6 +63,12 @@ interface AppStrings {
     val settingsPaletteTonalSpot: String
     val settingsPaletteNeutral: String
     val settingsPaletteVibrant: String
+    val settingsPaletteExpressive: String
+    val settingsPaletteRainbow: String
+    val settingsPaletteFruitSalad: String
+    val settingsPaletteMonochrome: String
+    val settingsPaletteFidelity: String
+    val settingsPaletteContent: String
     val settingsInterface: String
     val settingsPredictiveBack: String
     val settingsPredictiveBackDesc: String
@@ -208,6 +214,12 @@ object ZhStrings : AppStrings {
     override val settingsPaletteTonalSpot = "Tonal Spot"
     override val settingsPaletteNeutral = "Neutral"
     override val settingsPaletteVibrant = "Vibrant"
+    override val settingsPaletteExpressive = "Expressive"
+    override val settingsPaletteRainbow = "Rainbow"
+    override val settingsPaletteFruitSalad = "Fruit Salad"
+    override val settingsPaletteMonochrome = "Monochrome"
+    override val settingsPaletteFidelity = "Fidelity"
+    override val settingsPaletteContent = "Content"
     override val settingsInterface = "界面"
     override val settingsPredictiveBack = "预测性返回"
     override val settingsPredictiveBackDesc = "启用导航页面的系统返回过渡"
@@ -346,6 +358,12 @@ object EnStrings : AppStrings {
     override val settingsPaletteTonalSpot = "Tonal Spot"
     override val settingsPaletteNeutral = "Neutral"
     override val settingsPaletteVibrant = "Vibrant"
+    override val settingsPaletteExpressive = "Expressive"
+    override val settingsPaletteRainbow = "Rainbow"
+    override val settingsPaletteFruitSalad = "Fruit Salad"
+    override val settingsPaletteMonochrome = "Monochrome"
+    override val settingsPaletteFidelity = "Fidelity"
+    override val settingsPaletteContent = "Content"
     override val settingsInterface = "Interface"
     override val settingsPredictiveBack = "Predictive back"
     override val settingsPredictiveBackDesc = "Enable system back transitions for app navigation"

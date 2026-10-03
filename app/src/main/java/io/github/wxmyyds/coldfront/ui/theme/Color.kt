@@ -1,134 +1,85 @@
 package io.github.wxmyyds.coldfront.ui.theme
 
+import android.os.Build
 import androidx.compose.material3.ColorScheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
+import com.materialkolor.PaletteStyle
+import com.materialkolor.dynamicColorScheme
+import com.materialkolor.dynamiccolor.ColorSpec
 
-internal val PageBackgroundLight = Color(0xFFEFECF6)
-internal val OptionSurfaceLight = Color(0xFFFBF9FE)
-internal val PageBackgroundDark = Color(0xFF191920)
-internal val OptionSurfaceDark = Color(0xFF2B2B34)
+/** 动态取色种子取自平台公开的动态色板 accent 资源。 */
+internal object ThemeSeed {
+    /** 该资源仅在 Android 12 及以上存在，调用前需先判断版本。 */
+    fun dynamicResourceId(): Int = android.R.color.system_accent1_500
 
-private val LightPrimary = Color(0xFF595A9E)
-private val LightOnPrimary = Color(0xFFFFFFFF)
-private val LightPrimaryContainer = Color(0xFFBDBDF4)
-private val LightOnPrimaryContainer = Color(0xFF242452)
-private val LightSecondary = Color(0xFF625F70)
-private val LightOnSecondary = Color(0xFFFFFFFF)
-private val LightSecondaryContainer = Color(0xFFE8E4F0)
-private val LightOnSecondaryContainer = Color(0xFF1E1B29)
-private val LightTertiary = Color(0xFF74566B)
-private val LightOnTertiary = Color(0xFFFFFFFF)
-private val LightTertiaryContainer = Color(0xFFF2DCEB)
-private val LightOnTertiaryContainer = Color(0xFF2B1526)
-private val LightBackground = PageBackgroundLight
-private val LightOnBackground = Color(0xFF1C1B20)
-private val LightSurface = OptionSurfaceLight
-private val LightOnSurface = Color(0xFF1C1B20)
-private val LightSurfaceVariant = Color(0xFFE8E3ED)
-private val LightOnSurfaceVariant = Color(0xFF494650)
-private val LightOutline = Color(0xFF797681)
-private val LightOutlineVariant = Color(0xFFCAC5D1)
+    fun supportsDynamic(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+}
 
-val LightColorScheme: ColorScheme = lightColorScheme(
-    primary = LightPrimary,
-    onPrimary = LightOnPrimary,
-    primaryContainer = LightPrimaryContainer,
-    onPrimaryContainer = LightOnPrimaryContainer,
-    inversePrimary = Color(0xFFC4C3FF),
-    secondary = LightSecondary,
-    onSecondary = LightOnSecondary,
-    secondaryContainer = LightSecondaryContainer,
-    onSecondaryContainer = LightOnSecondaryContainer,
-    tertiary = LightTertiary,
-    onTertiary = LightOnTertiary,
-    tertiaryContainer = LightTertiaryContainer,
-    onTertiaryContainer = LightOnTertiaryContainer,
-    background = LightBackground,
-    onBackground = LightOnBackground,
-    surface = LightSurface,
-    onSurface = LightOnSurface,
-    surfaceVariant = LightSurfaceVariant,
-    onSurfaceVariant = LightOnSurfaceVariant,
-    surfaceTint = LightPrimary,
-    inverseSurface = Color(0xFF313036),
-    inverseOnSurface = Color(0xFFF4F0F8),
-    error = Color(0xFFBA1A1A),
-    onError = Color(0xFFFFFFFF),
-    errorContainer = Color(0xFFFFDAD6),
-    onErrorContainer = Color(0xFF410002),
-    outline = LightOutline,
-    outlineVariant = LightOutlineVariant,
-    scrim = Color(0xFF000000),
-    surfaceBright = OptionSurfaceLight,
-    surfaceContainer = OptionSurfaceLight,
-    surfaceContainerHigh = OptionSurfaceLight,
-    surfaceContainerHighest = OptionSurfaceLight,
-    surfaceContainerLow = OptionSurfaceLight,
-    surfaceContainerLowest = OptionSurfaceLight,
-    surfaceDim = Color(0xFFDED9E3),
-    primaryFixed = Color(0xFFE3E2FF),
-    primaryFixedDim = Color(0xFFC4C3FF),
-    onPrimaryFixed = Color(0xFF191943),
-    onPrimaryFixedVariant = Color(0xFF414276),
-    secondaryFixed = Color(0xFFE8E4F0),
-    secondaryFixedDim = Color(0xFFCBC7D4),
-    onSecondaryFixed = Color(0xFF1E1B29),
-    onSecondaryFixedVariant = Color(0xFF494653),
-    tertiaryFixed = Color(0xFFF2DCEB),
-    tertiaryFixedDim = Color(0xFFD5C0D0),
-    onTertiaryFixed = Color(0xFF2B1526),
-    onTertiaryFixedVariant = Color(0xFF593D52),
+/**
+ * 页面层级：底色与选项容器分离。
+ *
+ * 页面底色用 `surfaceContainer`（tone 94/9），不用 `background`：SPEC_2025 把
+ * `background` 重映射到 `surface`（tone 98/4），过浅，与内容容器几乎同色。
+ * 不用 `surfaceContainerLowest`：那是 tone 100/0 的纯白/纯黑，chroma 为 0。
+ *
+ * `onBackground` 同步换成 `onSurface`，保证底色变化后文字对比度仍然可读。
+ */
+internal fun pageLayerScheme(scheme: ColorScheme): ColorScheme = scheme.copy(
+    background = scheme.surfaceContainer,
+    onBackground = scheme.onSurface,
 )
 
-val DarkColorScheme: ColorScheme = darkColorScheme(
-    primary = Color(0xFFC4C3FF),
-    onPrimary = Color(0xFF2D2F68),
-    primaryContainer = Color(0xFF414276),
-    onPrimaryContainer = Color(0xFFE3E2FF),
-    inversePrimary = LightPrimary,
-    secondary = Color(0xFFCBC7D4),
-    onSecondary = Color(0xFF33313E),
-    secondaryContainer = Color(0xFF494653),
-    onSecondaryContainer = Color(0xFFE8E4F0),
-    tertiary = Color(0xFFD5C0D0),
-    onTertiary = Color(0xFF402A39),
-    tertiaryContainer = Color(0xFF593D52),
-    onTertiaryContainer = Color(0xFFF2DCEB),
-    background = PageBackgroundDark,
-    onBackground = Color(0xFFE6E1E9),
-    surface = OptionSurfaceDark,
-    onSurface = Color(0xFFE6E1E9),
-    surfaceVariant = OptionSurfaceDark,
-    onSurfaceVariant = Color(0xFFCAC5D1),
-    surfaceTint = Color(0xFFC7C2E0),
-    inverseSurface = Color(0xFFE6E1E9),
-    inverseOnSurface = Color(0xFF313036),
-    error = Color(0xFFFFB4AB),
-    onError = Color(0xFF690005),
-    errorContainer = Color(0xFF93000A),
-    onErrorContainer = Color(0xFFFFDAD6),
-    outline = Color(0xFF938F9A),
-    outlineVariant = Color(0xFF494650),
-    scrim = Color(0xFF000000),
-    surfaceBright = OptionSurfaceDark,
-    surfaceContainer = OptionSurfaceDark,
-    surfaceContainerHigh = OptionSurfaceDark,
-    surfaceContainerHighest = OptionSurfaceDark,
-    surfaceContainerLow = OptionSurfaceDark,
-    surfaceContainerLowest = OptionSurfaceDark,
-    surfaceDim = PageBackgroundDark,
-    primaryFixed = Color(0xFFE3E2FF),
-    primaryFixedDim = Color(0xFFC4C3FF),
-    onPrimaryFixed = Color(0xFF191943),
-    onPrimaryFixedVariant = Color(0xFF414276),
-    secondaryFixed = Color(0xFFE8E4F0),
-    secondaryFixedDim = Color(0xFFCBC7D4),
-    onSecondaryFixed = Color(0xFF1E1B29),
-    onSecondaryFixedVariant = Color(0xFF494653),
-    tertiaryFixed = Color(0xFFF2DCEB),
-    tertiaryFixedDim = Color(0xFFD5C0D0),
-    onTertiaryFixed = Color(0xFF2B1526),
-    onTertiaryFixedVariant = Color(0xFF593D52),
+/**
+ * 选项行与分组卡片的容器角色：比页面底色（surfaceContainer）更亮一档。
+ *
+ * SPEC_2025 下 surfaceBright 为 tone 98/18，而页面底色 surfaceContainer 为 94/9，
+ * 因此行容器比底色更浅/更亮，与“卡片浮在页面上”的观感一致。
+ */
+internal fun optionContainerColor(scheme: ColorScheme): Color = scheme.surfaceBright
+/**
+ * 从种子生成整套 Material 3 角色色。纯函数，可单测。
+ *
+ * 参数遵循 Material Color Utilities 公开规范：变体由设置中的调色板决定，
+ * SPEC_2025 色调映射，标准对比度曲线。
+ */
+internal fun colorSchemeFromSeed(
+    seed: Color,
+    darkTheme: Boolean,
+    palette: String = PaletteStyles.DEFAULT,
+): ColorScheme = dynamicColorScheme(
+    seedColor = seed,
+    isDark = darkTheme,
+    style = paletteStyle(palette),
+    contrastLevel = 0.0,
+    specVersion = paletteSpecVersion(palette),
+)
+
+internal fun paletteStyle(palette: String): PaletteStyle = when (palette) {
+    PaletteStyles.NEUTRAL -> PaletteStyle.Neutral
+    PaletteStyles.VIBRANT -> PaletteStyle.Vibrant
+    PaletteStyles.EXPRESSIVE -> PaletteStyle.Expressive
+    PaletteStyles.RAINBOW -> PaletteStyle.Rainbow
+    PaletteStyles.FRUIT_SALAD -> PaletteStyle.FruitSalad
+    PaletteStyles.MONOCHROME -> PaletteStyle.Monochrome
+    PaletteStyles.FIDELITY -> PaletteStyle.Fidelity
+    PaletteStyles.CONTENT -> PaletteStyle.Content
+    else -> PaletteStyle.TonalSpot
+}
+
+/**
+ * SPEC_2025 只对 Material 3 Expressive 定义的四种变体有效，
+ * 其余变体回退到 SPEC_2021，避免传入不支持的规范版本。
+ */
+internal fun paletteSpecVersion(palette: String): ColorSpec.SpecVersion =
+    if (palette in SPEC_2025_PALETTES) {
+        ColorSpec.SpecVersion.SPEC_2025
+    } else {
+        ColorSpec.SpecVersion.SPEC_2021
+    }
+
+private val SPEC_2025_PALETTES = listOf(
+    PaletteStyles.TONAL_SPOT,
+    PaletteStyles.NEUTRAL,
+    PaletteStyles.VIBRANT,
+    PaletteStyles.EXPRESSIVE,
 )

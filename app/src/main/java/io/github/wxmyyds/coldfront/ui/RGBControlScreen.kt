@@ -79,13 +79,16 @@ import io.github.wxmyyds.coldfront.ui.component.SegmentedContainer
 import io.github.wxmyyds.coldfront.ui.component.SegmentedDropdownRow
 import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
+import io.github.wxmyyds.coldfront.ui.theme.optionContainerColor
 
 /**
  * 预览和通道色标保留设备灯光的真实色；RGB 滑条的轨道/滑块同样取通道色，
  * 用颜色本身传达「这条轨道调的是哪个通道」——属数据可视化语义，不是主题角色色。
+ *
+ * 预览卡不再用写死的纯黑舞台：它与页面其他卡片共用 optionContainerColor，
+ * 卡内文字/图标改用 onSurface。灯光本身由 [LightPreview] 自行绘制满色，
+ * 不依赖容器色，所以数据可视化的观感不变。
  */
-private val PreviewStage = Color.Black
-private val PreviewStageContent = Color.White
 private val PreviewLedOff = Color(0xFF101418)
 private val FullColorBreathPalette = listOf(
     Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta,
@@ -159,7 +162,10 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = MaterialTheme.shapes.extraLarge,
-                        colors = CardDefaults.cardColors(containerColor = PreviewStage),
+                        colors = CardDefaults.cardColors(
+                            containerColor = optionContainerColor(MaterialTheme.colorScheme),
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                        ),
                     ) {
                         Column(
                             modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -169,14 +175,14 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
                                 CoolerArt(
                                     state.deviceType,
                                     modifier = Modifier.size(64.dp),
-                                    iconTint = PreviewStageContent,
+                                    iconTint = MaterialTheme.colorScheme.onSurface,
                                 )
                                 Spacer(Modifier.width(16.dp))
                                 Text(
                                     effectLabel(effect, strings),
                                     modifier = Modifier.weight(1f),
                                     style = MaterialTheme.typography.labelLarge,
-                                    color = PreviewStageContent,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                 )
                             }
                             LightPreview(
@@ -514,7 +520,7 @@ private fun NotConnectedCard(strings: io.github.wxmyyds.coldfront.ui.i18n.AppStr
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            containerColor = optionContainerColor(MaterialTheme.colorScheme),
         ),
     ) {
         Column(
@@ -539,7 +545,7 @@ private fun NotSupportedCard(strings: io.github.wxmyyds.coldfront.ui.i18n.AppStr
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            containerColor = optionContainerColor(MaterialTheme.colorScheme),
         ),
     ) {
         Column(

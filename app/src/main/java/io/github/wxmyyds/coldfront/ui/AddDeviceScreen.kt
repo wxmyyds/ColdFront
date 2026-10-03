@@ -72,6 +72,7 @@ import io.github.wxmyyds.coldfront.ui.component.segmentedRowShapes
 import io.github.wxmyyds.coldfront.ui.i18n.AppStrings
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 import io.github.wxmyyds.coldfront.ui.theme.EmphasizedTypography
+import io.github.wxmyyds.coldfront.ui.theme.optionContainerColor
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -309,7 +310,10 @@ private fun ConnectionStatusCard(
 ) {
     val connecting = connection == ConnectionState.CONNECTING || connection == ConnectionState.DISCOVERING
     val failed = !connecting && connection != ConnectionState.CONNECTED
-    Card(Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = optionContainerColor(MaterialTheme.colorScheme)),
+    ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             deviceName?.let { Text(it, style = MaterialTheme.typography.titleMedium) }
             if (connecting) LoadingIndicator(Modifier.size(32.dp))
@@ -344,7 +348,10 @@ private fun ScanStatusCard(
     onLocation: () -> Unit,
 ) {
     val locationBlocked = locationRequired && !scanState.locationServiceEnabled
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = optionContainerColor(MaterialTheme.colorScheme)),
+    ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
                 strings.diagStatusPermission + ": " +

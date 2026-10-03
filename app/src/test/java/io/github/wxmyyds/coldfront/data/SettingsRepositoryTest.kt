@@ -58,7 +58,8 @@ class SettingsRepositoryTest {
             repository.setDarkMode(mode)
             assertEquals(mode, repository.darkMode.first())
         }
-        listOf("tonal_spot", "neutral", "vibrant").forEach { palette ->
+        listOf("tonal_spot", "neutral", "vibrant", "expressive", "rainbow",
+            "fruit_salad", "monochrome", "fidelity", "content").forEach { palette ->
             repository.setPalette(palette)
             assertEquals(palette, repository.palette.first())
         }
