@@ -9,7 +9,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.colorResource
 
 /**
  * MD3E 主题：[MaterialExpressiveTheme] + 弹簧动效 [MotionScheme.expressive]。
@@ -27,8 +26,9 @@ fun RedmagicCoolerTheme(
 ) {
     val context = LocalContext.current
     // 资源读取放在版本判断之后：Android 12 以下不存在该资源。
+    // minSdk 已为 24，Context.getColor 可直接使用，无需 compose 的 @Composable 重载。
     val dynamicSeed = if (dynamicColor && ThemeSeed.supportsDynamic()) {
-        colorResource(ThemeSeed.dynamicResourceId(), context)
+        Color(context.getColor(ThemeSeed.dynamicResourceId()))
     } else {
         null
     }
