@@ -26,9 +26,9 @@ fun RedmagicCoolerTheme(
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
+    // 资源读取放在版本判断之后：Android 12 以下不存在该资源。
     val dynamicSeed = if (dynamicColor && ThemeSeed.supportsDynamic()) {
-        // 读取失败时回退品牌色，不影响主题可用性。
-        runCatching { colorResource(ThemeSeed.dynamicResourceId(), context) }.getOrNull()
+        colorResource(ThemeSeed.dynamicResourceId(), context)
     } else {
         null
     }
