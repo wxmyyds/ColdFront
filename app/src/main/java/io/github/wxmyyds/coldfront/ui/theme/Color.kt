@@ -7,9 +7,6 @@ import com.materialkolor.PaletteStyle
 import com.materialkolor.dynamicColorScheme
 import com.materialkolor.dynamiccolor.ColorSpec
 
-/** 关闭动态取色时的品牌紫灰种子。 */
-internal val BrandSeed = Color(0xFF595A9E)
-
 /** 动态取色种子取自平台公开的动态色板 accent 资源。 */
 internal object ThemeSeed {
     /** 该资源仅在 Android 12 及以上存在，调用前需先判断版本。 */
