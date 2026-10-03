@@ -33,6 +33,14 @@ fun RedmagicCoolerTheme(
     } else {
         null
     }
+    if (dynamicSeed != null) {
+        android.util.Log.i(
+            "ColdFrontStartup",
+            "seed=#%08X dynamicColor=$dynamicColor".format(dynamicSeed.value.toULong().toLong()),
+        )
+    } else {
+        android.util.Log.i("ColdFrontStartup", "brand seed path, dynamicColor=$dynamicColor")
+    }
     val colorScheme = remember(dynamicSeed, darkTheme, palette) {
         // 页面底色落到 surfaceContainer，SPEC_2025 下 background 已被重映射到 surface。
         pageLayerScheme(colorSchemeFromSeed(dynamicSeed ?: BrandSeed, darkTheme, palette))
