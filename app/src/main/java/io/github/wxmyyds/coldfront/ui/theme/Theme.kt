@@ -18,10 +18,12 @@ import androidx.compose.ui.platform.LocalContext
  *
  * 开启动态取色时直接使用系统色板 [dynamicLightColorScheme] / [dynamicDarkColorScheme]，
  * 不再对系统颜色二次量化，因此 primary 等角色与系统设置及其它 Material 应用完全一致，
- * background 与全部 surface 角色也跟随壁纸。
+ * 页面背景与全部 surface 角色也跟随壁纸。
  *
- * 关闭动态取色时用应用紫灰品牌色作为种子，由系统色板算法生成整套角色色；页面背景与
- * 选项容器不再是写死的常量，而是由种子推导，所以浅色/深色都保持可读的明度分层。
+ * 关闭动态取色时用应用紫灰品牌色作为种子，由同一套算法生成整套角色色；两条路径只在
+ * 种子来源上不同，明度分层与文字对比度表现一致。
+ *
+ * 最后统一经 [pageLayerScheme] 修正背景层角色，保证页面底色与分段行容器有一档可读分层。
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -32,11 +34,14 @@ fun RedmagicCoolerTheme(
 ) {
     val context = LocalContext.current
     val colorScheme = remember(context, darkTheme, dynamicColor) {
-        if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val scheme = if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // 系统色板直接使用，不做二次量化，因此 primary 等角色与其它 Material 应用一致。
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         } else {
             brandColorScheme(darkTheme)
         }
+        // 2025 规范下 background 被重映射为 surface（卡片级），页面底色需改用最底层容器。
+        pageLayerScheme(scheme)
     }
     val motionScheme = MotionScheme.expressive()
     MaterialExpressiveTheme(

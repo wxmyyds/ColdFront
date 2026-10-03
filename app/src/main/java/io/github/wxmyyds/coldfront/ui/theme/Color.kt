@@ -27,3 +27,18 @@ internal fun brandColorScheme(darkTheme: Boolean): ColorScheme = dynamicColorSch
     style = PaletteStyle.TonalSpot,
     specVersion = ColorSpec.SpecVersion.SPEC_2025,
 )
+
+/**
+ * 让 `background` 真正表示“页面底色”，而不是 2025 规范下被重映射到 `surface` 的值。
+ *
+ * ColorSpec2025 把 `background` 重映射为 `surface`（tone 98/4），那是卡片级颜色；
+ * 页面底色应当是最底层容器 `surfaceContainerLowest`（tone 100/0）。不修正的话，
+ * PageScaffold 与导航栏都用 `background`，页面会整体深一档，失去原有的明度分层。
+ *
+ * `onBackground` 必须同步换成 `onSurfaceContainerLowest`，否则底色变浅/变深后
+ * 文字对比度不再满足可读性要求。
+ */
+internal fun pageLayerScheme(scheme: ColorScheme): ColorScheme = scheme.copy(
+    background = scheme.surfaceContainerLowest,
+    onBackground = scheme.onSurface,
+)
