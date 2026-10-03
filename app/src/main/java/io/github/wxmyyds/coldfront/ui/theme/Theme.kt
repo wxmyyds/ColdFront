@@ -6,37 +6,37 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MotionScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.colorResource
-import com.materialkolor.PaletteStyle
-import com.materialkolor.dynamicColorScheme
-import com.materialkolor.dynamiccolor.ColorSpec
+import androidx.compose.ui.platform.LocalContext
 
 /**
  * MD3E 主题：[MaterialExpressiveTheme] + 弹簧动效 [MotionScheme.expressive]。
  *
- * 取色与 InstallerX 一致：用 [com.materialkolor.dynamicColorScheme] 从单一 seed 生成整套角色色，
- * 动态取色时 seed 取系统 accent 资源 [android.R.color.system_accent1_500]，否则用应用品牌紫灰。
- * 不再把系统 ColorScheme 的 primary 当 seed 二次生成，也不再覆盖 background / surface 角色，
- * 页面背景与选项容器都跟随当前色板。
+ * 开启动态取色时直接使用系统色板 [dynamicLightColorScheme] / [dynamicDarkColorScheme]，
+ * 不再对系统颜色二次量化，因此 primary 等角色与系统设置及其它 Material 应用完全一致，
+ * background 与全部 surface 角色也跟随壁纸。
+ *
+ * 关闭动态取色时用应用紫灰品牌色作为种子，由系统色板算法生成整套角色色；页面背景与
+ * 选项容器不再是写死的常量，而是由种子推导，所以浅色/深色都保持可读的明度分层。
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun RedmagicCoolerTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = false,
-    palette: String = PaletteStyles.DEFAULT,
     content: @Composable () -> Unit,
 ) {
-    val seed = if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        colorResource(android.R.color.system_accent1_500)
-    } else {
-        BrandSeed
-    }
-    val colorScheme = remember(seed, darkTheme, palette) {
-        appColorScheme(seed, darkTheme, palette)
+    val context = LocalContext.current
+    val colorScheme = remember(context, darkTheme, dynamicColor) {
+        if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        } else {
+            brandColorScheme(darkTheme)
+        }
     }
     val motionScheme = MotionScheme.expressive()
     MaterialExpressiveTheme(
@@ -48,38 +48,6 @@ fun RedmagicCoolerTheme(
         content = content,
     )
 }
-
-/** Pure, testable palette generation straight from a seed color. */
-internal fun appColorScheme(seed: Color, darkTheme: Boolean, palette: String): ColorScheme =
-    dynamicColorScheme(
-        seedColor = seed,
-        isDark = darkTheme,
-        style = paletteStyle(palette),
-        specVersion = paletteSpecVersion(palette),
-    )
-
-internal fun paletteStyle(palette: String): PaletteStyle = when (palette) {
-    PaletteStyles.NEUTRAL -> PaletteStyle.Neutral
-    PaletteStyles.VIBRANT -> PaletteStyle.Vibrant
-    PaletteStyles.EXPRESSIVE -> PaletteStyle.Expressive
-    PaletteStyles.RAINBOW -> PaletteStyle.Rainbow
-    PaletteStyles.FRUIT_SALAD -> PaletteStyle.FruitSalad
-    PaletteStyles.MONOCHROME -> PaletteStyle.Monochrome
-    PaletteStyles.FIDELITY -> PaletteStyle.Fidelity
-    PaletteStyles.CONTENT -> PaletteStyle.Content
-    else -> PaletteStyle.TonalSpot
-}
-
-/** SPEC_2025 only exists for the four styles M3E defines it for; others fall back to 2021. */
-internal fun paletteSpecVersion(palette: String): ColorSpec.SpecVersion =
-    if (palette in SPEC_2025_STYLES) ColorSpec.SpecVersion.SPEC_2025 else ColorSpec.SpecVersion.SPEC_2021
-
-private val SPEC_2025_STYLES = listOf(
-    PaletteStyles.TONAL_SPOT,
-    PaletteStyles.NEUTRAL,
-    PaletteStyles.VIBRANT,
-    PaletteStyles.EXPRESSIVE,
-)
 
 /** Animate role values only; keep the existing theme transition and role semantics. */
 @Composable

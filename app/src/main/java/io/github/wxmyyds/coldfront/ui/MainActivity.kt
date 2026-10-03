@@ -118,7 +118,6 @@ class MainActivity : ComponentActivity() {
         val dynamicColor by vm.dynamicColor.collectAsStateWithLifecycle()
         val darkMode by vm.darkMode.collectAsStateWithLifecycle()
         val appLanguage by vm.appLanguage.collectAsStateWithLifecycle()
-        val palette by vm.palette.collectAsStateWithLifecycle()
         // 语言覆盖必须在取文案之前生效
         val strings = rememberStrings(override = appLanguage)
         val latestStrings by rememberUpdatedState(strings)
@@ -136,7 +135,7 @@ class MainActivity : ComponentActivity() {
         CompositionLocalProvider(
             LocalStrings provides strings,
         ) {
-            RedmagicCoolerTheme(darkTheme = dark, dynamicColor = dynamicColor, palette = palette) {
+            RedmagicCoolerTheme(darkTheme = dark, dynamicColor = dynamicColor) {
                 SystemBarAppearance(dark)
                 PermissionAndBluetoothEffects(vm)
                 AppNav(vm)

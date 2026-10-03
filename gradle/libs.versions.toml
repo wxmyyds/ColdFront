@@ -12,6 +12,7 @@ kotlinxCoroutines = "1.11.0"
 navigationCompose = "2.10.2"
 datastore = "1.2.1"
 materialColorUtilities = "5.0.1"
+# material-kolor 传递依赖 material-color-utilities，提供 dynamicColorScheme 高层 API
 materialKolor = "5.0.1"
 junit = "4.13.2"
 junitVersion = "1.3.0"

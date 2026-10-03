@@ -14,7 +14,6 @@ import io.github.wxmyyds.coldfront.domain.CoolerDevice
 import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
 import io.github.wxmyyds.coldfront.domain.CoolerProfile
 import io.github.wxmyyds.coldfront.domain.RGBConfig
-import io.github.wxmyyds.coldfront.ui.theme.PaletteStyles
 import java.io.IOException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -74,7 +73,6 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
     )
     val dynamicColor = settingsRepo.dynamicColor.uiState(false)
     val darkMode = settingsRepo.darkMode.uiState("system")
-    val palette = settingsRepo.palette.uiState(PaletteStyles.DEFAULT)
     val predictiveBack = settingsRepo.predictiveBack.uiState(true)
     val appLanguage = settingsRepo.appLanguage.uiState("system")
 
@@ -112,7 +110,6 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setDynamicColor(enabled: Boolean) = saveSetting { settingsRepo.setDynamicColor(enabled) }
     fun setDarkMode(mode: String) = saveSetting { settingsRepo.setDarkMode(mode) }
-    fun setPalette(palette: String) = saveSetting { settingsRepo.setPalette(palette) }
     fun setPredictiveBack(enabled: Boolean) = saveSetting { settingsRepo.setPredictiveBack(enabled) }
     fun setAppLanguage(language: String) = saveSetting { settingsRepo.setAppLanguage(language) }
 
