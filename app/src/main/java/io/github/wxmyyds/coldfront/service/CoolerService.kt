@@ -78,7 +78,7 @@ class CoolerService : Service() {
     private var activation: Job? = null
     private var acceptedStartup = false
     private var strings: AppStrings = stringsFor(Locale.getDefault())
-    private var lastNotification: Pair<String, Int>? = null
+    private var lastNotification: ServiceNotification? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -95,7 +95,8 @@ class CoolerService : Service() {
             val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
             } else 0
-            ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(strings.serviceWaitingConfig, 0), type)
+            val waiting = ServiceNotification(strings.serviceWaitingConfig, 0, showReconnect = true)
+            ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(waiting), type)
             acceptedStartup = true
         } catch (e: RuntimeException) {
             Log.e(TAG, "Cannot enter foreground", e)
@@ -176,6 +177,7 @@ class CoolerService : Service() {
         stopping = false
         activation?.cancel()
         target = profile
+        activationFailed = false
         val current = ble.state.value
         if (!profile.matches(current) || current.connection !in setOf(
                 ConnectionState.CONNECTED, ConnectionState.CONNECTING, ConnectionState.DISCOVERING,
@@ -187,12 +189,11 @@ class CoolerService : Service() {
                 .collect {
                     // CONNECTED means initialization is done. No optimistic smart=true before
                     // characteristics exist; the manager acknowledges the actual write.
-                    if (!ble.setSmartAndAwait(true)) {
-                        activationFailed = true
-                        showControlFailure()
-                        lastNotification = null
-                        updateNotification(strings.serviceControlFailed, ble.state.value.fanPercent)
-                    } else activationFailed = false
+                    activationFailed = !ble.setSmartAndAwait(true)
+                    if (activationFailed) showControlFailure()
+                    // A successful retry need not change BLE StateFlow (smart may already
+                    // be true), so refresh text and actions explicitly on both outcomes.
+                    updateNotification()
                 }
         }
     }
@@ -214,15 +215,7 @@ class CoolerService : Service() {
                         lastNotification = null
                         createNotificationChannel()
                     }
-                    val text = when {
-                        state.isConnected && state.smartOn -> strings.serviceAutoOn
-                        state.isConnected -> strings.serviceManual
-                        state.connection == ConnectionState.CONNECTING ||
-                            state.connection == ConnectionState.DISCOVERING -> strings.homeConnecting
-                        state.connection == ConnectionState.FAILED -> strings.homeConnectionFailed
-                        else -> strings.serviceReconnect
-                    }
-                    updateNotification(text, state.fanPercent)
+                    updateNotification(serviceNotification(state, strings, activationFailed))
                 }
         }
         scope.launch {
@@ -231,12 +224,10 @@ class CoolerService : Service() {
                 Log.e(TAG, "Cannot observe service target", cause)
                 delay(2_000)
                 true
-            }.collect { saved ->
-                // Deleting the running profile or an explicit opt-out invalidates recovery.
-                // Command handling performs the manual write before stop; don't race it here.
-                if (target != null && saved == null && !stopping) {
-                    commands.trySend(ServiceCommand(Intent().setAction(ACTION_VALIDATE_TARGET), latestStartId))
-                }
+            }.collectTargetInvalidations(latestStartId = { latestStartId }) { startId ->
+                // Never discard deletion while target is still being loaded. The queued
+                // validator runs after startup/manual commands and re-reads persisted intent.
+                commands.trySend(ServiceCommand(Intent().setAction(ACTION_VALIDATE_TARGET), startId))
             }
         }
     }
@@ -278,7 +269,7 @@ class CoolerService : Service() {
         )
     }
 
-    private fun buildNotification(text: String, fanPercent: Int): Notification {
+    private fun buildNotification(value: ServiceNotification): Notification {
         val main = PendingIntent.getActivity(
             this, 0, packageManager.getLaunchIntentForPackage(packageName) ?: Intent(),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
@@ -286,26 +277,27 @@ class CoolerService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setContentTitle(strings.appName)
-            .setContentText("$text · $fanPercent%")
+            .setContentText("${value.text} · ${value.fanPercent}%")
             .setContentIntent(main)
             .setOngoing(true)
             .addAction(android.R.drawable.ic_media_pause, strings.close, actionIntent(ACTION_STOP))
             .addAction(android.R.drawable.ic_menu_edit, strings.serviceSwitchManual, actionIntent(ACTION_SWITCH_TO_MANUAL))
             .apply {
-                if (::ble.isInitialized && (!ble.state.value.isConnected || activationFailed)) {
+                if (value.showReconnect) {
                     addAction(android.R.drawable.ic_menu_rotate, strings.serviceReconnect, actionIntent(ACTION_RECONNECT))
                 }
             }
             .build()
     }
 
-    private fun updateNotification(text: String, fanPercent: Int) {
+    private fun updateNotification(
+        value: ServiceNotification = serviceNotification(ble.state.value, strings, activationFailed),
+    ) {
         if (stopping || !acceptedStartup) return
-        val value = text to fanPercent
         if (value == lastNotification) return
-        lastNotification = value
         try {
-            getSystemService(NotificationManager::class.java)?.notify(NOTIFICATION_ID, buildNotification(text, fanPercent))
+            getSystemService(NotificationManager::class.java)?.notify(NOTIFICATION_ID, buildNotification(value))
+            lastNotification = value
         } catch (e: SecurityException) {
             Log.w(TAG, "Notification permission changed", e)
         }

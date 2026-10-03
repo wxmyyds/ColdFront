@@ -17,39 +17,23 @@ private val Context.settingsDataStore by preferencesDataStore(name = "cooler_set
 class SettingsRepository internal constructor(private val dataStore: DataStore<Preferences>) {
     constructor(context: Context) : this(context.applicationContext.settingsDataStore)
 
-    /** 动态取色默认关闭，使用应用自带的紫灰主题；用户可在设置中开启。 */
-    val dynamicColor: Flow<Boolean> = dataStore.data.map {
-        it[KEY_DYNAMIC_COLOR] ?: false
+    /** All fields are decoded together, never combined from independently collected setting flows. */
+    val settings: Flow<AppSettings> = dataStore.data.map { preferences ->
+        AppSettings(
+            dynamicColor = preferences[KEY_DYNAMIC_COLOR] ?: false,
+            darkMode = darkModeOrDefault(preferences[KEY_DARK_MODE]),
+            palette = paletteOrDefault(preferences[KEY_PALETTE]),
+            predictiveBack = preferences[KEY_PREDICTIVE_BACK] ?: true,
+            appLanguage = languageOrDefault(preferences[KEY_APP_LANGUAGE]),
+        )
     }.distinctUntilChanged()
 
-    /**
-     * 首个真实快照读完时发射。
-     *
-     * 与上面的设置流不同：它们各自带一个写死的初值，而 DataStore 的首次读盘是异步的，
-     * 因此“拿到默认值”不等于“读到磁盘”。主题必须区分这两者，否则首帧会用品牌色渲染，
-     * 等真实值到达时再跳变。调用方在它为 true 之前不应绘制任何 UI。
-     */
-    val snapshotLoaded: Flow<Boolean> = dataStore.data
-        .map { true }
-        .distinctUntilChanged()
-
-    /** 深色模式: system / light / dark */
-    val darkMode: Flow<String> = dataStore.data.map {
-        darkModeOrDefault(it[KEY_DARK_MODE])
-    }.distinctUntilChanged()
-
-    val palette: Flow<String> = dataStore.data.map {
-        paletteOrDefault(it[KEY_PALETTE])
-    }.distinctUntilChanged()
-
-    val predictiveBack: Flow<Boolean> = dataStore.data.map {
-        it[KEY_PREDICTIVE_BACK] ?: true
-    }.distinctUntilChanged()
-
-    /** 界面语言: system / zh / en */
-    val appLanguage: Flow<String> = dataStore.data.map {
-        languageOrDefault(it[KEY_APP_LANGUAGE])
-    }.distinctUntilChanged()
+    // Keep single-setting flows for non-UI consumers (e.g. service notification language).
+    val dynamicColor: Flow<Boolean> = settings.map { it.dynamicColor }.distinctUntilChanged()
+    val darkMode: Flow<String> = settings.map { it.darkMode }.distinctUntilChanged()
+    val palette: Flow<String> = settings.map { it.palette }.distinctUntilChanged()
+    val predictiveBack: Flow<Boolean> = settings.map { it.predictiveBack }.distinctUntilChanged()
+    val appLanguage: Flow<String> = settings.map { it.appLanguage }.distinctUntilChanged()
 
     suspend fun setDynamicColor(enabled: Boolean) {
         dataStore.edit { it[KEY_DYNAMIC_COLOR] = enabled }

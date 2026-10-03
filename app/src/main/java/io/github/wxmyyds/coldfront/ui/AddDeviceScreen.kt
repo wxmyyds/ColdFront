@@ -507,7 +507,7 @@ private fun DiagnosticCard(
                     DetailLine(strings.diagServiceUuids, it)
                 }
                 if (entry.serviceUuids.size > 3) {
-                    DetailLine(strings.diagServiceUuids, "+${entry.serviceUuids.size - 3} more")
+                    DetailLine(strings.diagServiceUuids, strings.diagMoreCount.format(entry.serviceUuids.size - 3))
                 }
             }
         }

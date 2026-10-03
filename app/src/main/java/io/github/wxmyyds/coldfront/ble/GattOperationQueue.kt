@@ -12,8 +12,8 @@ import kotlinx.coroutines.withTimeoutOrNull
  * Main-confined GATT queue. Owner and target are compared by identity, not UUID/equality.
  * An accepted operation owns the lane until its callback or session teardown. A timeout
  * poisons the session by default: retrying on that GATT could consume the previous
- * operation's callback. Telemetry-only callers pass [poisonOnTimeout] = false so a stale
- * optional read in the background cannot close an otherwise healthy session.
+ * operation's callback. Optional telemetry callers pass [poisonOnTimeout] = false;
+ * their owner/target/kind combination is quarantined until session teardown instead.
  */
 internal class GattOperationQueue(
     private val onTimeout: (owner: Any) -> Unit,
@@ -34,21 +34,19 @@ internal class GattOperationQueue(
 
     private val mutex = Mutex()
     private var pending: Pending? = null
-    private val timedOutReads = java.util.IdentityHashMap<Any, MutableSet<Any>>()
+    private val timedOut = java.util.IdentityHashMap<Any, java.util.IdentityHashMap<Any, MutableSet<Kind>>>()
 
-    private fun readTimedOut(owner: Any, target: Any): Boolean =
-        timedOutReads[owner]?.contains(target) == true
+    private fun hasTimedOut(owner: Any, target: Any, kind: Kind): Boolean =
+        timedOut[owner]?.get(target)?.contains(kind) == true
 
-    private fun markReadTimedOut(owner: Any, target: Any) {
-        val targets = timedOutReads.getOrPut(owner) {
-            java.util.Collections.newSetFromMap(java.util.IdentityHashMap<Any, Boolean>())
-        }
-        targets.add(target)
+    private fun markTimedOut(owner: Any, target: Any, kind: Kind) {
+        val targets = timedOut.getOrPut(owner) { java.util.IdentityHashMap() }
+        targets.getOrPut(target) { mutableSetOf() }.add(kind)
     }
 
-    /** Returns false for unsolicited, stale-owner, wrong-kind/target, or timed-out reads. */
+    /** Returns false for unsolicited, stale-owner, wrong-kind/target, or quarantined callbacks. */
     fun complete(owner: Any, target: Any, kind: Kind, result: Result): Boolean {
-        if (kind == Kind.READ && readTimedOut(owner, target)) return false
+        if (hasTimedOut(owner, target, kind)) return false
         val operation = pending ?: return false
         if (operation.owner !== owner || operation.target !== target || operation.kind != kind) return false
         clear(operation)
@@ -58,7 +56,7 @@ internal class GattOperationQueue(
 
     /** Call only after invalidating the owner, before closing its transport. */
     fun abort(owner: Any) {
-        timedOutReads.remove(owner)
+        timedOut.remove(owner)
         val operation = pending ?: return
         if (operation.owner !== owner) return
         clear(operation)
@@ -78,7 +76,7 @@ internal class GattOperationQueue(
         poisonOnTimeout: Boolean = true,
         start: () -> Boolean,
     ): Result = mutex.withLock {
-        if (!isCurrent() || (kind == Kind.READ && readTimedOut(owner, target))) {
+        if (!isCurrent() || hasTimedOut(owner, target, kind)) {
             return@withLock Result(false)
         }
         // Cancellation must not free a lane that Android has already accepted. The owner
@@ -100,10 +98,10 @@ internal class GattOperationQueue(
                     clear(operation)
                     if (callback == null) {
                         // No retry, even if isCurrent has become false due to a newer intent.
-                        // Optional telemetry opts out: a delayed background callback must not
-                        // invalidate the session, the next poll simply observes the next value.
+                        // Android callbacks have no generation: quarantine this exact lane
+                        // even after a late callback arrives. Other targets/kinds remain usable.
                         if (poisonOnTimeout) onTimeout(owner)
-                        else if (kind == Kind.READ) markReadTimedOut(owner, target)
+                        else markTimedOut(owner, target, kind)
                         return@withContext Result(false)
                     }
                     result = callback

@@ -69,6 +69,7 @@ import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -80,7 +81,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import io.github.wxmyyds.coldfront.ble.BlePermissionManager
-import io.github.wxmyyds.coldfront.domain.ConnectionState
+import io.github.wxmyyds.coldfront.data.AppSettings
 import io.github.wxmyyds.coldfront.ui.component.AppMotion
 import io.github.wxmyyds.coldfront.ui.component.NavigationMotionKind
 import io.github.wxmyyds.coldfront.ui.component.isForwardTopLevelTransition
@@ -88,6 +89,9 @@ import io.github.wxmyyds.coldfront.ui.component.isSecondaryDestination
 import io.github.wxmyyds.coldfront.ui.component.navigationMotionKind
 import io.github.wxmyyds.coldfront.ui.component.shouldUsePredictivePop
 import io.github.wxmyyds.coldfront.ui.component.topLevelRouteDistance
+import io.github.wxmyyds.coldfront.ui.component.topLevelDragReversed
+import io.github.wxmyyds.coldfront.ui.component.topLevelPositionAfterDrag
+import io.github.wxmyyds.coldfront.ui.component.topLevelTargetAfterDrag
 import io.github.wxmyyds.coldfront.ui.component.topLevelPageIndex
 import io.github.wxmyyds.coldfront.ui.component.TOP_LEVEL_PAGE_DURATION_MS
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
@@ -99,9 +103,7 @@ import io.github.wxmyyds.coldfront.ui.theme.colorSchemeFromSeed
 import io.github.wxmyyds.coldfront.ui.theme.pageLayerScheme
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
-import kotlin.math.abs
 import kotlin.math.roundToInt
-import kotlin.math.sign
 
 class MainActivity : ComponentActivity() {
 
@@ -121,30 +123,25 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun AppContent(vm: CoolerViewModel) {
-        // collectAsStateWithLifecycle 等到 STARTED 才收集，首帧拿不到值；这里用普通的
-        // collectAsState，保证冷启动第一帧就能拿到 DataStore 的就绪标志。
-        // 取色、深浅模式、调色板都在同一个 store 里，没就绪就不画，避免先闪一帧品牌色。
-        val settingsLoaded by vm.settingsLoaded.collectAsState()
-        val dynamicColor by vm.dynamicColor.collectAsState()
-        val darkMode by vm.darkMode.collectAsState()
-        val appLanguage by vm.appLanguage.collectAsState()
-        val palette by vm.palette.collectAsState()
-        // 语言覆盖必须在取文案之前生效
-        val strings = rememberStrings(override = appLanguage)
+        // One collected snapshot owns both readiness and every visible setting. Do not
+        // split these into StateFlows: their independent scheduling can mix disk revisions.
+        val snapshot by vm.settings.collectAsState()
+        val settings = snapshot
+        // Until the first read succeeds, only error messages use the system language.
+        val strings = rememberStrings(override = settings?.appLanguage)
         val latestStrings by rememberUpdatedState(strings)
         val context = LocalContext.current
-        if (!settingsLoaded) {
-            // 与参考实现一致：设置未就绪时不产出任何 UI，只留一层中性底避免白屏闪烁。
-            // 底色走主题的 surface 角色，不写死 hex；此时主题已经按深浅模式建好。
-            StartupPlaceholder()
-            return
-        }
+        // Install before the loading gate, so a failed first read can actually be reported.
         LaunchedEffect(vm) {
             vm.errors.collect {
                 Toast.makeText(context, latestStrings.storageOperationFailed, Toast.LENGTH_LONG).show()
             }
         }
-        val dark = when (darkMode) {
+        if (settings == null) {
+            StartupPlaceholder()
+            return
+        }
+        val dark = when (settings.darkMode) {
             "light" -> false
             "dark" -> true
             else -> androidx.compose.foundation.isSystemInDarkTheme()
@@ -152,10 +149,14 @@ class MainActivity : ComponentActivity() {
         CompositionLocalProvider(
             LocalStrings provides strings,
         ) {
-            RedmagicCoolerTheme(darkTheme = dark, dynamicColor = dynamicColor, palette = palette) {
+            RedmagicCoolerTheme(
+                darkTheme = dark,
+                dynamicColor = settings.dynamicColor,
+                palette = settings.palette,
+            ) {
                 SystemBarAppearance(dark)
                 PermissionAndBluetoothEffects(vm)
-                AppNav(vm)
+                AppNav(vm, settings)
             }
         }
     }
@@ -252,7 +253,7 @@ private object Routes {
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun AppNav(vm: CoolerViewModel) {
+private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
     val nav = rememberNavController()
     val strings = LocalStrings.current
     val backStack by nav.currentBackStackEntryAsState()
@@ -260,10 +261,15 @@ private fun AppNav(vm: CoolerViewModel) {
 
     // 连接成功后自动离开扫描页,回主页看状态(避免连上后停在列表里像「没反应」)
     val liveState by vm.liveState.collectAsStateWithLifecycle()
-    val predictiveBack by vm.predictiveBack.collectAsStateWithLifecycle()
-    LaunchedEffect(liveState.connection) {
-        if (liveState.connection == ConnectionState.CONNECTED &&
-            current?.hierarchy?.any { it.route == Routes.SCAN } == true
+    val predictiveBack = settings.predictiveBack
+    // Include the session even if lifecycle collection skipped reconnect's intermediate states.
+    // Never key on route: an already-connected user must still be able to open scan.
+    val connectionKey = connectionNavigationKey(liveState)
+    LaunchedEffect(connectionKey) {
+        if (shouldLeaveScanOnConnection(
+                connectionKey,
+                isScanDestination = current?.hierarchy?.any { it.route == Routes.SCAN } == true,
+            )
         ) {
             nav.navigate(Routes.HOME) {
                 popUpTo(nav.graph.findStartDestination().id)
@@ -394,20 +400,22 @@ private fun AppNav(vm: CoolerViewModel) {
                                 .draggable(
                                     enabled = !isSecondaryDestination(currentRoute, topLevelRouteSet),
                                     orientation = Orientation.Horizontal,
+                                    // Foundation reverses both delta and stop velocity; offset below
+                                    // already mirrors in RTL, so do not reverse it a second time.
+                                    reverseDirection = topLevelDragReversed(LocalLayoutDirection.current),
                                     state = rememberDraggableState { delta ->
                                         pageScope.launch {
                                             pagePosition.snapTo(
-                                                (pagePosition.value - delta / pageWidthPx.coerceAtLeast(1f))
-                                                    .coerceIn(0f, topLevelRoutes.lastIndex.toFloat()),
+                                                topLevelPositionAfterDrag(
+                                                    pagePosition.value, delta, pageWidthPx, topLevelRoutes.lastIndex,
+                                                ),
                                             )
                                         }
                                     },
                                     onDragStopped = { velocity ->
-                                        val target = (if (abs(velocity) > 700f) {
-                                            (pagePosition.value - sign(velocity)).roundToInt()
-                                        } else {
-                                            pagePosition.value.roundToInt()
-                                        }).coerceIn(0, topLevelRoutes.lastIndex)
+                                        val target = topLevelTargetAfterDrag(
+                                            pagePosition.value, velocity, topLevelRoutes.lastIndex,
+                                        )
                                         val targetRoute = topLevelRoutes[target]
                                         if (targetRoute != currentRoute) {
                                             navigateToTab(targetRoute)
@@ -428,8 +436,14 @@ private fun AppNav(vm: CoolerViewModel) {
                             listOf<@Composable () -> Unit>(
                                 { HomeScreen(vm, onAddDevice = { nav.navigate(Routes.SCAN) { launchSingleTop = true } }) },
                                 { DevicesScreen(vm, onAddDevice = { nav.navigate(Routes.SCAN) { launchSingleTop = true } }) },
-                                { RGBControlScreen(vm, onConnect = { nav.navigate(Routes.SCAN) { launchSingleTop = true } }) },
-                                { SettingsScreen(vm, onAbout = { nav.navigate(Routes.ABOUT) { launchSingleTop = true } }) },
+                                {
+                                    RGBControlScreen(
+                                        vm,
+                                        isPageActive = currentRoute == Routes.RGB,
+                                        onConnect = { nav.navigate(Routes.SCAN) { launchSingleTop = true } },
+                                    )
+                                },
+                                { SettingsScreen(vm, settings, onAbout = { nav.navigate(Routes.ABOUT) { launchSingleTop = true } }) },
                             ).forEachIndexed { index, content ->
                                 Box(
                                     modifier = Modifier
