@@ -88,9 +88,22 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
         // Any visible setting emitting means the shared DataStore snapshot arrived, so the
         // theme can be painted with final values instead of the brand fallback.
         viewModelScope.launch {
+            val t0 = android.os.SystemClock.elapsedRealtime()
             merge(dynamicColor, darkMode, palette, appLanguage, predictiveBack).first()
+            android.util.Log.i("ColdFrontStartup", "settingsLoaded after ${android.os.SystemClock.elapsedRealtime() - t0}ms")
             _settingsLoaded.value = true
         }
+    }
+
+    init {
+        viewModelScope.launch {
+            val t = android.os.SystemClock.elapsedRealtime()
+            settingsRepo.dynamicColor.first()
+            android.util.Log.i("ColdFrontStartup", "DataStore first read after ${android.os.SystemClock.elapsedRealtime() - t}ms")
+        }
+    }
+
+    init {
         backgroundResume.attach()
         viewModelScope.launch {
             liveState.filter { it.isConnected }
