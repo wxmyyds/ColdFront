@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.retryWhen
@@ -72,11 +73,26 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
         hasRunningSession = ble::hasRunningSession,
         connect = ble::connectByAddress,
     )
+    // 首帧不渲染，等 DataStore 首个快照读完再置位。信号必须直接来自 dataStore.data，
+    // 不能用 settingsFlow 的 StateFlow：那些流带写死初值，.first() 会立即返回，测得 6ms，
+    // 而真实读盘要 2 秒。dynamicColor / darkMode / palette 共用同一个 store 快照，
+    // 因此这一个信号足以保证首帧的取色、深浅模式与调色板都是最终值。
+    private val _settingsLoaded = MutableStateFlow(false)
+    val settingsLoaded: StateFlow<Boolean> = _settingsLoaded.asStateFlow()
     val dynamicColor = settingsRepo.dynamicColor.uiState(false)
     val darkMode = settingsRepo.darkMode.uiState("system")
     val palette = settingsRepo.palette.uiState(PaletteStyles.DEFAULT)
     val predictiveBack = settingsRepo.predictiveBack.uiState(true)
     val appLanguage = settingsRepo.appLanguage.uiState("system")
+
+    init {
+        // The shared DataStore snapshot is the readiness signal; the setting flows above
+        // all default to a placeholder until it arrives.
+        viewModelScope.launch {
+            settingsRepo.snapshotLoaded.first()
+            _settingsLoaded.value = true
+        }
+    }
 
     init {
         backgroundResume.attach()

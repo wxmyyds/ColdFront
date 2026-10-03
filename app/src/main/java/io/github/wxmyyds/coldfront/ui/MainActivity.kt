@@ -13,6 +13,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.core.view.WindowCompat
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -69,6 +70,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -90,7 +92,11 @@ import io.github.wxmyyds.coldfront.ui.component.topLevelPageIndex
 import io.github.wxmyyds.coldfront.ui.component.TOP_LEVEL_PAGE_DURATION_MS
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 import io.github.wxmyyds.coldfront.ui.i18n.rememberStrings
+import io.github.wxmyyds.coldfront.ui.theme.BrandSeed
 import io.github.wxmyyds.coldfront.ui.theme.RedmagicCoolerTheme
+import io.github.wxmyyds.coldfront.ui.theme.ThemeSeed
+import io.github.wxmyyds.coldfront.ui.theme.colorSchemeFromSeed
+import io.github.wxmyyds.coldfront.ui.theme.pageLayerScheme
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -115,14 +121,24 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun AppContent(vm: CoolerViewModel) {
-        val dynamicColor by vm.dynamicColor.collectAsStateWithLifecycle()
-        val darkMode by vm.darkMode.collectAsStateWithLifecycle()
-        val appLanguage by vm.appLanguage.collectAsStateWithLifecycle()
-        val palette by vm.palette.collectAsStateWithLifecycle()
+        // collectAsStateWithLifecycle 等到 STARTED 才收集，首帧拿不到值；这里用普通的
+        // collectAsState，保证冷启动第一帧就能拿到 DataStore 的就绪标志。
+        // 取色、深浅模式、调色板都在同一个 store 里，没就绪就不画，避免先闪一帧品牌色。
+        val settingsLoaded by vm.settingsLoaded.collectAsState()
+        val dynamicColor by vm.dynamicColor.collectAsState()
+        val darkMode by vm.darkMode.collectAsState()
+        val appLanguage by vm.appLanguage.collectAsState()
+        val palette by vm.palette.collectAsState()
         // 语言覆盖必须在取文案之前生效
         val strings = rememberStrings(override = appLanguage)
         val latestStrings by rememberUpdatedState(strings)
         val context = LocalContext.current
+        if (!settingsLoaded) {
+            // 与参考实现一致：设置未就绪时不产出任何 UI，只留一层中性底避免白屏闪烁。
+            // 底色走主题的 surface 角色，不写死 hex；此时主题已经按深浅模式建好。
+            StartupPlaceholder()
+            return
+        }
         LaunchedEffect(vm) {
             vm.errors.collect {
                 Toast.makeText(context, latestStrings.storageOperationFailed, Toast.LENGTH_LONG).show()
@@ -142,6 +158,25 @@ class MainActivity : ComponentActivity() {
                 AppNav(vm)
             }
         }
+    }
+
+    /**
+     * 冷启动占位层：设置还没从 DataStore 读完时不渲染真实界面，只铺一层底色。
+     *
+     * 底色刻意用与动态取色最终态相同的种子与算法（而非品牌色），因为种子是同步可读的框架
+     * 资源，不依赖 DataStore——真正需要异步读盘的只有 dynamicColor 开关本身。若占位层用品牌色，
+     * 动态取色用户会先看到一帧品牌紫再跳到壁纸色，正是这里要消除的闪烁。
+     */
+    @Composable
+    private fun StartupPlaceholder() {
+        val dark = androidx.compose.foundation.isSystemInDarkTheme()
+        val seed = if (ThemeSeed.supportsDynamic()) {
+            androidx.compose.ui.res.colorResource(ThemeSeed.dynamicResourceId())
+        } else {
+            BrandSeed
+        }
+        val scheme = pageLayerScheme(colorSchemeFromSeed(seed, dark))
+        Box(Modifier.fillMaxSize().background(scheme.background))
     }
 
     @Composable
