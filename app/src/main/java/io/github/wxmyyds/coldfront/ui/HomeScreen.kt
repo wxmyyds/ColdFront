@@ -65,13 +65,14 @@ import io.github.wxmyyds.coldfront.ui.component.staticStandaloneRowShapes
 import io.github.wxmyyds.coldfront.ui.i18n.AppStrings
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 import io.github.wxmyyds.coldfront.ui.theme.EmphasizedTypography
+import io.github.wxmyyds.coldfront.ui.theme.optionContainerColor
 import kotlin.math.roundToInt
 
 /**
  * 首页 —— 按 MD3E 七条表达性战术设计:
  *
  * - 战术 2/4(色彩层次 + 容器分组):温度英雄卡用 primaryContainer(制冷中)
- *   ↔ surfaceContainerHighest(待机)之间过渡,最亮表面留给最重要信息。
+ *   ↔ surfaceBright(待机)之间过渡,与选项容器同一档明度，不制造孤立的深色块。
  * - 战术 3(排印引导):温度用 displayLarge + SemiBold 强调。
  * - 战术 5(流体动效):颜色过渡走 MaterialTheme.motionScheme 的 effects spec。
  * - 电源和模式控制沿用 SegmentedSwitchRow 的原生开关与分组形态。
@@ -198,10 +199,10 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
 private fun TempHero(state: CoolerLiveState) {
     val strings = LocalStrings.current
     val scheme = MaterialTheme.colorScheme
-    // 制冷中 → primaryContainer;待机 → surfaceContainerHighest(战术 2/4)
+    // 制冷中 → primaryContainer；待机 → surfaceBright，与选项容器同档
     val container by animateColorAsState(
         targetValue = if (state.coolingOn) scheme.primaryContainer
-        else scheme.surfaceContainerHighest,
+        else optionContainerColor(scheme),
         animationSpec = MaterialTheme.motionScheme.fastEffectsSpec<Color>(),
         label = "heroContainer",
     )
@@ -267,7 +268,7 @@ private fun TempHero(state: CoolerLiveState) {
 @Composable
 private fun MetricPill(icon: ImageVector, text: String, content: Color) {
     // 胶囊底是对 content 的装饰性淡色叠加：英雄卡容器会在 primaryContainer 与
-    // surfaceContainerHighest 之间过渡，没有单一角色色能同时适配，故保留 alpha 写法。
+    // surfaceBright 之间过渡，没有单一角色色能同时适配，故保留 alpha 写法。
     // 但文字与图标不再做 alpha（那直接影响对比度），一律用全强度 content。
     Surface(
         shape = CircleShape,
@@ -451,7 +452,7 @@ private fun NotConnectedContent(strings: AppStrings, onAddDevice: () -> Unit) {
         // 色调圆底图标章(参考图的克制风格,不用整块灰卡)
         Surface(
             shape = CircleShape,
-            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            color = optionContainerColor(MaterialTheme.colorScheme),
         ) {
             Box(
                 modifier = Modifier.size(112.dp),
