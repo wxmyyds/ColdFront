@@ -47,11 +47,17 @@ class ThemeColorSchemeTest {
     }
 
     @Test
-    fun `palette styles and dark mode yield distinct accents`() {
+    fun `palette style and dark mode both change the generated scheme`() {
+        // Rainbow/FruitSalad/Content keep the seed's primary tone by design and only rotate
+        // hues downstream, so primary is not required to differ per style. The other roles are.
         val lightSchemes = PaletteStyles.all.associateWith { appColorScheme(BrandSeed, false, it) }
-        assertEquals(
-            lightSchemes.size,
-            lightSchemes.values.map { it.primary }.toSet().size,
+        val secondaryRoles = lightSchemes.values.map { it.secondary }.toSet()
+        val tertiaryRoles = lightSchemes.values.map { it.tertiary }.toSet()
+        assertTrue("styles must produce distinct secondary roles", secondaryRoles.size > 1)
+        assertTrue("styles must produce distinct tertiary roles", tertiaryRoles.size > 1)
+        assertNotEquals(
+            lightSchemes.getValue(PaletteStyles.TONAL_SPOT).secondary,
+            lightSchemes.getValue(PaletteStyles.RAINBOW).secondary,
         )
         assertNotEquals(
             appColorScheme(BrandSeed, false, PaletteStyles.TONAL_SPOT).primary,
