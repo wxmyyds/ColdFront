@@ -508,7 +508,7 @@ private fun AppNav(vm: CoolerViewModel) {
                                 routeDistance = topLevelRouteDistance(initialRoute, targetRoute, topLevelRoutes),
                             )
                         },
-                        predictivePopEnterTransition = { _ ->
+                        predictivePopEnterTransition = { swipeEdge ->
                             if (shouldUsePredictivePop(
                                     predictiveBackEnabled = predictiveBack,
                                     currentRoute = initialState.destination.route,
@@ -516,15 +516,10 @@ private fun AppNav(vm: CoolerViewModel) {
                                     topLevelRoutes = topLevelRouteSet,
                                 )
                             ) {
-                                AppMotion.pageEnter(
-                                    kind = NavigationMotionKind.PopDetail,
-                                    forward = false,
-                                    motionScheme = motionScheme,
-                                    routeDistance = 1,
-                                )
+                                AppMotion.predictivePopEnter(swipeEdge)
                             } else EnterTransition.None
                         },
-                        predictivePopExitTransition = { _ ->
+                        predictivePopExitTransition = { swipeEdge ->
                             if (shouldUsePredictivePop(
                                     predictiveBackEnabled = predictiveBack,
                                     currentRoute = initialState.destination.route,
@@ -532,12 +527,7 @@ private fun AppNav(vm: CoolerViewModel) {
                                     topLevelRoutes = topLevelRouteSet,
                                 )
                             ) {
-                                AppMotion.pageExit(
-                                    kind = NavigationMotionKind.PopDetail,
-                                    forward = false,
-                                    motionScheme = motionScheme,
-                                    routeDistance = 1,
-                                )
+                                AppMotion.predictivePopExit(swipeEdge)
                             } else ExitTransition.None
                         },
                         // Constrain the child, not the weighted slot: retain centering on wide windows.

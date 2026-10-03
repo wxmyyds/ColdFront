@@ -7,6 +7,7 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
@@ -15,6 +16,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -22,9 +24,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MotionScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import kotlin.math.roundToInt
+
+/**
+ * Swipe edge constants from [androidx.navigationevent.NavigationEvent]; a value the transition
+ * layer passes through untouched, so they are mirrored here rather than imported.
+ */
+internal const val EDGE_LEFT = 0
+internal const val EDGE_RIGHT = 1
+internal const val EDGE_NONE = 2
 
 internal enum class NavigationMotionKind {
     TopLevel,
@@ -93,6 +105,42 @@ private fun topLevelIndex(route: String?, routes: List<String>): Int {
         else -> route
     }
     return rootRoute?.let(routes::indexOf) ?: -1
+}
+
+/**
+ * AOSP cross-activity predictive back constants, for [androidx.navigation] NavHost.
+ *
+ * InstallerX-Revived implements this motion on Miuix Nav, which exposes the live gesture to its
+ * transition scope. NavHost exposes only the swipe edge and seeks the transition state itself, so
+ * the values here are the subset that survives that mapping: the scale the page settles to, how far
+ * it drifts, and where the cross-fade sits. Nothing here is copied from the GPL project — the
+ * numbers are the published Material cross-activity motion constants.
+ */
+internal object AppPredictiveBack {
+    /** The outgoing page shrinks to this before it leaves. */
+    internal const val MIN_SCALE = 0.9f
+
+    /** Drift off-screen, as a fraction of page width. */
+    internal const val DRIFT_FRACTION = 0.22f
+
+    /** Duration for the settle once the gesture is released. */
+    internal const val CLASSIC_FADE_DURATION_MS = 300
+
+    /** The outgoing page keeps most of its opacity until late, then drops away quickly. */
+    internal const val OUTGOING_FADE_END = 0.4f
+
+    /** The incoming page starts dim and resolves to opaque; avoids a flat cross-fade at rest. */
+    internal const val INCOMING_FADE_START = 0.72f
+
+    /**
+     * Direction the outgoing page travels for a given swipe edge, in Compose's left-to-right
+     * coordinate space: a gesture from the right edge pushes the page left, and vice versa.
+     */
+    internal fun outgoingDirection(swipeEdge: Int): Float = when (swipeEdge) {
+        EDGE_RIGHT -> -1f
+        EDGE_LEFT, EDGE_NONE -> 1f
+        else -> 1f
+    }
 }
 
 internal const val TOP_LEVEL_PAGE_DURATION_MS = 300
@@ -171,6 +219,50 @@ internal object AppMotion {
             targetOffsetX = offset,
         ) + effects
     }
+
+    /**
+     * AOSP-style predictive pop.
+     *
+     * InstallerX builds this on Miuix Nav, which hands its transition scope a live [NavGesture]
+     * (progress, touch, release velocity) every frame. NavHost instead drives progress by seeking
+     * the transition state and exposes only [swipeEdge], so the shape below is expressed through
+     * the specs Compose interpolates, not through a per-frame callback:
+     *
+     *  - the outgoing page shrinks to [MIN_SCALE] while sliding toward the gesture edge; both are
+     *    standard Enter/ExitTransition effects that NavHost seeks with the finger.
+     *  - the incoming page stays hidden until the gesture is underway (see [incomingAlpha]) and is
+     *    applied as an initial alpha so there is no cross-fade at rest.
+     *  - the damped-oscillator settle bounce needs the release velocity, and the vertical drift
+     *    needs touch Y. Neither is available here, so both are dropped rather than faked from
+     *    swipeEdge; the spring below is the closest honest substitute for the settle.
+     */
+    fun predictivePopExit(swipeEdge: Int): ExitTransition {
+        val direction = AppPredictiveBack.outgoingDirection(swipeEdge)
+        val spatial = spring<IntOffset>(dampingRatio = 0.9f, stiffness = 1500f)
+        // InstallerX `CrossActivityDrift`, expressed as a fraction of the page so the motion scales
+        // with the window instead of drifting by a fixed pixel count on wide screens.
+        val drift = slideOutHorizontally(
+            animationSpec = spatial,
+            targetOffsetX = { width -> (direction * AppPredictiveBack.DRIFT_FRACTION * width).roundToInt() },
+        )
+        // The page shrinks as it leaves. scaleOut interpolates 1 -> MIN_SCALE along with the slide,
+        // which is what gives the gesture its depth; without it both pages only translate and the
+        // effect reads as flat.
+        val shrink = scaleOut(
+            animationSpec = spatial,
+            targetScale = AppPredictiveBack.MIN_SCALE,
+            transformOrigin = TransformOrigin(0.5f, 0.5f),
+        )
+        return drift + shrink + fadeOut(
+            animationSpec = tween(AppPredictiveBack.CLASSIC_FADE_DURATION_MS),
+            targetAlpha = AppPredictiveBack.OUTGOING_FADE_END,
+        )
+    }
+
+    fun predictivePopEnter(swipeEdge: Int): EnterTransition = fadeIn(
+        animationSpec = tween(AppPredictiveBack.CLASSIC_FADE_DURATION_MS),
+        initialAlpha = AppPredictiveBack.INCOMING_FADE_START,
+    )
 
     fun navigationBarEnter(motionScheme: MotionScheme) =
         expandVertically(
