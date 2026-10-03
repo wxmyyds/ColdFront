@@ -30,6 +30,7 @@ class SettingsRepositoryTest {
     @Test
     fun `empty preferences expose existing defaults`() = runTest {
         val repository = SettingsRepository(TestPreferencesStore())
+        assertEquals(AppSettings(false, "system", "tonal_spot", true, "system"), repository.settings.first())
         assertFalse(repository.dynamicColor.first())
         assertTrue(repository.predictiveBack.first())
         assertEquals("system", repository.darkMode.first())
@@ -124,12 +125,11 @@ class SettingsRepositoryTest {
     }
 
     @Test
-    fun `theme relevant settings all resolve from the first snapshot`() = runTest {
-        // Cold start depends on every visible theme setting being final in the first
-        // snapshot: the UI holds off painting until the store emits, so a second, corrected
-        // emission would already show a wrong first frame.
+    fun `first snapshot contains every persisted setting without defaults or a correction pass`() = runTest {
+        // Readiness is the full object itself, not a separate signal or independent fields.
         val initial = mutablePreferencesOf(
             booleanPreferencesKey("dynamic_color") to true,
+            booleanPreferencesKey("predictive_back") to false,
             darkModeKey to "dark",
             paletteKey to "vibrant",
             languageKey to "en",
@@ -143,17 +143,12 @@ class SettingsRepositoryTest {
                 error("No write expected")
         }
         val repository = SettingsRepository(store)
-        assertTrue(repository.dynamicColor.first())
-        assertEquals("dark", repository.darkMode.first())
-        assertEquals("vibrant", repository.palette.first())
-        assertEquals("en", repository.appLanguage.first())
+        assertEquals(AppSettings(true, "dark", "vibrant", false, "en"), repository.settings.first())
     }
 
     @Test
-    fun `snapshot readiness has no default and stays false until the store emits`() = runTest {
-        // The theme gates its first frame on this signal. If it carried a default like the
-        // setting flows do, the UI would paint the brand palette and only later correct itself.
-        // The value must therefore not be observable before the store emits at all.
+    fun `snapshot has no value until the store emits`() = runTest {
+        // Loading must not be represented by a synthetic default AppSettings.
         val gate = CompletableDeferred<Unit>()
         val store = object : DataStore<Preferences> {
             override val data: Flow<Preferences> = flow {
@@ -163,12 +158,12 @@ class SettingsRepositoryTest {
             override suspend fun updateData(transform: suspend (Preferences) -> Preferences): Preferences =
                 error("No write expected")
         }
-        val readiness = SettingsRepository(store).snapshotLoaded
-        val received = async(start = CoroutineStart.UNDISPATCHED) { readiness.first() }
+        val snapshots = SettingsRepository(store).settings
+        val received = async(start = CoroutineStart.UNDISPATCHED) { snapshots.first() }
         // Nothing may be emitted while the store is still loading; a default would land here.
         assertFalse(received.isCompleted)
         gate.complete(Unit)
-        assertTrue(received.await())
+        assertEquals(AppSettings(false, "system", "tonal_spot", true, "system"), received.await())
     }
 
     @Test
@@ -180,6 +175,7 @@ class SettingsRepositoryTest {
                     throw failure
             }
             val repository = SettingsRepository(store)
+            assertSame(failure, expectFailure<Exception> { repository.settings.first() })
             assertSame(failure, expectFailure<Exception> { repository.dynamicColor.first() })
             assertSame(failure, expectFailure<Exception> { repository.darkMode.first() })
             assertSame(failure, expectFailure<Exception> { repository.palette.first() })

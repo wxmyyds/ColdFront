@@ -8,28 +8,23 @@ import androidx.lifecycle.viewModelScope
 import io.github.wxmyyds.coldfront.ble.BackgroundResume
 import io.github.wxmyyds.coldfront.ble.BleManagerHolder
 import io.github.wxmyyds.coldfront.ble.BleScanDiagnostic
+import io.github.wxmyyds.coldfront.data.AppSettings
 import io.github.wxmyyds.coldfront.data.ProfileRepository
 import io.github.wxmyyds.coldfront.data.SettingsRepository
 import io.github.wxmyyds.coldfront.domain.CoolerDevice
 import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
 import io.github.wxmyyds.coldfront.domain.CoolerProfile
 import io.github.wxmyyds.coldfront.domain.RGBConfig
-import io.github.wxmyyds.coldfront.ui.theme.PaletteStyles
 import java.io.IOException
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.retryWhen
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -54,12 +49,8 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
 
     // A transient read failure keeps the last good value and retries, rather than replacing
     // persisted data with defaults or permanently killing an eagerly collected StateFlow.
-    private fun <T> Flow<T>.uiState(initial: T): StateFlow<T> = retryWhen { cause, attempt ->
-        if (cause !is IOException) return@retryWhen false
-        if (attempt == 0L) reportStorageError(cause)
-        delay(2_000)
-        true
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, initial)
+    private fun <T> Flow<T>.uiState(initial: T): StateFlow<T> =
+        storageStateIn(viewModelScope, initial, ::reportStorageError)
 
     private val _profilesLoaded = MutableStateFlow(false)
     val profilesLoaded: StateFlow<Boolean> = _profilesLoaded.asStateFlow()
@@ -73,26 +64,8 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
         hasRunningSession = ble::hasRunningSession,
         connect = ble::connectByAddress,
     )
-    // 首帧不渲染，等 DataStore 首个快照读完再置位。信号必须直接来自 dataStore.data，
-    // 不能用 settingsFlow 的 StateFlow：那些流带写死初值，.first() 会立即返回，测得 6ms，
-    // 而真实读盘要 2 秒。dynamicColor / darkMode / palette 共用同一个 store 快照，
-    // 因此这一个信号足以保证首帧的取色、深浅模式与调色板都是最终值。
-    private val _settingsLoaded = MutableStateFlow(false)
-    val settingsLoaded: StateFlow<Boolean> = _settingsLoaded.asStateFlow()
-    val dynamicColor = settingsRepo.dynamicColor.uiState(false)
-    val darkMode = settingsRepo.darkMode.uiState("system")
-    val palette = settingsRepo.palette.uiState(PaletteStyles.DEFAULT)
-    val predictiveBack = settingsRepo.predictiveBack.uiState(true)
-    val appLanguage = settingsRepo.appLanguage.uiState("system")
-
-    init {
-        // The shared DataStore snapshot is the readiness signal; the setting flows above
-        // all default to a placeholder until it arrives.
-        viewModelScope.launch {
-            settingsRepo.snapshotLoaded.first()
-            _settingsLoaded.value = true
-        }
-    }
+    // null means no successful disk read yet. Readiness and all settings move atomically.
+    val settings: StateFlow<AppSettings?> = settingsRepo.settings.uiState<AppSettings?>(null)
 
     init {
         backgroundResume.attach()

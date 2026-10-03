@@ -26,12 +26,12 @@ import io.github.wxmyyds.coldfront.domain.CoolerBleConstants
 import io.github.wxmyyds.coldfront.domain.CoolerDevice
 import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
 import io.github.wxmyyds.coldfront.domain.CoolerLiveState
-import io.github.wxmyyds.coldfront.domain.CoolerTelemetryParser
+import io.github.wxmyyds.coldfront.domain.CoolerTelemetryReducer
 import io.github.wxmyyds.coldfront.domain.ConnectionState
-import io.github.wxmyyds.coldfront.domain.FanMode
 import io.github.wxmyyds.coldfront.domain.RGBConfig
 import io.github.wxmyyds.coldfront.domain.RgbWriteState
 import io.github.wxmyyds.coldfront.domain.RgbWriteStatus
+import io.github.wxmyyds.coldfront.domain.withFanMode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -327,6 +327,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
 
     private class LinkLoss(val address: String?, val type: CoolerDeviceType?)
     private var lastLinkLoss: LinkLoss? = null
+    override var foregroundStarted: Boolean = false
 
     fun hasRunningSession(): Boolean = session != null
 
@@ -678,85 +679,31 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
     }
 
     /**
-     * One background-tolerant telemetry pass. Returns true when at least one read was
-     * accepted. Setup/control paths still use the poisoning default; only this periodic
-     * pass opts out, so a Doze-delayed callback degrades the UI value instead of
-     * invalidating an otherwise healthy session.
+     * One background-tolerant telemetry pass. Returns true when at least one readable
+     * characteristic completed successfully. Setup/control paths retain skip-as-success
+     * and poisoning defaults; periodic reads cannot invalidate an otherwise healthy session.
      */
-    private suspend fun pollTelemetryOnce(s: Session): Boolean {
-        var accepted = false
-        for (uuid in telemetryUuids.filterNot { it == CoolerBleConstants.LIGHT_CONTROL_UUID }) {
-            if (!ready(s)) return accepted
-            val ch = s.characteristics[uuid] ?: continue
-            if (readIfReadable(s, ch, poisonOnTimeout = false)) accepted = true
-            if (!ready(s)) return accepted
-        }
-        if (SystemClock.elapsedRealtime() - s.lastTempUpdateMs > 6000) {
-            for (uuid in listOf(CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID, CoolerBleConstants.STATUS_UUID)) {
-                if (!ready(s)) return accepted
-                val ch = s.characteristics[uuid] ?: continue
-                enableNotification(s, ch, poisonOnTimeout = false)
-                if (!ready(s)) return accepted
-                if (readIfReadable(s, ch, poisonOnTimeout = false)) accepted = true
-                if (!ready(s)) return accepted
-            }
-            s.lastTempUpdateMs = SystemClock.elapsedRealtime() - 4000
-        }
-        return accepted
-    }
+    private suspend fun pollTelemetryOnce(s: Session): Boolean = pollTelemetry(
+        targets = telemetryUuids.filterNot { it == CoolerBleConstants.LIGHT_CONTROL_UUID }
+            .mapNotNull { s.characteristics[it] },
+        temperatureTargets = listOf(CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID, CoolerBleConstants.STATUS_UUID)
+            .mapNotNull { s.characteristics[it] },
+        isCurrent = { ready(s) },
+        isReadable = { it.properties and BluetoothGattCharacteristic.PROPERTY_READ != 0 },
+        read = { readIfReadable(s, it, poisonOnTimeout = false) },
+        temperatureStale = { SystemClock.elapsedRealtime() - s.lastTempUpdateMs > 6000 },
+        subscribe = { enableNotification(s, it, poisonOnTimeout = false) },
+        onTemperatureRecovery = { s.lastTempUpdateMs = SystemClock.elapsedRealtime() - 4000 },
+    )
 
     private fun handleData(s: Session, uuid: UUID, value: ByteArray) {
         if (!owns(s)) return
+        val update = CoolerTelemetryReducer.reduce(_state.value, uuid, value) ?: return
+        // Valid reports are authoritative even when they repeat the current value.
         s.telemetryRevision[uuid] = (s.telemetryRevision[uuid] ?: 0L) + 1
-        when (uuid) {
-            CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID -> updateTemperature(s, value)
-            CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID -> {
-                val type = _state.value.deviceType ?: return
-                CoolerTelemetryParser.fanPercent(value, type)?.let { percent ->
-                    _state.update { it.copy(fanPercent = percent) }
-                }
-            }
-            CoolerBleConstants.LIGHT_CONTROL_UUID -> _state.update {
-                RGBConfig.fromNotification(value, it.rgb)?.let { rgb -> it.copy(rgb = rgb) } ?: it
-            }
-            CoolerBleConstants.COOLING_SWITCH_UUID -> _state.update {
-                it.copy(coolingOn = value.firstOrNull()?.toInt() == 0x02).withFanMode()
-            }
-            CoolerBleConstants.STATUS_UUID -> when (CoolerTelemetryParser.unsignedByte(value)) {
-                0x04 -> updateTemperature(s, value)
-                0x08 -> CoolerTelemetryParser.bigEndianShort(value.copyOfRange(1, value.size))?.let { rpm ->
-                    _state.update { it.copy(fanRpm = rpm) }
-                }
-                0x09 -> value.getOrNull(1)?.let { w -> _state.update { it.copy(powerW = w.toInt() and 0xFF) } }
-            }
-            CoolerBleConstants.RPM_UUID -> CoolerTelemetryParser.bigEndianShort(value)?.let { rpm ->
-                _state.update { it.copy(fanRpm = rpm) }
-            }
-            CoolerBleConstants.POWER_UUID -> CoolerTelemetryParser.unsignedByte(value)?.let { w ->
-                _state.update { it.copy(powerW = w) }
-            }
-            CoolerBleConstants.PROTECTION_UUID -> if (value.isNotEmpty()) {
-                _state.update { it.copy(overcoldOn = value[0].toInt() and 0x04 != 0) }
-            }
-            CoolerBleConstants.BOOST_CONTROL_UUID -> if (value.isNotEmpty()) {
-                _state.update { it.copy(boostOn = value[0] == 1.toByte()) }
-            }
-            CoolerBleConstants.AUTO_MODE_CONTROL_UUID -> if (value.isNotEmpty()) {
-                _state.update { it.copy(smartOn = value[0] == 1.toByte()).withFanMode() }
-            }
-        }
+        if (update.temperatureReported) s.lastTempUpdateMs = SystemClock.elapsedRealtime()
+        _state.value = update.state
     }
-
-    private fun updateTemperature(s: Session, value: ByteArray) {
-        CoolerTelemetryParser.temperature(value)?.let { temp ->
-            s.lastTempUpdateMs = SystemClock.elapsedRealtime()
-            _state.update { it.copy(temperatureC = temp) }
-        }
-    }
-
-    private fun CoolerLiveState.withFanMode(): CoolerLiveState = copy(
-        fanMode = if (!coolingOn) FanMode.OFF else if (smartOn) FanMode.AUTO else FanMode.MANUAL,
-    )
 
     private class Command(
         val session: Session,

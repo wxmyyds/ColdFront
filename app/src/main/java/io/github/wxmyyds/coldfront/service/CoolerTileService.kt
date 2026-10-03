@@ -61,8 +61,11 @@ class CoolerTileService : TileService() {
                         putExtra(CoolerService.EXTRA_CONTROL_ADDRESS, current.deviceAddress)
                     })
                 } else {
-                    val profile = ProfileRepository(applicationContext).loadActiveProfile()
-                    if (profile == null || !profile.deviceType.supportsAutoMode) {
+                    val active = ProfileRepository(applicationContext).loadActiveProfile()
+                    // Reading storage suspends: both the selected device and the connection
+                    // session must still belong to this click when the result arrives.
+                    val profile = tileStartProfile(current, ble.state.value, active)
+                    if (profile == null) {
                         showUnavailable()
                         return@launch
                     }

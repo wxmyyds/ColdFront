@@ -20,16 +20,11 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import io.github.wxmyyds.coldfront.BuildConfig
+import io.github.wxmyyds.coldfront.data.AppSettings
 import io.github.wxmyyds.coldfront.ui.component.AnimatedRowIcon
 import io.github.wxmyyds.coldfront.ui.component.RowIcon
 import io.github.wxmyyds.coldfront.ui.component.PageScaffold
@@ -49,13 +44,13 @@ import io.github.wxmyyds.coldfront.ui.theme.PaletteStyles
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(vm: CoolerViewModel, onAbout: () -> Unit) {
+fun SettingsScreen(vm: CoolerViewModel, settings: AppSettings, onAbout: () -> Unit) {
     val strings = LocalStrings.current
-    val dynamicColor by vm.dynamicColor.collectAsStateWithLifecycle()
-    val darkMode by vm.darkMode.collectAsStateWithLifecycle()
-    val appLanguage by vm.appLanguage.collectAsStateWithLifecycle()
-    val palette by vm.palette.collectAsStateWithLifecycle()
-    val predictiveBack by vm.predictiveBack.collectAsStateWithLifecycle()
+    val dynamicColor = settings.dynamicColor
+    val darkMode = settings.darkMode
+    val appLanguage = settings.appLanguage
+    val palette = settings.palette
+    val predictiveBack = settings.predictiveBack
     val contentScrollState = rememberScrollState()
     val supportsDynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 

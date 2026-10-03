@@ -114,6 +114,7 @@ interface AppStrings {
     val diagMsd: String
     val diagServiceData: String
     val diagServiceUuids: String
+    val diagMoreCount: String
     val diagConnectAs: String
     val diagCancel: String
     val diagRawCount: String
@@ -262,6 +263,7 @@ object ZhStrings : AppStrings {
     override val diagMsd = "厂商数据"
     override val diagServiceData = "服务数据"
     override val diagServiceUuids = "服务 UUID"
+    override val diagMoreCount = "另有 %d 项"
     override val diagConnectAs = "选择型号连接"
     override val diagCancel = "取消"
     override val diagRawCount = "共 %d 个设备"
@@ -406,6 +408,7 @@ object EnStrings : AppStrings {
     override val diagMsd = "Manufacturer data"
     override val diagServiceData = "Service data"
     override val diagServiceUuids = "Service UUIDs"
+    override val diagMoreCount = "+%d more"
     override val diagConnectAs = "Connect as model…"
     override val diagCancel = "Cancel"
     override val diagRawCount = "%d devices total"

@@ -102,14 +102,14 @@ private val FullColorBreathPalette = listOf(
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
+fun RGBControlScreen(vm: CoolerViewModel, isPageActive: Boolean, onConnect: () -> Unit = {}) {
     val strings = LocalStrings.current
     val state by vm.liveState.collectAsStateWithLifecycle()
     val writeState by vm.rgbWriteState.collectAsStateWithLifecycle()
-    var previewActive by remember(vm) { mutableStateOf(false) }
+    var resumed by remember(vm) { mutableStateOf(false) }
     LifecycleResumeEffect(vm) {
-        previewActive = true
-        onPauseOrDispose { previewActive = false }
+        resumed = true
+        onPauseOrDispose { resumed = false }
     }
 
     // Save the draft across rotation/tab restoration, but validate the connection identity
@@ -191,7 +191,7 @@ fun RGBControlScreen(vm: CoolerViewModel, onConnect: () -> Unit = {}) {
                                 g,
                                 b,
                                 Modifier.fillMaxWidth().height(112.dp),
-                                active = previewActive,
+                                active = isRgbPreviewActive(isPageActive, resumed),
                             )
                         }
                     }
