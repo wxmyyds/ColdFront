@@ -77,6 +77,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
 import kotlinx.coroutines.flow.collect
+import io.github.wxmyyds.coldfront.ui.theme.optionContainerColor
 
 /**
  * MD3E 分段选项列表 —— ColdFront 自有实现。
@@ -88,7 +89,7 @@ import kotlinx.coroutines.flow.collect
  *   可见项 ≥ 2 的分组（pressed/focused 取 large 16dp，由组件按主题 motionScheme 补间），
  *   单项分组与独立单行全取 large 16dp、即无形变——反馈只留涟漪与状态层；
  * - 行间留分段缝隙；
- * - 行容器用 surfaceContainerHighest，页面用 background —— 靠明度分层，不靠阴影；
+ * - 行容器用 surfaceContainerHigh，页面用 surfaceContainer —— 靠明度分层，不靠阴影；
  * - 下拉行 trailing 直接显示当前值（bodyMedium + onSurfaceVariant，单行省略），不再放
  *   下三角图标；整行仍是点击区域，菜单逻辑不变；
  * - 组标题 titleSmall + primary；
@@ -120,24 +121,25 @@ val SegmentedRowGap = 2.dp
 val LocalSegmentedShapes = compositionLocalOf<ListItemShapes?> { null }
 
 /**
- * 行配色：容器 surfaceContainerHighest，正文 onSurface，其余槽位 onSurfaceVariant。
+ * 行配色：容器 surfaceContainerHigh，正文 onSurface，其余槽位 onSurfaceVariant。
  *
- * 容器色不用 surfaceBright：动态取色(Material You)下 surfaceBright 与页面 background 几乎
- * 同色，整组行会“隐形”。surfaceContainerHighest 在动态/自建色板下都稳定比背景深一档，
- * 靠明度分层。选中/开启态仍由行内控件（Switch、下拉勾）表达，故 selected* 保持常态值。
+ * 页面底色用 surfaceContainer（见 theme 的 pageLayerScheme），行容器比它深一档，
+ * 靠明度分层。不用 surfaceBright：动态取色下 surfaceBright 与页面底色几乎同色，
+ * 整组行会“隐形”。选中/开启态仍由行内控件（Switch、下拉勾）表达，故 selected* 保持常态值。
  */
 @Composable
 fun segmentedRowColors(): ListItemColors {
     val scheme = MaterialTheme.colorScheme
+    val container = optionContainerColor(scheme)
     return ListItemDefaults.segmentedColors(
-        containerColor = scheme.surfaceContainerHighest,
+        containerColor = container,
         contentColor = scheme.onSurface,
         leadingContentColor = scheme.onSurfaceVariant,
         trailingContentColor = scheme.onSurfaceVariant,
         overlineContentColor = scheme.onSurfaceVariant,
         supportingContentColor = scheme.onSurfaceVariant,
-        disabledContainerColor = scheme.surfaceContainerHighest,
-        selectedContainerColor = scheme.surfaceContainerHighest,
+        disabledContainerColor = container,
+        selectedContainerColor = container,
         selectedContentColor = scheme.onSurface,
         selectedLeadingContentColor = scheme.onSurfaceVariant,
         selectedTrailingContentColor = scheme.onSurfaceVariant,
@@ -335,7 +337,7 @@ fun SegmentedGroup(
 fun SegmentedContainer(
     modifier: Modifier = Modifier,
     shapes: ListItemShapes? = null,
-    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
+    containerColor: Color = optionContainerColor(MaterialTheme.colorScheme),
     contentPadding: PaddingValues = PaddingValues(16.dp),
     content: @Composable ColumnScope.() -> Unit,
 ) {

@@ -38,6 +38,7 @@ import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
 import io.github.wxmyyds.coldfront.ui.component.SegmentedRow
 import io.github.wxmyyds.coldfront.ui.component.SegmentedSwitchRow
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
+import io.github.wxmyyds.coldfront.ui.theme.PaletteStyles
 
 /**
  * 设置页(MD3E 分段选项列表):
@@ -53,6 +54,7 @@ fun SettingsScreen(vm: CoolerViewModel, onAbout: () -> Unit) {
     val dynamicColor by vm.dynamicColor.collectAsStateWithLifecycle()
     val darkMode by vm.darkMode.collectAsStateWithLifecycle()
     val appLanguage by vm.appLanguage.collectAsStateWithLifecycle()
+    val palette by vm.palette.collectAsStateWithLifecycle()
     val predictiveBack by vm.predictiveBack.collectAsStateWithLifecycle()
     val contentScrollState = rememberScrollState()
     val supportsDynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
@@ -98,6 +100,26 @@ fun SettingsScreen(vm: CoolerViewModel, onAbout: () -> Unit) {
                         checked = supportsDynamicColor && dynamicColor,
                         enabled = supportsDynamicColor,
                         onCheckedChange = { if (supportsDynamicColor) vm.setDynamicColor(it) },
+                        leadingContent = { RowIcon(Icons.Filled.Palette) },
+                    )
+                }
+                item(key = "palette") {
+                    SegmentedDropdownRow(
+                        title = strings.settingsPalette,
+                        options = PaletteStyles.all,
+                        selected = palette,
+                        onSelect = vm::setPalette,
+                        optionLabel = { value -> when (value) {
+                            PaletteStyles.NEUTRAL -> strings.settingsPaletteNeutral
+                            PaletteStyles.VIBRANT -> strings.settingsPaletteVibrant
+                            PaletteStyles.EXPRESSIVE -> strings.settingsPaletteExpressive
+                            PaletteStyles.RAINBOW -> strings.settingsPaletteRainbow
+                            PaletteStyles.FRUIT_SALAD -> strings.settingsPaletteFruitSalad
+                            PaletteStyles.MONOCHROME -> strings.settingsPaletteMonochrome
+                            PaletteStyles.FIDELITY -> strings.settingsPaletteFidelity
+                            PaletteStyles.CONTENT -> strings.settingsPaletteContent
+                            else -> strings.settingsPaletteTonalSpot
+                        } },
                         leadingContent = { RowIcon(Icons.Filled.Palette) },
                     )
                 }

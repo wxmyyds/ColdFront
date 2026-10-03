@@ -58,6 +58,7 @@ import io.github.wxmyyds.coldfront.ui.component.segmentedRowShapes
 import io.github.wxmyyds.coldfront.ui.i18n.AppStrings
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 import io.github.wxmyyds.coldfront.ui.theme.EmphasizedTypography
+import io.github.wxmyyds.coldfront.ui.theme.optionContainerColor
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -187,7 +188,7 @@ private fun SavedDeviceCard(
 
     Surface(
         shape = segmentedRowShapes(index = index, count = count).shape,
-        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        color = optionContainerColor(MaterialTheme.colorScheme),
         contentColor = MaterialTheme.colorScheme.onSurface,
         modifier = Modifier
             .fillMaxWidth()

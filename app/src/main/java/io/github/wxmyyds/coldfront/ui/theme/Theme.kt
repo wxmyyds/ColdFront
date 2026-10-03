@@ -14,14 +14,15 @@ import androidx.compose.ui.res.colorResource
  * MD3E 主题：[MaterialExpressiveTheme] + 弹簧动效 [MotionScheme.expressive]。
  *
  * 取色种子：开启动态取色时取系统动态色板的 accent 资源，关闭时用品牌紫灰。
- * 两者都交给同一个生成器（[colorSchemeFromSeed]），参数为 TonalSpot + SPEC_2025
- * + 标准对比度，因此明度分层与文字对比度表现一致，且所有 surface 角色都由种子推导。
+ * 两者都交给同一个生成器（[colorSchemeFromSeed]），变体由设置中的调色板决定，
+ * 因此所有 surface 角色都由种子推导，没有写死的常量。
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun RedmagicCoolerTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = false,
+    palette: String = PaletteStyles.DEFAULT,
     content: @Composable () -> Unit,
 ) {
     // 读取放在版本判断之后：Android 12 以下不存在该资源。
@@ -32,8 +33,9 @@ fun RedmagicCoolerTheme(
     } else {
         null
     }
-    val colorScheme = remember(dynamicSeed, darkTheme) {
-        colorSchemeFromSeed(dynamicSeed ?: ThemeSeed.Brand, darkTheme)
+    val colorScheme = remember(dynamicSeed, darkTheme, palette) {
+        // 页面底色落到 surfaceContainer，SPEC_2025 下 background 已被重映射到 surface。
+        pageLayerScheme(colorSchemeFromSeed(dynamicSeed ?: BrandSeed, darkTheme, palette))
     }
     val motionScheme = MotionScheme.expressive()
     MaterialExpressiveTheme(

@@ -21,8 +21,8 @@ import java.io.IOException
 
 class SettingsRepositoryTest {
     private val darkModeKey = stringPreferencesKey("dark_mode")
+    private val paletteKey = stringPreferencesKey("palette")
     private val languageKey = stringPreferencesKey("app_language")
-    private val removedPaletteKey = stringPreferencesKey("palette")
 
     @Test
     fun `empty preferences expose existing defaults`() = runTest {
@@ -30,33 +30,21 @@ class SettingsRepositoryTest {
         assertFalse(repository.dynamicColor.first())
         assertTrue(repository.predictiveBack.first())
         assertEquals("system", repository.darkMode.first())
+        assertEquals("tonal_spot", repository.palette.first())
         assertEquals("system", repository.appLanguage.first())
-    }
-
-    @Test
-    fun `retired palette preference is ignored and left on disk`() = runTest {
-        // Dynamic color now uses the system scheme directly, so the palette key is retired.
-        // Stored values must neither break reads nor be rewritten.
-        val initial = mutablePreferencesOf(removedPaletteKey to "vibrant").toPreferences()
-        val store = TestPreferencesStore(initial)
-        val repository = SettingsRepository(store)
-        assertEquals(initial, store.snapshot)
-        assertTrue(store.commits.isEmpty())
-        repository.setDarkMode("dark")
-        // The orphaned value survives unrelated writes.
-        assertEquals("vibrant", store.snapshot[removedPaletteKey])
     }
 
     @Test
     fun `invalid stored enum-like settings expose fallback without rewriting preferences`() = runTest {
         val initial = mutablePreferencesOf(
             darkModeKey to "DARK",
-            removedPaletteKey to "future_palette",
+            paletteKey to "future_palette",
             languageKey to "fr",
         ).toPreferences()
         val store = TestPreferencesStore(initial)
         val repository = SettingsRepository(store)
         assertEquals("system", repository.darkMode.first())
+        assertEquals("tonal_spot", repository.palette.first())
         assertEquals("system", repository.appLanguage.first())
         assertEquals(initial, store.snapshot)
         assertTrue(store.commits.isEmpty())
@@ -70,14 +58,21 @@ class SettingsRepositoryTest {
             repository.setDarkMode(mode)
             assertEquals(mode, repository.darkMode.first())
         }
+        listOf("tonal_spot", "neutral", "vibrant", "expressive", "rainbow",
+            "fruit_salad", "monochrome", "fidelity", "content").forEach { palette ->
+            repository.setPalette(palette)
+            assertEquals(palette, repository.palette.first())
+        }
         listOf("system", "zh", "en").forEach { language ->
             repository.setAppLanguage(language)
             assertEquals(language, repository.appLanguage.first())
         }
         listOf("", "unsupported", " SYSTEM ").forEach { invalid ->
             repository.setDarkMode(invalid)
+            repository.setPalette(invalid)
             repository.setAppLanguage(invalid)
             assertEquals("system", store.snapshot[darkModeKey])
+            assertEquals("tonal_spot", store.snapshot[paletteKey])
             assertEquals("system", store.snapshot[languageKey])
         }
         repository.setDynamicColor(true)
@@ -99,6 +94,7 @@ class SettingsRepositoryTest {
         val store = TestPreferencesStore(initial)
         val repository = SettingsRepository(store)
         repository.setDarkMode("dark")
+        repository.setPalette("vibrant")
         repository.setAppLanguage("en")
         repository.setDynamicColor(true)
         repository.setPredictiveBack(false)
@@ -112,7 +108,7 @@ class SettingsRepositoryTest {
         val store = object : DataStore<Preferences> {
             override val data: Flow<Preferences> = flow {
                 emit(mutablePreferencesOf(darkModeKey to "dark"))
-                emit(mutablePreferencesOf(darkModeKey to "dark", removedPaletteKey to "neutral"))
+                emit(mutablePreferencesOf(darkModeKey to "dark", paletteKey to "neutral"))
                 emit(mutablePreferencesOf(darkModeKey to "invalid"))
                 emit(mutablePreferencesOf(darkModeKey to "also_invalid"))
                 emit(mutablePreferencesOf(darkModeKey to "light"))
@@ -135,10 +131,12 @@ class SettingsRepositoryTest {
             val repository = SettingsRepository(store)
             assertSame(failure, expectFailure<Exception> { repository.dynamicColor.first() })
             assertSame(failure, expectFailure<Exception> { repository.darkMode.first() })
+            assertSame(failure, expectFailure<Exception> { repository.palette.first() })
             assertSame(failure, expectFailure<Exception> { repository.predictiveBack.first() })
             assertSame(failure, expectFailure<Exception> { repository.appLanguage.first() })
             assertSame(failure, expectFailure<Exception> { repository.setDynamicColor(true) })
             assertSame(failure, expectFailure<Exception> { repository.setDarkMode("dark") })
+            assertSame(failure, expectFailure<Exception> { repository.setPalette("neutral") })
             assertSame(failure, expectFailure<Exception> { repository.setPredictiveBack(false) })
             assertSame(failure, expectFailure<Exception> { repository.setAppLanguage("en") })
         }

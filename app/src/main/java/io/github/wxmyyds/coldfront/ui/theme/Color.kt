@@ -7,45 +7,77 @@ import com.materialkolor.PaletteStyle
 import com.materialkolor.dynamicColorScheme
 import com.materialkolor.dynamiccolor.ColorSpec
 
-/**
- * MD3E 色板来源。
- *
- * 动态取色：Android 12+ 读取系统动态色板中的 accent 资源作为种子。
- * 关闭时：使用应用品牌紫灰，保持既有观感。
- *
- * 种子只取系统的 accent 资源本身，不再对系统已生成的 ColorScheme 角色做二次处理。
- */
-internal object ThemeSeed {
-    /** 品牌紫灰。关闭动态取色时的种子。 */
-    val Brand = Color(0xFF595A9E)
+/** 关闭动态取色时的品牌紫灰种子。 */
+internal val BrandSeed = Color(0xFF595A9E)
 
-    /**
-     * 动态取色种子的系统资源 ID。Android 12 以下不存在，需要调用方先判断版本。
-     *
-     * 该资源是平台公开的动态色板 accent，取的是种子本身，
-     * 不是某个应用已生成好的角色色。
-     */
+/** 动态取色种子取自平台公开的动态色板 accent 资源。 */
+internal object ThemeSeed {
+    /** 该资源仅在 Android 12 及以上存在，调用前需先判断版本。 */
     fun dynamicResourceId(): Int = android.R.color.system_accent1_500
 
     fun supportsDynamic(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 }
 
 /**
- * 从种子生成整套 Material 3 角色色。
+ * 页面层级：底色与选项容器分离。
  *
- * 参数与 Material Color Utilities 公开规范保持一致：
- * - TonalSpot 变体（Material You 默认）
- * - SPEC_2025 颜色规范（Material 3 Expressive 的色调映射）
- * - contrast 0.0，即标准对比度曲线
+ * 页面底色用 `surfaceContainer`（tone 94/9），不用 `background`：SPEC_2025 把
+ * `background` 重映射到 `surface`（tone 98/4），过浅，与内容容器几乎同色。
+ * 不用 `surfaceContainerLowest`：那是 tone 100/0 的纯白/纯黑，chroma 为 0。
  *
- * 纯函数，不读系统状态，可单测。全部 surface 角色由种子推导，
- * 因此开启动态取色时背景与选项容器会跟随壁纸，不存在写死的常量覆盖。
+ * `onBackground` 同步换成 `onSurface`，保证底色变化后文字对比度仍然可读。
  */
-internal fun colorSchemeFromSeed(seed: Color, darkTheme: Boolean): ColorScheme =
-    dynamicColorScheme(
-        seedColor = seed,
-        isDark = darkTheme,
-        style = PaletteStyle.TonalSpot,
-        contrastLevel = 0.0,
-        specVersion = ColorSpec.SpecVersion.SPEC_2025,
-    )
+internal fun pageLayerScheme(scheme: ColorScheme): ColorScheme = scheme.copy(
+    background = scheme.surfaceContainer,
+    onBackground = scheme.onSurface,
+)
+
+/** 选项行与分组卡片的容器角色：比页面底色深一档。 */
+internal fun optionContainerColor(scheme: ColorScheme): Color = scheme.surfaceContainerHigh
+/**
+ * 从种子生成整套 Material 3 角色色。纯函数，可单测。
+ *
+ * 参数遵循 Material Color Utilities 公开规范：变体由设置中的调色板决定，
+ * SPEC_2025 色调映射，标准对比度曲线。
+ */
+internal fun colorSchemeFromSeed(
+    seed: Color,
+    darkTheme: Boolean,
+    palette: String = PaletteStyles.DEFAULT,
+): ColorScheme = dynamicColorScheme(
+    seedColor = seed,
+    isDark = darkTheme,
+    style = paletteStyle(palette),
+    contrastLevel = 0.0,
+    specVersion = paletteSpecVersion(palette),
+)
+
+internal fun paletteStyle(palette: String): PaletteStyle = when (palette) {
+    PaletteStyles.NEUTRAL -> PaletteStyle.Neutral
+    PaletteStyles.VIBRANT -> PaletteStyle.Vibrant
+    PaletteStyles.EXPRESSIVE -> PaletteStyle.Expressive
+    PaletteStyles.RAINBOW -> PaletteStyle.Rainbow
+    PaletteStyles.FRUIT_SALAD -> PaletteStyle.FruitSalad
+    PaletteStyles.MONOCHROME -> PaletteStyle.Monochrome
+    PaletteStyles.FIDELITY -> PaletteStyle.Fidelity
+    PaletteStyles.CONTENT -> PaletteStyle.Content
+    else -> PaletteStyle.TonalSpot
+}
+
+/**
+ * SPEC_2025 只对 Material 3 Expressive 定义的四种变体有效，
+ * 其余变体回退到 SPEC_2021，避免传入不支持的规范版本。
+ */
+internal fun paletteSpecVersion(palette: String): ColorSpec.SpecVersion =
+    if (palette in SPEC_2025_PALETTES) {
+        ColorSpec.SpecVersion.SPEC_2025
+    } else {
+        ColorSpec.SpecVersion.SPEC_2021
+    }
+
+private val SPEC_2025_PALETTES = listOf(
+    PaletteStyles.TONAL_SPOT,
+    PaletteStyles.NEUTRAL,
+    PaletteStyles.VIBRANT,
+    PaletteStyles.EXPRESSIVE,
+)
