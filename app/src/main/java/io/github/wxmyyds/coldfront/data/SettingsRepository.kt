@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import io.github.wxmyyds.coldfront.ui.theme.PaletteStyles
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -64,10 +65,8 @@ class SettingsRepository internal constructor(private val dataStore: DataStore<P
         else -> "system"
     }
 
-    private fun paletteOrDefault(value: String?): String = when (value) {
-        "tonal_spot", "neutral", "vibrant" -> value
-        else -> "tonal_spot"
-    }
+    private fun paletteOrDefault(value: String?): String =
+        if (PaletteStyles.isValid(value)) requireNotNull(value) else PaletteStyles.DEFAULT
 
     private fun languageOrDefault(value: String?): String = when (value) {
         "system", "zh", "en" -> value
