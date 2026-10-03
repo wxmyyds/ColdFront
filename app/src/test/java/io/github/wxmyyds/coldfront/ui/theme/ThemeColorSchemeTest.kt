@@ -63,13 +63,17 @@ class ThemeColorSchemeTest {
     }
 
     @Test
-    fun `surfaces are not forced to the retired fixed constants`() {
+    fun `page background and option containers are derived, not fixed constants`() {
+        // Regression guard for the retired overrides. A generated tone may legitimately
+        // coincide with a specific hex value, so assert the property instead: the containers
+        // must come from the generated scheme and vary with the seed.
         for (dark in listOf(false, true)) {
-            val scheme = pageLayerScheme(colorSchemeFromSeed(BrandSeed, dark))
-            assertNotEquals(Color(0xFFEFECF6), scheme.background)
-            assertNotEquals(Color(0xFFFBF9FE), scheme.surface)
-            assertNotEquals(Color(0xFF191920), scheme.background)
-            assertNotEquals(Color(0xFF2B2B34), scheme.surface)
+            val brand = pageLayerScheme(colorSchemeFromSeed(BrandSeed, dark))
+            val green = pageLayerScheme(colorSchemeFromSeed(Color(0xFF008800), dark))
+            assertEquals(brand.surfaceContainer, brand.background)
+            assertEquals(brand.surfaceContainerHigh, optionContainerColor(brand))
+            assertNotEquals(green.background, brand.background)
+            assertNotEquals(optionContainerColor(green), optionContainerColor(brand))
         }
     }
 
