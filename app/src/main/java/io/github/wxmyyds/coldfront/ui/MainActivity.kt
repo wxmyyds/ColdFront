@@ -69,6 +69,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -115,14 +116,24 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun AppContent(vm: CoolerViewModel) {
-        val dynamicColor by vm.dynamicColor.collectAsStateWithLifecycle()
-        val darkMode by vm.darkMode.collectAsStateWithLifecycle()
-        val appLanguage by vm.appLanguage.collectAsStateWithLifecycle()
-        val palette by vm.palette.collectAsStateWithLifecycle()
+        // collectAsStateWithLifecycle 等到 STARTED 才收集，首帧拿不到值；这里用普通的
+        // collectAsState，保证冷启动第一帧就能拿到 DataStore 的就绪标志。
+        // 取色、深浅模式、调色板都在同一个 store 里，没就绪就不画，避免先闪一帧品牌色。
+        val settingsLoaded by vm.settingsLoaded.collectAsState()
+        val dynamicColor by vm.dynamicColor.collectAsState()
+        val darkMode by vm.darkMode.collectAsState()
+        val appLanguage by vm.appLanguage.collectAsState()
+        val palette by vm.palette.collectAsState()
         // 语言覆盖必须在取文案之前生效
         val strings = rememberStrings(override = appLanguage)
         val latestStrings by rememberUpdatedState(strings)
         val context = LocalContext.current
+        if (!settingsLoaded) {
+            // 与参考实现一致：设置未就绪时不产出任何 UI，只留一层中性底避免白屏闪烁。
+            // 底色走主题的 surface 角色，不写死 hex；此时主题已经按深浅模式建好。
+            StartupPlaceholder()
+            return
+        }
         LaunchedEffect(vm) {
             vm.errors.collect {
                 Toast.makeText(context, latestStrings.storageOperationFailed, Toast.LENGTH_LONG).show()
@@ -141,6 +152,21 @@ class MainActivity : ComponentActivity() {
                 PermissionAndBluetoothEffects(vm)
                 AppNav(vm)
             }
+        }
+    }
+
+    /**
+     * 冷启动占位层：设置还没从 DataStore 读完时不渲染真实界面，只铺一层主题底色。
+     * 它套自己的主题（仅跟随系统深浅模式），因此底色来自 surface 角色而非写死 hex，
+     * 深浅切换时也不会闪白。用户看不到任何内容，也就看不到错误的主题色。
+     */
+    @Composable
+    private fun StartupPlaceholder() {
+        RedmagicCoolerTheme(
+            darkTheme = androidx.compose.foundation.isSystemInDarkTheme(),
+            dynamicColor = false,
+        ) {
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface))
         }
     }
 

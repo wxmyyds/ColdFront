@@ -25,6 +25,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.retryWhen
@@ -72,6 +74,10 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
         hasRunningSession = ble::hasRunningSession,
         connect = ble::connectByAddress,
     )
+    // 首帧不渲染，等 DataStore 首个快照全部读完再置位：dynamicColor / darkMode / palette /
+    // appLanguage 都存在同一个 store 里，只等其中一项仍会先画出默认深浅模式 + 品牌色的错帧。
+    private val _settingsLoaded = MutableStateFlow(false)
+    val settingsLoaded: StateFlow<Boolean> = _settingsLoaded.asStateFlow()
     val dynamicColor = settingsRepo.dynamicColor.uiState(false)
     val darkMode = settingsRepo.darkMode.uiState("system")
     val palette = settingsRepo.palette.uiState(PaletteStyles.DEFAULT)
@@ -79,6 +85,12 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
     val appLanguage = settingsRepo.appLanguage.uiState("system")
 
     init {
+        // Any visible setting emitting means the shared DataStore snapshot arrived, so the
+        // theme can be painted with final values instead of the brand fallback.
+        viewModelScope.launch {
+            merge(dynamicColor, darkMode, palette, appLanguage, predictiveBack).first()
+            _settingsLoaded.value = true
+        }
         backgroundResume.attach()
         viewModelScope.launch {
             liveState.filter { it.isConnected }

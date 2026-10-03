@@ -121,6 +121,32 @@ class SettingsRepositoryTest {
     }
 
     @Test
+    fun `theme relevant settings all resolve from the first snapshot`() = runTest {
+        // Cold start depends on every visible theme setting being final in the first
+        // snapshot: the UI holds off painting until the store emits, so a second, corrected
+        // emission would already show a wrong first frame.
+        val initial = mutablePreferencesOf(
+            booleanPreferencesKey("dynamic_color") to true,
+            darkModeKey to "dark",
+            paletteKey to "vibrant",
+            languageKey to "en",
+        ).toPreferences()
+        val store = object : DataStore<Preferences> {
+            override val data: Flow<Preferences> = flow {
+                emit(initial)
+                error("settings must not need a correction pass")
+            }
+            override suspend fun updateData(transform: suspend (Preferences) -> Preferences): Preferences =
+                error("No write expected")
+        }
+        val repository = SettingsRepository(store)
+        assertTrue(repository.dynamicColor.first())
+        assertEquals("dark", repository.darkMode.first())
+        assertEquals("vibrant", repository.palette.first())
+        assertEquals("en", repository.appLanguage.first())
+    }
+
+    @Test
     fun `settings read write errors and cancellation propagate unchanged`() = runTest {
         listOf(IOException("disk failure"), CancellationException("cancelled")).forEach { failure ->
             val store = object : DataStore<Preferences> {
