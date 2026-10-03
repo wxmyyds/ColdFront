@@ -238,18 +238,17 @@ internal object AppMotion {
      */
     fun predictivePopExit(swipeEdge: Int): ExitTransition {
         val direction = AppPredictiveBack.outgoingDirection(swipeEdge)
-        val spatial = spring<IntOffset>(dampingRatio = 0.9f, stiffness = 1500f)
-        // InstallerX `CrossActivityDrift`, expressed as a fraction of the page so the motion scales
-        // with the window instead of drifting by a fixed pixel count on wide screens.
+        // InstallerX `CrossActivityDrift`, as a fraction of the page so the motion scales with the
+        // window instead of drifting by a fixed pixel count on wide screens.
         val drift = slideOutHorizontally(
-            animationSpec = spatial,
+            animationSpec = spring<IntOffset>(dampingRatio = 0.9f, stiffness = 1500f),
             targetOffsetX = { width -> (direction * AppPredictiveBack.DRIFT_FRACTION * width).roundToInt() },
         )
-        // The page shrinks as it leaves. scaleOut interpolates 1 -> MIN_SCALE along with the slide,
+        // The page shrinks as it leaves. scaleOut interpolates 1 -> MIN_SCALE alongside the slide,
         // which is what gives the gesture its depth; without it both pages only translate and the
         // effect reads as flat.
         val shrink = scaleOut(
-            animationSpec = spatial,
+            animationSpec = spring<Float>(dampingRatio = 0.9f, stiffness = 1500f),
             targetScale = AppPredictiveBack.MIN_SCALE,
             transformOrigin = TransformOrigin(0.5f, 0.5f),
         )
