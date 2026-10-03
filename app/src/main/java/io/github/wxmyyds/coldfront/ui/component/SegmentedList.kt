@@ -572,7 +572,7 @@ fun <T> SegmentedDropdownRow(
 }
 
 /**
- * 列表项 trailing 标准当前值：bodyMedium + onSurfaceVariant，层级弱于标题但保持可读；
+ * 列表项 trailing 标准当前值：bodySmall + primary，层级弱于标题但保持可读；
  * 单行省略、右对齐，垂直居中由行内 verticalAlignment 保证；颜色取当前 ColorScheme，
  * 浅色/深色/动态取色自动适配。整行仍是点击区域，不要单独给它加点击。
  */
@@ -583,7 +583,7 @@ fun SegmentedTrailingValue(text: String, modifier: Modifier = Modifier) {
         // 只定最小可读宽度、不定最大宽度：标题与 trailing 的空间分配交给
         // ListItem 内部 Row（标题 weight=1、trailing 不挤标题），此处不参与分栏。
         modifier = modifier.padding(start = 16.dp),
-        style = MaterialTheme.typography.bodyMedium,
+        style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.primary,
         textAlign = TextAlign.End,
         maxLines = 1,
