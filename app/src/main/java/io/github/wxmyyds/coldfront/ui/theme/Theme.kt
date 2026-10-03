@@ -8,14 +8,14 @@ import androidx.compose.material3.MotionScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.colorResource
 
 /**
  * MD3E 主题：[MaterialExpressiveTheme] + 弹簧动效 [MotionScheme.expressive]。
  *
  * 取色种子：开启动态取色时取系统动态色板的 accent 资源，关闭时用品牌紫灰。
- * 两者都交给同一个生成器（[colorSchemeFromSeed]），因此明度分层与文字对比度表现一致。
- * 最后经 [pageLayerScheme] 修正背景层角色，保证页面底色与选项容器有一档可读分层。
+ * 两者都交给同一个生成器（[colorSchemeFromSeed]），参数为 TonalSpot + SPEC_2025
+ * + 标准对比度，因此明度分层与文字对比度表现一致，且所有 surface 角色都由种子推导。
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -24,16 +24,16 @@ fun RedmagicCoolerTheme(
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    val context = LocalContext.current
-    // 资源读取放在版本判断之后：Android 12 以下不存在该资源。
-    // minSdk 已为 24，Context.getColor 可直接使用，无需 compose 的 @Composable 重载。
+    // 读取放在版本判断之后：Android 12 以下不存在该资源。
+    // 用 Compose 的 colorResource 而非 Context.getColor：前者是配置感知的，
+    // 壁纸或深浅模式变化时会重新读取。
     val dynamicSeed = if (dynamicColor && ThemeSeed.supportsDynamic()) {
-        Color(context.getColor(ThemeSeed.dynamicResourceId()))
+        colorResource(ThemeSeed.dynamicResourceId())
     } else {
         null
     }
     val colorScheme = remember(dynamicSeed, darkTheme) {
-        pageLayerScheme(colorSchemeFromSeed(dynamicSeed ?: ThemeSeed.Brand, darkTheme))
+        colorSchemeFromSeed(dynamicSeed ?: ThemeSeed.Brand, darkTheme)
     }
     val motionScheme = MotionScheme.expressive()
     MaterialExpressiveTheme(

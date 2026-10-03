@@ -49,17 +49,3 @@ internal fun colorSchemeFromSeed(seed: Color, darkTheme: Boolean): ColorScheme =
         contrastLevel = 0.0,
         specVersion = ColorSpec.SpecVersion.SPEC_2025,
     )
-
-/**
- * 让 `background` 真正表示页面底色。
- *
- * ColorSpec2025 将 `background` 重映射为 `surface`，那是卡片级角色；
- * 页面底色应当是最底层容器 `surfaceContainerLowest`。不修正的话
- * PageScaffold 与导航栏都用 `background`，整页会深一档并失去分层。
- *
- * `onBackground` 同步换成 `onSurface`，保证底色变化后文字对比度仍然可读。
- */
-internal fun pageLayerScheme(scheme: ColorScheme): ColorScheme = scheme.copy(
-    background = scheme.surfaceContainerLowest,
-    onBackground = scheme.onSurface,
-)
