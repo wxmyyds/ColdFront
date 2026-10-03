@@ -89,7 +89,7 @@ import io.github.wxmyyds.coldfront.ui.theme.optionContainerColor
  *   可见项 ≥ 2 的分组（pressed/focused 取 large 16dp，由组件按主题 motionScheme 补间），
  *   单项分组与独立单行全取 large 16dp、即无形变——反馈只留涟漪与状态层；
  * - 行间留分段缝隙；
- * - 行容器用 surfaceContainerHigh，页面用 surfaceContainer —— 靠明度分层，不靠阴影；
+ * - 行容器用 surfaceBright，页面用 surfaceContainer —— 靠明度分层，不靠阴影；
  * - 下拉行 trailing 直接显示当前值（bodyMedium + onSurfaceVariant，单行省略），不再放
  *   下三角图标；整行仍是点击区域，菜单逻辑不变；
  * - 组标题 titleSmall + primary；
@@ -121,11 +121,10 @@ val SegmentedRowGap = 2.dp
 val LocalSegmentedShapes = compositionLocalOf<ListItemShapes?> { null }
 
 /**
- * 行配色：容器 surfaceContainerHigh，正文 onSurface，其余槽位 onSurfaceVariant。
+ * 行配色：容器 surfaceBright，正文 onSurface，其余槽位 onSurfaceVariant。
  *
- * 页面底色用 surfaceContainer（见 theme 的 pageLayerScheme），行容器比它深一档，
- * 靠明度分层。不用 surfaceBright：动态取色下 surfaceBright 与页面底色几乎同色，
- * 整组行会“隐形”。选中/开启态仍由行内控件（Switch、下拉勾）表达，故 selected* 保持常态值。
+ * 页面底色用 surfaceContainer（见 theme 的 pageLayerScheme），行容器比它亮一档，
+ * 靠明度分层。选中/开启态仍由行内控件（Switch、下拉勾）表达，故 selected* 保持常态值。
  */
 @Composable
 fun segmentedRowColors(): ListItemColors {

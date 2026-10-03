@@ -79,6 +79,7 @@ import io.github.wxmyyds.coldfront.ui.component.SegmentedContainer
 import io.github.wxmyyds.coldfront.ui.component.SegmentedDropdownRow
 import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
+import io.github.wxmyyds.coldfront.ui.theme.optionContainerColor
 
 /**
  * 预览和通道色标保留设备灯光的真实色；RGB 滑条的轨道/滑块同样取通道色，
@@ -514,7 +515,7 @@ private fun NotConnectedCard(strings: io.github.wxmyyds.coldfront.ui.i18n.AppStr
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            containerColor = optionContainerColor(MaterialTheme.colorScheme),
         ),
     ) {
         Column(
@@ -539,7 +540,7 @@ private fun NotSupportedCard(strings: io.github.wxmyyds.coldfront.ui.i18n.AppStr
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            containerColor = optionContainerColor(MaterialTheme.colorScheme),
         ),
     ) {
         Column(

@@ -29,8 +29,13 @@ internal fun pageLayerScheme(scheme: ColorScheme): ColorScheme = scheme.copy(
     onBackground = scheme.onSurface,
 )
 
-/** 选项行与分组卡片的容器角色：比页面底色深一档。 */
-internal fun optionContainerColor(scheme: ColorScheme): Color = scheme.surfaceContainerHigh
+/**
+ * 选项行与分组卡片的容器角色：比页面底色（surfaceContainer）更亮一档。
+ *
+ * SPEC_2025 下 surfaceBright 为 tone 98/18，而页面底色 surfaceContainer 为 94/9，
+ * 因此行容器比底色更浅/更亮，与“卡片浮在页面上”的观感一致。
+ */
+internal fun optionContainerColor(scheme: ColorScheme): Color = scheme.surfaceBright
 /**
  * 从种子生成整套 Material 3 角色色。纯函数，可单测。
  *

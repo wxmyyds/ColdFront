@@ -40,14 +40,14 @@ class ThemeColorSchemeTest {
     }
 
     @Test
-    fun `option container sits one step below the page background`() {
-        // surfaceContainerHigh (92/12) must read darker than surfaceContainer (94/9) in light
-        // mode and lighter in dark mode, otherwise rows disappear into the page.
+    fun `option container sits one step above the page background`() {
+        // surfaceBright (tone 98/18) must read lighter than surfaceContainer (94/9) in light
+        // mode and lighter in dark mode too, otherwise rows vanish into the page.
         for (dark in listOf(false, true)) {
             val scheme = pageLayerScheme(colorSchemeFromSeed(BrandSeed, dark))
             val option = optionContainerColor(scheme).luminance()
             val page = scheme.background.luminance()
-            if (dark) assertTrue("dark", option > page) else assertTrue("light", option < page)
+            assertTrue("dark=$dark", option > page)
         }
     }
 
@@ -71,7 +71,7 @@ class ThemeColorSchemeTest {
             val brand = pageLayerScheme(colorSchemeFromSeed(BrandSeed, dark))
             val green = pageLayerScheme(colorSchemeFromSeed(Color(0xFF008800), dark))
             assertEquals(brand.surfaceContainer, brand.background)
-            assertEquals(brand.surfaceContainerHigh, optionContainerColor(brand))
+            assertEquals(brand.surfaceBright, optionContainerColor(brand))
             assertNotEquals(green.background, brand.background)
             assertNotEquals(optionContainerColor(green), optionContainerColor(brand))
         }

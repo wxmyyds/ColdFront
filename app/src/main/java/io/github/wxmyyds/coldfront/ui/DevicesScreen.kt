@@ -278,7 +278,7 @@ private fun EmptyState(strings: AppStrings, modifier: Modifier = Modifier) {
     ) {
         Surface(
             shape = MaterialTheme.shapes.large,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            color = optionContainerColor(MaterialTheme.colorScheme),
         ) {
             Box(
                 modifier = Modifier.size(104.dp),
