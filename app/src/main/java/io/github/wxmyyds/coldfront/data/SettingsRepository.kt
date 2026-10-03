@@ -22,6 +22,17 @@ class SettingsRepository internal constructor(private val dataStore: DataStore<P
         it[KEY_DYNAMIC_COLOR] ?: false
     }.distinctUntilChanged()
 
+    /**
+     * 首个真实快照读完时发射。
+     *
+     * 与上面的设置流不同：它们各自带一个写死的初值，而 DataStore 的首次读盘是异步的，
+     * 因此“拿到默认值”不等于“读到磁盘”。主题必须区分这两者，否则首帧会用品牌色渲染，
+     * 等真实值到达时再跳变。调用方在它为 true 之前不应绘制任何 UI。
+     */
+    val snapshotLoaded: Flow<Boolean> = dataStore.data
+        .map { true }
+        .distinctUntilChanged()
+
     /** 深色模式: system / light / dark */
     val darkMode: Flow<String> = dataStore.data.map {
         darkModeOrDefault(it[KEY_DARK_MODE])

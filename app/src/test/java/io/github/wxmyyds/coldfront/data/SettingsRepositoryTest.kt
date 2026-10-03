@@ -6,7 +6,10 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.mutablePreferencesOf
 import androidx.datastore.preferences.core.stringPreferencesKey
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
@@ -144,6 +147,28 @@ class SettingsRepositoryTest {
         assertEquals("dark", repository.darkMode.first())
         assertEquals("vibrant", repository.palette.first())
         assertEquals("en", repository.appLanguage.first())
+    }
+
+    @Test
+    fun `snapshot readiness has no default and stays false until the store emits`() = runTest {
+        // The theme gates its first frame on this signal. If it carried a default like the
+        // setting flows do, the UI would paint the brand palette and only later correct itself.
+        // The value must therefore not be observable before the store emits at all.
+        val gate = CompletableDeferred<Unit>()
+        val store = object : DataStore<Preferences> {
+            override val data: Flow<Preferences> = flow {
+                gate.await()
+                emit(mutablePreferencesOf().toPreferences())
+            }
+            override suspend fun updateData(transform: suspend (Preferences) -> Preferences): Preferences =
+                error("No write expected")
+        }
+        val readiness = SettingsRepository(store).snapshotLoaded
+        val received = async(start = CoroutineStart.UNDISPATCHED) { readiness.first() }
+        // Nothing may be emitted while the store is still loading; a default would land here.
+        assertFalse(received.isCompleted)
+        gate.complete(Unit)
+        assertTrue(received.await())
     }
 
     @Test

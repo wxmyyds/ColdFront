@@ -26,7 +26,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.retryWhen
@@ -74,8 +73,10 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
         hasRunningSession = ble::hasRunningSession,
         connect = ble::connectByAddress,
     )
-    // 首帧不渲染，等 DataStore 首个快照全部读完再置位：dynamicColor / darkMode / palette /
-    // appLanguage 都存在同一个 store 里，只等其中一项仍会先画出默认深浅模式 + 品牌色的错帧。
+    // 首帧不渲染，等 DataStore 首个快照读完再置位。信号必须直接来自 dataStore.data，
+    // 不能用 settingsFlow 的 StateFlow：那些流带写死初值，.first() 会立即返回，测得 6ms，
+    // 而真实读盘要 2 秒。dynamicColor / darkMode / palette 共用同一个 store 快照，
+    // 因此这一个信号足以保证首帧的取色、深浅模式与调色板都是最终值。
     private val _settingsLoaded = MutableStateFlow(false)
     val settingsLoaded: StateFlow<Boolean> = _settingsLoaded.asStateFlow()
     val dynamicColor = settingsRepo.dynamicColor.uiState(false)
@@ -85,21 +86,13 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
     val appLanguage = settingsRepo.appLanguage.uiState("system")
 
     init {
-        // Any visible setting emitting means the shared DataStore snapshot arrived, so the
-        // theme can be painted with final values instead of the brand fallback.
+        // The shared DataStore snapshot is the readiness signal; the setting flows above
+        // all default to a placeholder until it arrives.
         viewModelScope.launch {
             val t0 = android.os.SystemClock.elapsedRealtime()
-            merge(dynamicColor, darkMode, palette, appLanguage, predictiveBack).first()
+            settingsRepo.snapshotLoaded.first()
             android.util.Log.i("ColdFrontStartup", "settingsLoaded after ${android.os.SystemClock.elapsedRealtime() - t0}ms")
             _settingsLoaded.value = true
-        }
-    }
-
-    init {
-        viewModelScope.launch {
-            val t = android.os.SystemClock.elapsedRealtime()
-            settingsRepo.dynamicColor.first()
-            android.util.Log.i("ColdFrontStartup", "DataStore first read after ${android.os.SystemClock.elapsedRealtime() - t}ms")
         }
     }
 
