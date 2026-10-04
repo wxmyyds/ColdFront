@@ -261,7 +261,14 @@ private val detailPopExit: ExitTransition = slideOutHorizontally(
  * is signed for the incoming direction: a page coming from the right uncovers the parent's leading
  * side first, so the parent retreats the same way.
  */
-internal fun predictiveBackParentEnter(): EnterTransition = slideInHorizontally(
+internal fun predictiveBackParentEnter(): EnterTransition = parentReturnEnter
+
+/**
+ * One shared instance, for the same reason as [detailPopExit]: `slideInHorizontally` allocates per
+ * call, so a fresh object each time would let the gesture and the committed pop drift apart and
+ * would make that guarantee untestable.
+ */
+private val parentReturnEnter: EnterTransition = slideInHorizontally(
     animationSpec = tween(DETAIL_POP_DURATION_MS, easing = LinearEasing),
     initialOffsetX = { width -> parentParallaxOffset(covered = true, width = width) },
 )

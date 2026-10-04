@@ -164,12 +164,22 @@ class NavigationMotionKindTest {
         assertEquals(-200, parentParallaxOffset(covered = true, width = 1000))
         assertEquals("a revealed parent is exactly in place", 0, parentParallaxOffset(false, 1000))
         assertEquals(0.2f, PARENT_PARALLAX_FRACTION)
-        // Mirrored: stepping left while entering is the same motion as stepping right while leaving,
-        // so a push and its return describe one continuous path.
-        assertEquals(
-            parentParallaxOffset(covered = true, width = 1000),
-            -parentParallaxOffset(covered = false, width = 1000),
-        )
+    }
+
+    @Test
+    fun aPushAndItsReturnLeaveTheParentWhereTheyFoundIt() {
+        // The push steps the parent left by a fifth; the return must bring it back to exactly the
+        // offset it started from, so repeated push/pop cycles cannot accumulate a drift.
+        val width = 1000
+        val resting = parentParallaxOffset(covered = false, width = width)
+        val covered = parentParallaxOffset(covered = true, width = width)
+        assertEquals("the parent must return to exactly where it began", resting, 0)
+        assertEquals("a fifth of the width", -200, covered)
+        // Both the push's exit and the pop's enter start from the same covered offset, which is what
+        // makes the two describe one continuous motion rather than a jump.
+        assertEquals(covered, navigationOffset(
+            NavigationMotionKind.PushDetail, entering = false, forward = true, width = width,
+        ))
     }
 
     @Test

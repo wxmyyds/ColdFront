@@ -182,6 +182,31 @@ class PredictiveBackRenderingTest {
     }
 
     @Test
+    fun diagnosePop() {
+        setup()
+        openDetail()
+        gesture(BackEventCompat.EDGE_LEFT)
+        progress(0.5f, BackEventCompat.EDGE_LEFT)
+        val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
+        val sb = StringBuilder("route=${nav.currentDestination?.route} vp=${pixels.width}x${pixels.height}\n")
+        for (y in pixels.height - 1 downTo pixels.height - 700 step 20) {
+            sb.append(String.format("%4d ", y))
+            for (x in 0 until pixels.width step 27) sb.append(letter(pixels[x, y]))
+            sb.append('\n')
+        }
+        throw AssertionError(sb.toString())
+    }
+
+    private fun letter(p: Color): Char = when {
+        p.red > 0.6f && p.green > 0.6f && p.blue < 0.4f -> 'R'
+        p.green > 0.6f && p.red < 0.4f && p.blue < 0.4f -> 'G'
+        p.blue > 0.6f && p.green > 0.6f && p.red < 0.4f -> 'C'
+        p.red < 0.4f && p.green < 0.4f && p.blue < 0.4f -> 'K'
+        p.red > 0.6f && p.green > 0.6f && p.blue > 0.6f -> 'W'
+        else -> '.'
+    }
+
+    @Test
     fun theLeavingPageIsOnlyRoundedWhileTheGestureRuns() {
         setup()
         openDetail()
