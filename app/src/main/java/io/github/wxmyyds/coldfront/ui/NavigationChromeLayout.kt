@@ -46,12 +46,13 @@ internal fun rememberChromeVisibility(
  *    flat black. Drawing inside this node's own bounds cannot exceed the bar.
  *
  * [drawWithContent] rather than a `graphicsLayer` alpha: the scrim must be drawn *over* the content,
- * not applied to it.
+ * not applied to it. Reading the progress inside the draw block keeps a drag off the recomposition
+ * path entirely.
  */
 @Composable
-internal fun chromeScrim(backProgress: State<Float?>): Modifier {
+internal fun Modifier.chromeScrim(backProgress: State<Float?>): Modifier {
     val scrim = MaterialTheme.colorScheme.scrim
-    return Modifier.drawWithContent {
+    return this.drawWithContent {
         drawContent()
         val progress = backProgress.value
         if (progress != null) {
