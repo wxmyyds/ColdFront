@@ -49,7 +49,7 @@ internal fun rememberChromeVisibility(
  * not applied to it.
  */
 @Composable
-internal fun rememberChromeScrim(backProgress: State<Float?>): Modifier {
+internal fun chromeScrim(backProgress: State<Float?>): Modifier {
     val scrim = MaterialTheme.colorScheme.scrim
     return Modifier.drawWithContent {
         drawContent()
@@ -70,7 +70,7 @@ internal fun rememberChromeScrim(backProgress: State<Float?>): Modifier {
  * of what is being revealed. Only MAIN consumes [PaddingValues]; detail destinations and the NavHost
  * always keep the same bounds and transform centre.
  *
- * @param chromeScrim drawn over the bar or rail within its own bounds. The chrome is a sibling of
+ * @param scrim drawn over the bar or rail within its own bounds. The chrome is a sibling of
  * the NavHost, so it cannot inherit the top-level page's scrim and has to be dimmed separately.
  */
 @Composable
@@ -78,7 +78,7 @@ internal fun NavigationChromeLayout(
     useRail: Boolean,
     showNavigation: Boolean,
     modifier: Modifier = Modifier,
-    chromeScrim: Modifier = Modifier,
+    scrim: Modifier = Modifier,
     navigation: @Composable () -> Unit,
     content: @Composable (PaddingValues) -> Unit,
 ) {
@@ -86,7 +86,7 @@ internal fun NavigationChromeLayout(
         // The Box wraps the bar without adding a child of its own: it only carries the scrim, and
         // wrapping content keeps the bar's measurement exactly as it was.
         val chrome = subcompose(NavigationSlot.Chrome) {
-            Box(chromeScrim) { navigation() }
+            Box(scrim) { navigation() }
         }.map {
             it.measure(
                 constraints.copy(
