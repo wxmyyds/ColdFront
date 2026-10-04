@@ -17,6 +17,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -50,6 +51,7 @@ class PredictiveBackRenderingTest {
     private lateinit var parent: LayoutCoordinates
     private lateinit var detail: LayoutCoordinates
     private lateinit var selectedTab: LayoutCoordinates
+    private var chromeBounds: Rect? = null
     private val selected = mutableIntStateOf(3)
     private val rail = mutableStateOf(false)
     private val rtl = mutableStateOf(false)
@@ -280,7 +282,10 @@ class PredictiveBackRenderingTest {
     /** Brightness of the bottom bar strip at three points across it, from rendered pixels. */
     private fun sampleBottomStrip(): List<Int> {
         val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
-        val row = (pixels.height - chromeHeightPx() / 2).coerceIn(0, pixels.height - 1)
+        val chrome = chromeBounds ?: return List(3) { -1 }
+        // A row well inside the bar's own bounds: the topmost row can be an antialiased edge, and
+        // one pixel above it is the page rather than the bar.
+        val row = (chrome.center.y).toInt().coerceIn(0, pixels.height - 1)
         return listOf(0.15f, 0.35f, 0.5f).map { fraction ->
             val x = (pixels.width * fraction).toInt().coerceIn(0, pixels.width - 1)
             (pixels[x, row].red * 255f).toInt()
@@ -292,13 +297,6 @@ class PredictiveBackRenderingTest {
         val travel = renderedTravelX()
         val x = (travel / 2).coerceIn(0, pixels.width - 1)
         return (pixels[x, pixels.height / 2].green * 255f).toInt()
-    }
-
-    /** Height of the bottom bar strip in pixels, as laid out by the chrome. */
-    private fun chromeHeightPx(): Int {
-        val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
-        return (80 * rule.activity.resources.displayMetrics.density).toInt()
-            .coerceAtMost(pixels.height / 3)
     }
 
     private fun setup() {
@@ -324,7 +322,8 @@ class PredictiveBackRenderingTest {
                         navigation = {
                             Box(
                                 (if (rail.value) Modifier.width(80.dp).fillMaxHeight()
-                                else Modifier.fillMaxWidth().height(80.dp)).background(Color.Cyan),
+                                else Modifier.fillMaxWidth().height(80.dp)).background(Color.Cyan)
+                                    .onGloballyPositioned { chromeBounds = it.boundsInRoot() },
                             )
                         },
                     ) { chromePadding ->
