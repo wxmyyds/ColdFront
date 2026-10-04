@@ -71,8 +71,7 @@ class PredictiveBackRenderingTest {
             assertEquals(1f, horizontalScale(parent), 0.002f)
             // The page tracks the finger: travel is linear in progress, so at 0.5 it has moved
             // exactly half its width and still covers half the screen.
-            assertEquals("page must track the finger at $progress",
-                (progress * width).toInt(), renderedTravelX { it.red > 0.9f }, 3)
+            assertTravel("page must track the finger at $progress", (progress * width).toInt())
             // The page must still be covering most of the screen, and the parent visible beside
             // it, so the two layers read as stacked rather than cross-faded.
             assertEquals(
@@ -98,8 +97,7 @@ class PredictiveBackRenderingTest {
         }
         // captureToImage reads the real surface, so it must be sampled on the UI thread rather
         // than from inside runOnIdle.
-        assertEquals("cancel must restore the page to its resting position",
-            0, renderedTravelX { it.red > 0.9f }, 3)
+        assertTravel("cancel must restore the page to its resting position", 0)
         // Repeated gestures use the same input owner; release must continue, not replay a pop.
         gesture(BackEventCompat.EDGE_RIGHT)
         progress(0.65f, BackEventCompat.EDGE_RIGHT)
@@ -113,8 +111,7 @@ class PredictiveBackRenderingTest {
         gesture(BackEventCompat.EDGE_LEFT)
         progress(0.55f, BackEventCompat.EDGE_LEFT)
         assertCentred(parent)
-        assertEquals("page must track the finger at 0.55f",
-            (0.55f * viewport.size.width).toInt(), renderedTravelX { it.red > 0.9f }, 3)
+        assertTravel("page must track the finger at 0.55f", (0.55f * viewport.size.width).toInt())
         commitAndCheck()
     }
 
@@ -129,8 +126,7 @@ class PredictiveBackRenderingTest {
         gesture(BackEventCompat.EDGE_RIGHT)
         progress(0.6f, BackEventCompat.EDGE_RIGHT)
         assertCentred(parent)
-        assertEquals("page must track the finger at 0.6f",
-            (0.6f * viewport.size.width).toInt(), renderedTravelX { it.red > 0.9f }, 3)
+        assertTravel("page must track the finger at 0.6f", (0.6f * viewport.size.width).toInt())
         commitAndCheck()
     }
 
@@ -159,8 +155,7 @@ class PredictiveBackRenderingTest {
         gesture(BackEventCompat.EDGE_LEFT)
         progress(0.7f, BackEventCompat.EDGE_LEFT)
         assertCentred(parent)
-        assertEquals("page must track the finger at 0.7f",
-            (0.7f * viewport.size.width).toInt(), renderedTravelX { it.red > 0.9f }, 3)
+        assertTravel("page must track the finger at 0.7f", (0.7f * viewport.size.width).toInt())
         commitAndCheck()
     }
 
@@ -175,8 +170,7 @@ class PredictiveBackRenderingTest {
         // The page always leaves towards the physical right, whatever the layout direction or the
         // edge the swipe started from; the parent stays centred underneath it.
         assertCentred(parent)
-        assertEquals("page must track the finger at 0.7f",
-            (0.7f * viewport.size.width).toInt(), renderedTravelX { it.red > 0.9f }, 3)
+        assertTravel("page must track the finger at 0.7f", (0.7f * viewport.size.width).toInt())
         commitAndCheck()
     }
 
@@ -319,6 +313,16 @@ class PredictiveBackRenderingTest {
     private fun centre(coordinates: LayoutCoordinates): Offset = coordinates.localToRoot(
         Offset(coordinates.size.width / 2f, coordinates.size.height / 2f),
     )
+
+    /** The page must have travelled exactly as far as the finger says it has. */
+    private fun assertTravel(message: String, expectedPixels: Int) {
+        assertEquals(
+            "$message (expected ${expectedPixels}px)",
+            expectedPixels.toFloat(),
+            renderedTravelX { it.red > 0.9f }.toFloat(),
+            3f,
+        )
+    }
 
     /**
      * How far the leaving page has travelled, measured from the rendered pixels.
