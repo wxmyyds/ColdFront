@@ -23,11 +23,13 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.IntOffset
 import io.github.wxmyyds.coldfront.data.AppSettings
+import io.github.wxmyyds.coldfront.ui.component.TOP_LEVEL_PAGE_DURATION_MS
 import io.github.wxmyyds.coldfront.ui.component.isSecondaryDestination
 import io.github.wxmyyds.coldfront.ui.component.topLevelDragReversed
 import io.github.wxmyyds.coldfront.ui.component.topLevelPositionAfterDrag
 import io.github.wxmyyds.coldfront.ui.component.topLevelTargetAfterDrag
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 /**
  * The four primary destinations, held side by side and moved as one strip.
