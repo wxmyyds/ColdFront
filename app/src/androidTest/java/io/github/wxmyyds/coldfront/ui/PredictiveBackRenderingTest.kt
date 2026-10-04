@@ -17,9 +17,11 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
@@ -50,6 +52,7 @@ class PredictiveBackRenderingTest {
     private lateinit var parent: LayoutCoordinates
     private lateinit var detail: LayoutCoordinates
     private lateinit var selectedTab: LayoutCoordinates
+    private var barRect: Rect? = null
     private val selected = mutableIntStateOf(3)
     private val rail = mutableStateOf(false)
     private val rtl = mutableStateOf(false)
@@ -227,26 +230,29 @@ class PredictiveBackRenderingTest {
     @Test
     fun diagnoseBottomRegion() {
         setup()
+        val before = dumpStrip("AT REST (bar lit, no detail)")
         openDetail()
         gesture(BackEventCompat.EDGE_LEFT)
         progress(0.5f, BackEventCompat.EDGE_LEFT)
+        val during = dumpStrip("DURING RETURN p=0.5")
+        throw AssertionError("barBounds=$barRect\n$before\n$during")
+    }
+
+    private fun dumpStrip(label: String): String {
         val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
-        val sb = StringBuilder("viewport=${pixels.width}x${pixels.height}\n")
-        for (y in pixels.height - 1 downTo pixels.height * 3 / 4 step 16) {
-            sb.append("y=$y ")
-            for (x in 0 until pixels.width step 24) {
-                sb.append(letter(pixels[x, y]))
-            }
+        val sb = StringBuilder("$label viewport=${pixels.width}x${pixels.height}\n")
+        for (y in pixels.height - 1 downTo pixels.height - 420 step 12) {
+            sb.append(String.format("%4d ", y))
+            for (x in 0 until pixels.width step 24) sb.append(letter(pixels[x, y]))
             sb.append('\n')
         }
-        throw AssertionError(sb.toString())
+        return sb.toString()
     }
 
     private fun letter(p: Color): Char = when {
         p.red > 0.6f && p.green > 0.6f && p.blue < 0.4f -> 'R'
         p.blue > 0.6f && p.green > 0.6f && p.red < 0.4f -> 'C'
         p.green > 0.6f && p.red < 0.4f && p.blue < 0.4f -> 'G'
-        p.red > 0.6f && p.green < 0.4f && p.blue > 0.6f -> 'M'
         p.blue > 0.6f && p.red < 0.4f && p.green < 0.4f -> 'B'
         p.red > 0.6f && p.green > 0.6f && p.blue > 0.6f -> 'W'
         p.red < 0.4f && p.green < 0.4f && p.blue < 0.4f -> 'K'
@@ -359,7 +365,8 @@ class PredictiveBackRenderingTest {
                         navigation = {
                             Box(
                                 (if (rail.value) Modifier.width(80.dp).fillMaxHeight()
-                                else Modifier.fillMaxWidth().height(80.dp)).background(Color.Cyan),
+                                else Modifier.fillMaxWidth().height(80.dp)).background(Color.Cyan)
+                                    .onGloballyPositioned { barRect = it.boundsInRoot() },
                             )
                         },
                     ) { chromePadding ->
