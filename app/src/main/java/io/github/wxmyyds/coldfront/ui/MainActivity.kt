@@ -301,10 +301,6 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
             navTopLevelRouteSet,
         )
         val backProgress = rememberRunningBackProgress(observeBackGesture = true)
-        val showPrimaryNavigation = rememberChromeVisibility(
-            isTopLevelCurrent = topLevelIsCurrent,
-            backProgress = backProgress,
-        )
         // True while a detail page is the one being dismissed, i.e. the gesture pops back onto a
         // top-level page. Resolved from the navigation layer, so any future detail page is covered
         // without naming it.
@@ -312,10 +308,22 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
             currentRoute ?: NavHostStartDestination,
             navTopLevelRouteSet,
         )
+        // The gesture is revealing the top-level page only when it is popping a detail off one.
+        // Keying this on "some back gesture is running" instead also fires on the finger-down that
+        // opens a detail, which put the bar and its scrim over the page being pushed in.
+        val returningToTopLevel = backProgress.value != null && currentIsDetail
+        val showPrimaryNavigation = rememberChromeVisibility(
+            isTopLevelCurrent = topLevelIsCurrent,
+            revealByGesture = returningToTopLevel,
+        )
         NavigationChromeLayout(
             useRail = useRail,
             showNavigation = showPrimaryNavigation.value,
-            scrim = Modifier.chromeScrim(backProgress),
+            scrim = if (returningToTopLevel) {
+                Modifier.chromeScrim(backProgress)
+            } else {
+                Modifier
+            },
             modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
             navigation = {
                 if (!useRail) {

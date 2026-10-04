@@ -5,33 +5,36 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.layout.SubcomposeLayout
 import io.github.wxmyyds.coldfront.ui.component.parentScrimAlphaForProgress
+import io.github.wxmyyds.coldfront.ui.component.shouldUsePredictivePop
 
 private enum class NavigationSlot { Chrome, Content }
 
 /**
- * Whether the bar or rail belongs on screen right now, given which layer is current.
+ * Whether the bar or rail belongs on screen right now.
  *
- * A back gesture in progress counts as "the top-level page is current", because that is where the
- * gesture is going: the destination does not change until the pop commits, so keying visibility off
- * the route alone would hide the bar for the whole drag and pop it in afterwards, instead of
- * revealing it underneath the leaving page as the page slides away.
+ * A back gesture only counts when it is *popping a detail off a top-level page*, which is exactly
+ * what [shouldUsePredictivePop] decides from the navigation layer.
  *
- * Kept as a derived state so reading it does not recompose the caller on every frame of the drag -
- * this boolean only flips twice per gesture.
+ * The narrower test matters, and an earlier version got this wrong. "Any back gesture is running" is
+ * not equivalent: the platform reports the finger-down that precedes a push identically, so that
+ * test placed the bar for the instant the user touched the screen to open a detail. Because the
+ * chrome slot is drawn after the NavHost and therefore sits on top, the bar flashed over the
+ * incoming page. Keying on the gesture's *destination* rather than on the gesture itself is what
+ * keeps the bar on the page it actually belongs to.
+ *
+ * @param revealByGesture whether a gesture is currently uncovering a top-level page, i.e. the bar
+ * should show before the route catches up.
  */
 @Composable
 internal fun rememberChromeVisibility(
     isTopLevelCurrent: Boolean,
-    backProgress: State<Float?>,
-): State<Boolean> = remember(backProgress) {
-    derivedStateOf { isTopLevelCurrent || backProgress.value != null }
-}
+    revealByGesture: Boolean,
+): State<Boolean> = rememberUpdatedState(isTopLevelCurrent || revealByGesture)
 
 /**
  * Draws a scrim over the bar or rail, matching the dimming of the page it belongs to.

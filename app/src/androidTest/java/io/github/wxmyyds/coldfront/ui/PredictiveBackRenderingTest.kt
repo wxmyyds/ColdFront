@@ -226,6 +226,36 @@ class PredictiveBackRenderingTest {
     }
 
     @Test
+    fun startingToPushADetailDoesNotFlashTheBarOverIt() {
+        setup()
+        openDetail()
+        // The finger-down that opens a detail is reported by the platform exactly like a back
+        // gesture, so treating "a back gesture is running" as "the top-level page is coming back"
+        // placed the bar on top of the page being pushed in - the chrome slot draws after the
+        // NavHost, so it is not covered by it.
+        rule.runOnUiThread {
+            dispatcher.dispatchOnBackStarted(BackEventCompat(0f, 400f, 0f, BackEventCompat.EDGE_LEFT))
+        }
+        frames(48)
+        rule.runOnIdle {
+            assertEquals("detail", nav.currentDestination?.route)
+            assertTrue(
+                "the bar must not appear over a detail page",
+                rule.onAllNodesWithTag("chrome").fetchSemanticsNodes().isEmpty(),
+            )
+        }
+        rule.runOnUiThread { dispatcher.dispatchOnBackCancelled() }
+        frames(600)
+        rule.runOnIdle {
+            assertEquals("detail", nav.currentDestination?.route)
+            assertTrue(
+                "the bar must stay hidden on a detail page after the gesture ends",
+                rule.onAllNodesWithTag("chrome").fetchSemanticsNodes().isEmpty(),
+            )
+        }
+    }
+
+    @Test
     fun theParentDimsUnderneathThePageAndRestoresAsItLeaves() {
         setup()
         openDetail()
@@ -302,14 +332,20 @@ class PredictiveBackRenderingTest {
                     val entry by nav.currentBackStackEntryAsState()
                     val active = (entry?.destination?.route ?: "root") == "root"
                     val backProgress = rememberRunningBackProgress(observeBackGesture = true)
+                    // Mirrors production: only a gesture popping a detail off "root" reveals it.
+                    val returningToTopLevel = backProgress.value != null && !active
                     val chromeVisible = rememberChromeVisibility(
                         isTopLevelCurrent = active,
-                        backProgress = backProgress,
+                        revealByGesture = returningToTopLevel,
                     )
                     NavigationChromeLayout(
                         useRail = rail.value,
                         showNavigation = chromeVisible.value,
-                        scrim = Modifier.chromeScrim(backProgress),
+                        scrim = if (returningToTopLevel) {
+                            Modifier.chromeScrim(backProgress)
+                        } else {
+                            Modifier
+                        },
                         modifier = Modifier.fillMaxSize().background(Color.Blue).testTag("viewport")
                             .onGloballyPositioned { viewport = it },
                         navigation = {
