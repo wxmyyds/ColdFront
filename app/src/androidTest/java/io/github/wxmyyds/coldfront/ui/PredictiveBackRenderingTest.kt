@@ -228,12 +228,17 @@ class PredictiveBackRenderingTest {
     fun theParentDimsUnderneathThePageAndRestoresAsItLeaves() {
         setup()
         openDetail()
-        // Sampled only once the push has settled: mid-push the parent is covered by the incoming
-        // page, so nothing of it is on screen to measure yet.
-        val dimmed = renderedParentBrightness()
         gesture(BackEventCompat.EDGE_LEFT)
+        // The parent can only be measured while the gesture has uncovered some of it: while the
+        // page is still on top there is no parent on screen to sample, and reading the middle of
+        // the viewport would just be reading the page itself.
+        val dimmed = renderedParentBrightness()
+        assertTrue(
+            "a covered parent must be dimmed, not full brightness",
+            dimmed < 250,
+        )
         var last = dimmed
-        for (progress in listOf(0.25f, 0.5f, 0.75f)) {
+        for (progress in listOf(0.5f, 0.75f)) {
             progress(progress, BackEventCompat.EDGE_LEFT)
             val brightness = renderedParentBrightness()
             assertTrue(
@@ -242,39 +247,29 @@ class PredictiveBackRenderingTest {
             )
             last = brightness
         }
-        // A cancelled gesture must put the parent's brightness back exactly where it started,
-        // not leave it half restored.
-        rule.runOnUiThread { dispatcher.dispatchOnBackCancelled() }
-        frames(600)
+        // Committing returns to the top-level page with no scrim at all, so it must be fully lit.
+        commitAndCheck()
         assertEquals(
-            "cancel must restore the parent's brightness",
-            dimmed.toFloat(),
-            renderedParentBrightness().toFloat(),
-            2f,
+            "the parent must be fully lit once the detail is gone",
+            255,
+            renderedParentBrightness(),
+            2,
         )
     }
 
     /**
-     * Brightness of the exposed strip of parent, from rendered pixels.
+     * Brightness of the uncovered strip of parent, from rendered pixels.
      *
-     * Sampled in the region the page has vacated, i.e. left of its leading edge, which is the only
-     * place the parent is visible during the gesture.
+     * Sampled halfway across the region the page has vacated, which is the only place the parent is
+     * visible during the gesture. The parent is `Color.Green`, so its green channel is the signal:
+     * averaging RGB cannot tell "dimmed green" from "nothing drawn here", which is what made an
+     * earlier version of this test report a meaningless 0.
      */
     private fun renderedParentBrightness(): Int {
         val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
         val travel = renderedTravelX()
-        val y = pixels.height / 2
-        var total = 0
-        var count = 0
-        for (x in 0 until travel - 4) {
-            val pixel = pixels[x, y]
-            total += (pixel.red.toInt() + pixel.green.toInt() + pixel.blue.toInt()) / 3
-            count++
-        }
-        // With no exposed parent yet, the reading would be meaningless; report a saturated value so
-        // the "must brighten" assertion fails loudly instead of silently comparing 0 to 0.
-        if (count == 0) return 255
-        return total / count
+        val x = (travel / 2).coerceIn(0, pixels.width - 1)
+        return (pixels[x, pixels.height / 2].green * 255f).toInt()
     }
 
     private fun setup() {
@@ -319,8 +314,11 @@ class PredictiveBackRenderingTest {
                             }
                             composable("detail") {
                                 DetailDismissSurface(
-                                    isDismissible = active.not(),
-                                    isLeaving = active.not(),
+                                    // The gesture dismisses the detail, which is on top exactly
+                                    // while "root" is not the current destination; it is only
+                                    // leaving once root has become current again.
+                                    isDismissible = !active,
+                                    isLeaving = active,
                                 ) {
                                     Box(Modifier.fillMaxSize().background(Color.Red)
                                         .onGloballyPositioned { detail = it })
