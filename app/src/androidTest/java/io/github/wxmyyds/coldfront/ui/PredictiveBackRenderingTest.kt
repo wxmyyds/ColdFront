@@ -251,9 +251,9 @@ class PredictiveBackRenderingTest {
         commitAndCheck()
         assertEquals(
             "the parent must be fully lit once the detail is gone",
-            255,
-            renderedParentBrightness(),
-            2,
+            255.0,
+            renderedParentBrightness().toDouble(),
+            2.0,
         )
     }
 
