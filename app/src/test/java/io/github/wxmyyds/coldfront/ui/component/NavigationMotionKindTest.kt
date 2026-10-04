@@ -250,15 +250,16 @@ class NavigationMotionKindTest {
         val mid = topLevelPageIndex("devices", tabs)
 
         // Mid-drag every page sits at its own offset, so the pages in between are genuinely
-        // travelled through instead of being cut away. Moving towards a later page pulls the strip
-        // left: the target comes in from the right, and the page behind it has already left.
+        // travelled through instead of being cut away. Halfway from the first tab to the last, the
+        // starting page has already left to the left, the pages in between are crossing, and the
+        // target is still off to the right.
         val position = from + 0.5f
         val offsets = tabs.indices.associateWith { index ->
             ((index - position) * width).toInt()
         }
         assertEquals(-500, offsets.getValue(from))
-        assertTrue("target is still off to the right", offsets.getValue(to) < 0)
-        assertEquals(0, offsets.getValue(mid))
+        assertEquals(500, offsets.getValue(mid))
+        assertEquals(2500, offsets.getValue(to))
     }
 
     @Test
