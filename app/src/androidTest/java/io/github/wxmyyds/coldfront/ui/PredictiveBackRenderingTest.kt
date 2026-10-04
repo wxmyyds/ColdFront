@@ -228,38 +228,30 @@ class PredictiveBackRenderingTest {
     @Test
     fun theBarBelongsToTheTopLevelPageAndNeverCoversADetail() {
         setup()
-        rule.runOnIdle {
-            assertTrue(
-                "the bar belongs to the top-level page",
-                rule.onAllNodesWithTag("chrome").fetchSemanticsNodes().isNotEmpty(),
-            )
-        }
-        // A push settles before anything else happens: the finger-down that opens a detail is a
-        // gesture the platform reports, but it ends before the page arrives, and nothing about the
-        // back stack has changed underneath.
+        assertTrue("the bar belongs to the top-level page", barIsOnScreen())
         openDetail()
-        rule.runOnIdle {
-            assertEquals("detail", nav.currentDestination?.route)
-            assertTrue(
-                "the bar must not sit on top of a detail page",
-                rule.onAllNodesWithTag("chrome").fetchSemanticsNodes().isEmpty(),
-            )
-        }
+        rule.runOnIdle { assertEquals("detail", nav.currentDestination?.route) }
+        assertFalse("the bar must not be drawn over a detail page", barIsOnScreen())
         // The bar returns with the page it belongs to, during the gesture rather than after it.
         gesture(BackEventCompat.EDGE_LEFT)
-        rule.runOnIdle {
-            assertTrue(
-                "the bar must appear while the return uncovers the top-level page",
-                rule.onAllNodesWithTag("chrome").fetchSemanticsNodes().isNotEmpty(),
-            )
-        }
+        assertTrue("the bar must appear while the return uncovers the page", barIsOnScreen())
         commitAndCheck()
-        rule.runOnIdle {
-            assertTrue(
-                "the bar must be back on the top-level page",
-                rule.onAllNodesWithTag("chrome").fetchSemanticsNodes().isNotEmpty(),
-            )
-        }
+        assertTrue("the bar must be back on the top-level page", barIsOnScreen())
+    }
+
+    /**
+     * Whether the bar is actually placed on screen.
+     *
+     * Existence in the semantics tree is not the question: [NavigationChromeLayout] subcomposes the
+     * bar unconditionally and simply skips placing it when hidden, so the node is present either
+     * way. A placed bar sits at the bottom of the window, so its root bounds tell the two apart.
+     */
+    private fun barIsOnScreen(): Boolean {
+        val node = rule.onAllNodesWithTag("chrome").fetchSemanticsNodes().firstOrNull()
+            ?: return false
+        val bounds = node.boundsInRoot
+        val viewportHeight = rule.onNodeWithTag("viewport").fetchSemanticsNode().boundsInRoot.height
+        return bounds.height > 0f && bounds.top > viewportHeight / 2f
     }
 
     @Test
@@ -290,16 +282,14 @@ class PredictiveBackRenderingTest {
         // bar for the whole gesture, because the route only becomes top-level once the pop commits,
         // so the bar appeared only after the gesture had already finished.
         //
-        // Asserted on the node rather than on pixels: the bar's rendered colours are produced by a
-        // scrim over it, so its pixels say nothing reliable about whether it is present, and a
+        // Asserted on placement rather than on pixels: the bar's rendered colours are produced by a
+        // scrim drawn over it, so they say nothing reliable about whether it is present, and a
         // pixel hunt here had already been wrong several times.
         gesture(BackEventCompat.EDGE_LEFT)
-        rule.runOnIdle {
-            assertTrue(
-                "the bar must be on screen while the return uncovers the top-level page",
-                rule.onAllNodesWithTag("chrome").fetchSemanticsNodes().isNotEmpty(),
-            )
-        }
+        assertTrue(
+            "the bar must be on screen while the return uncovers the top-level page",
+            barIsOnScreen(),
+        )
         // It must still read as a dimmed bar, not as a solid black strip. A scrim drawn at the
         // wrong size turns the whole strip flat black, which is what an overlay sized to the parent
         // instead of to the bar produced.
