@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,8 +28,6 @@ import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.width
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.Bluetooth
@@ -42,7 +39,6 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -53,8 +49,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -64,25 +58,14 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import io.github.wxmyyds.coldfront.ble.BlePermissionManager
 import io.github.wxmyyds.coldfront.data.AppSettings
-import io.github.wxmyyds.coldfront.ui.component.AppMotion
-import io.github.wxmyyds.coldfront.ui.component.isForwardTopLevelTransition
-import io.github.wxmyyds.coldfront.ui.component.isSecondaryDestination
-import io.github.wxmyyds.coldfront.ui.component.navigationMotionKind
 import io.github.wxmyyds.coldfront.ui.component.showsPrimaryNavigation
-import io.github.wxmyyds.coldfront.ui.component.shouldUsePredictivePop
-import io.github.wxmyyds.coldfront.ui.component.topLevelRouteDistance
-import io.github.wxmyyds.coldfront.ui.component.topLevelDragReversed
-import io.github.wxmyyds.coldfront.ui.component.topLevelPositionAfterDrag
-import io.github.wxmyyds.coldfront.ui.component.topLevelTargetAfterDrag
 import io.github.wxmyyds.coldfront.ui.component.topLevelPageIndex
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 import io.github.wxmyyds.coldfront.ui.i18n.rememberStrings
@@ -92,8 +75,6 @@ import io.github.wxmyyds.coldfront.ui.theme.ThemeSeed
 import io.github.wxmyyds.coldfront.ui.theme.colorSchemeFromSeed
 import io.github.wxmyyds.coldfront.ui.theme.pageLayerScheme
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
 
@@ -228,10 +209,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private fun routeIsSelected(current: NavDestination?, route: String): Boolean =
-    current?.hierarchy?.any { it.route == route } == true ||
-        (current?.route == Routes.ABOUT && route == TabRoutes.SETTINGS)
-
 private object Routes {
     /** The single entry that hosts all four primary destinations as a pager. */
     const val MAIN = "main"
@@ -296,12 +273,7 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
     // The four primary tabs are pages inside MAIN, not destinations of their own, so the selected
     // tab is its own state. It survives a push of a secondary page, which is what keeps the tab
     // strip showing the same page underneath after returning.
-    val routePage = topLevelPageIndex(currentRoute ?: Routes.MAIN, tabRoutes)
-    val selectedPage = rememberSaveable { mutableIntStateOf(routePage.coerceAtLeast(0)) }
-    // Returning to MAIN from a secondary page adopts whichever tab the route names.
-    LaunchedEffect(routePage) {
-        if (routePage >= 0) selectedPage.intValue = routePage
-    }
+    val selectedPage = rememberSaveable { mutableIntStateOf(0) }
 
     // Switching tabs stays inside MAIN: no navigation, so no NavHost transition and no predictive
     // back. The strip animates itself.
@@ -313,7 +285,6 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
 
     // Use existing foundation/Material3 APIs, without adding a window-size dependency.
     // Keep one NavHost at the same composition location across window resizing.
-    val motionScheme = MaterialTheme.motionScheme
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val useRail = maxWidth >= 600.dp
         // The bar and the rail are primary navigation, so they belong only to a top-level page.
@@ -324,17 +295,12 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
             currentRoute ?: NavHostStartDestination,
             navTopLevelRouteSet,
         )
-        Scaffold(
-            containerColor = MaterialTheme.colorScheme.background,
-            contentWindowInsets = WindowInsets(left = 0.dp, top = 0.dp, right = 0.dp, bottom = 0.dp),
-            bottomBar = {
-                // Deliberately a plain `if`, not AnimatedVisibility. AnimatedVisibility is an
-                // animation state machine: even with enter = None it keeps the exiting content in
-                // the layout while it transitions, so the bar and the Scaffold inset that reserves
-                // its height both keep changing after the pop commits. That reads as the bar
-                // sliding up into place. A bare conditional places the bar at its final position in
-                // the same frame the route becomes top-level, with nothing left to animate.
-                if (!useRail && showPrimaryNavigation) {
+        NavigationChromeLayout(
+            useRail = useRail,
+            showNavigation = showPrimaryNavigation,
+            modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+            navigation = {
+                if (!useRail) {
                     NavigationBar(
                         modifier = Modifier.semantics { isTraversalGroup = true },
                         containerColor = MaterialTheme.colorScheme.background,
@@ -345,7 +311,7 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                     ) {
                         items.forEach { (route, icon, label) ->
                             NavigationBarItem(
-                                selected = routeIsSelected(current, route),
+                                selected = tabRoutes.getOrNull(selectedPage.intValue) == route,
                                 onClick = { navigateToTab(route) },
                                 // Label + native selectable semantics announce the destination once.
                                 icon = { Icon(icon, contentDescription = null) },
@@ -353,18 +319,7 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                             )
                         }
                     }
-                }
-            },
-        ) { inner ->
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(inner)
-                    // Consume Scaffold's system/bar padding once; nested app bars and the rail
-                    // see only remaining insets. The bar uses the real navigation inset, at least 12dp.
-                    .consumeWindowInsets(inner),
-            ) {
-                if (useRail && showPrimaryNavigation) {
+                } else {
                     NavigationRail(
                         modifier = Modifier
                             .fillMaxHeight()
@@ -380,7 +335,7 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                         ) {
                             items.forEach { (route, icon, label) ->
                                 NavigationRailItem(
-                                    selected = routeIsSelected(current, route),
+                                    selected = tabRoutes.getOrNull(selectedPage.intValue) == route,
                                     onClick = { navigateToTab(route) },
                                     icon = { Icon(icon, contentDescription = null) },
                                     label = { Text(label()) },
@@ -389,124 +344,34 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                         }
                     }
                 }
-                Box(
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
-                    contentAlignment = Alignment.TopCenter,
+            },
+        ) { primaryPadding ->
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                AppNavHost(
+                    navController = nav,
+                    startDestination = NavHostStartDestination,
+                    topLevelRoutes = navTopLevelRouteSet,
+                    predictiveBack = predictiveBack,
+                    modifier = Modifier.widthIn(max = 840.dp).fillMaxSize()
+                        .semantics { isTraversalGroup = true },
                 ) {
-                    // Every destination is a real NavHost entry. The top-level pages live inside
-                    // MAIN as a pager, rather than being empty placeholders beside the NavHost, so a
-                    // predictive pop reveals a parent that actually exists and is already at its
-                    // final position. Nothing has to infer which entries are "real".
-                    NavHost(
-                        navController = nav,
-                        startDestination = NavHostStartDestination,
-                        enterTransition = {
-                            val initialRoute = initialState.destination.route
-                            val targetRoute = targetState.destination.route
-                            val kind = navigationMotionKind(
-                                isPop = false,
-                                initialIsSecondary = isSecondaryDestination(initialRoute, navTopLevelRouteSet),
-                                targetIsSecondary = isSecondaryDestination(targetRoute, navTopLevelRouteSet),
-                            )
-                            AppMotion.pageEnter(
-                                kind = kind,
-                                forward = isForwardTopLevelTransition(initialRoute, targetRoute, tabRoutes),
-                                motionScheme = motionScheme,
-                                routeDistance = topLevelRouteDistance(initialRoute, targetRoute, tabRoutes),
-                            )
-                        },
-                        exitTransition = {
-                            val initialRoute = initialState.destination.route
-                            val targetRoute = targetState.destination.route
-                            val kind = navigationMotionKind(
-                                isPop = false,
-                                initialIsSecondary = isSecondaryDestination(initialRoute, navTopLevelRouteSet),
-                                targetIsSecondary = isSecondaryDestination(targetRoute, navTopLevelRouteSet),
-                            )
-                            AppMotion.pageExit(
-                                kind = kind,
-                                forward = isForwardTopLevelTransition(initialRoute, targetRoute, tabRoutes),
-                                motionScheme = motionScheme,
-                                routeDistance = topLevelRouteDistance(initialRoute, targetRoute, tabRoutes),
-                            )
-                        },
-                        popEnterTransition = {
-                            val initialRoute = initialState.destination.route
-                            val targetRoute = targetState.destination.route
-                            val kind = navigationMotionKind(
-                                isPop = true,
-                                initialIsSecondary = isSecondaryDestination(initialRoute, navTopLevelRouteSet),
-                                targetIsSecondary = isSecondaryDestination(targetRoute, navTopLevelRouteSet),
-                            )
-                            AppMotion.pageEnter(
-                                kind = kind,
-                                forward = isForwardTopLevelTransition(initialRoute, targetRoute, tabRoutes),
-                                motionScheme = motionScheme,
-                                routeDistance = topLevelRouteDistance(initialRoute, targetRoute, tabRoutes),
-                            )
-                        },
-                        popExitTransition = {
-                            val initialRoute = initialState.destination.route
-                            val targetRoute = targetState.destination.route
-                            val kind = navigationMotionKind(
-                                isPop = true,
-                                initialIsSecondary = isSecondaryDestination(initialRoute, navTopLevelRouteSet),
-                                targetIsSecondary = isSecondaryDestination(targetRoute, navTopLevelRouteSet),
-                            )
-                            AppMotion.pageExit(
-                                kind = kind,
-                                forward = isForwardTopLevelTransition(initialRoute, targetRoute, tabRoutes),
-                                motionScheme = motionScheme,
-                                routeDistance = topLevelRouteDistance(initialRoute, targetRoute, tabRoutes),
-                            )
-                        },
-                        // Gesture-driven return. Both halves come from AppMotion so the gesture and
-                        // the committed pop describe exactly the same motion and the hand-off at
-                        // release is invisible. The parent is a real destination, so it is revealed
-                        // by its own scale-in rather than by a slide, and stays centred.
-                        predictivePopEnterTransition = { _ ->
-                            if (shouldUsePredictivePop(
-                                    predictiveBackEnabled = predictiveBack,
-                                    currentRoute = initialState.destination.route,
-                                    previousRoute = targetState.destination.route,
-                                    topLevelRoutes = navTopLevelRouteSet,
-                                )
-                            ) {
-                                AppMotion.predictiveBackEnter(motionScheme)
-                            } else EnterTransition.None
-                        },
-                        predictivePopExitTransition = { _ ->
-                            if (shouldUsePredictivePop(
-                                    predictiveBackEnabled = predictiveBack,
-                                    currentRoute = initialState.destination.route,
-                                    previousRoute = targetState.destination.route,
-                                    topLevelRoutes = navTopLevelRouteSet,
-                                )
-                            ) {
-                                AppMotion.predictiveBackExit(motionScheme)
-                            } else ExitTransition.None
-                        },
-                        // Constrain the child, not the weighted slot: retain centering on wide windows.
-                        modifier = Modifier
-                            .widthIn(max = 840.dp)
-                            .fillMaxSize()
-                            .semantics { isTraversalGroup = true },
-                    ) {
-                        composable(Routes.MAIN) {
+                    composable(Routes.MAIN) {
+                        // Reserve chrome in the parent itself, even while a detail is on top.
+                        // The NavHost viewport never resizes when the bar/rail is placed on commit.
+                        Box(Modifier.fillMaxSize().padding(primaryPadding).consumeWindowInsets(primaryPadding)) {
                             TopLevelPager(
                                 vm = vm,
                                 settings = settings,
-                                currentRoute = currentRoute,
-                                topLevelRoutes = tabRoutes,
+                                isActive = showPrimaryNavigation,
                                 selectedPage = selectedPage.intValue,
-                                onNavigate = navigateToTab,
+                                onSelectPage = { selectedPage.intValue = it },
                                 onOpenScan = { nav.navigate(Routes.SCAN) { launchSingleTop = true } },
                                 onOpenAbout = { nav.navigate(Routes.ABOUT) { launchSingleTop = true } },
                             )
                         }
-                        composable(Routes.SCAN) { AddDeviceScreen(vm, onBack = { nav.popBackStack() }) }
-                        composable(Routes.ABOUT) { AboutScreen(onBack = { nav.popBackStack() }) }
                     }
+                    composable(Routes.SCAN) { AddDeviceScreen(vm, onBack = { nav.popBackStack() }) }
+                    composable(Routes.ABOUT) { AboutScreen(onBack = { nav.popBackStack() }) }
                 }
             }
         }

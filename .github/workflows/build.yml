@@ -64,3 +64,39 @@ jobs:
         with:
           name: ColdFront-release-unsigned
           path: app/build/outputs/apk/release/app-release-unsigned.apk
+
+  navigation-ui:
+    name: Predictive back rendering tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+      - name: Run real Compose and NavHost rendering tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: false
+          script: ./gradlew connectedDebugAndroidTest --stacktrace
+      - name: Upload navigation rendering reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ColdFront-navigation-ui-reports
+          path: |
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
+          if-no-files-found: warn

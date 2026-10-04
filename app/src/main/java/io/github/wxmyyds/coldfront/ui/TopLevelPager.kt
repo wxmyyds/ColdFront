@@ -16,7 +16,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalDensity
@@ -24,122 +23,110 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.IntOffset
 import io.github.wxmyyds.coldfront.data.AppSettings
 import io.github.wxmyyds.coldfront.ui.component.TOP_LEVEL_PAGE_DURATION_MS
-import io.github.wxmyyds.coldfront.ui.component.isSecondaryDestination
 import io.github.wxmyyds.coldfront.ui.component.topLevelDragReversed
 import io.github.wxmyyds.coldfront.ui.component.topLevelPositionAfterDrag
 import io.github.wxmyyds.coldfront.ui.component.topLevelTargetAfterDrag
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
-/**
- * The four primary destinations, held side by side and moved as one strip.
- *
- * They are a NavHost destination rather than a sibling of the NavHost so that a secondary page
- * pushed on top of them has a parent that genuinely exists underneath. The strip is not rebuilt on
- * navigation: all four pages stay composed and only their offsets change, which is what lets a
- * jump across several pages pass the pages in between continuously instead of cutting from the
- * first to the last.
- */
+/** MAIN owns the selected tab; detail routes never select or animate a tab. */
 @Composable
 internal fun TopLevelPager(
     vm: CoolerViewModel,
     settings: AppSettings,
-    currentRoute: String?,
-    topLevelRoutes: List<String>,
+    isActive: Boolean,
     selectedPage: Int,
-    onNavigate: (String) -> Unit,
+    onSelectPage: (Int) -> Unit,
     onOpenScan: () -> Unit,
     onOpenAbout: () -> Unit,
 ) {
-    val topLevelRouteSet = remember(topLevelRoutes) { topLevelRoutes.toSet() }
-    // Seeded from the selected page so a restore starts on the right page instead of animating
-    // in from the first one.
-    val pagePosition = remember { Animatable(selectedPage.coerceAtLeast(0).toFloat()) }
-    val pageScope = rememberCoroutineScope()
-    LaunchedEffect(selectedPage) {
-        if (selectedPage >= 0) {
-            pagePosition.animateTo(
-                targetValue = selectedPage.toFloat(),
-                // A fixed duration, not one per page: travelling further costs no more time, so
-                // crossing two pages or three feels like the same single action.
-                animationSpec = tween(TOP_LEVEL_PAGE_DURATION_MS, easing = FastOutSlowInEasing),
+    PrimaryPageStrip(
+        pageCount = 4,
+        selectedPage = selectedPage,
+        isActive = isActive,
+        onSelectPage = onSelectPage,
+    ) { index ->
+        when (index) {
+            0 -> HomeScreen(vm, onAddDevice = onOpenScan)
+            1 -> DevicesScreen(vm, onAddDevice = onOpenScan)
+            2 -> RGBControlScreen(
+                vm,
+                isPageActive = isActive && selectedPage == index,
+                onConnect = onOpenScan,
             )
+            3 -> SettingsScreen(vm, settings, onAbout = onOpenAbout)
+        }
+    }
+}
+
+/**
+ * Animate only tab selection. On a detail preview the selected page is already at offset zero,
+ * even if the detail was opened before a tab animation finished. NavHost owns that whole return;
+ * the strip must neither continue its own motion nor replay it when MAIN is recomposed.
+ */
+@Composable
+internal fun PrimaryPageStrip(
+    pageCount: Int,
+    selectedPage: Int,
+    isActive: Boolean,
+    onSelectPage: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable (Int) -> Unit,
+) {
+    val pagePosition = remember { Animatable(selectedPage.toFloat()) }
+    val pageScope = rememberCoroutineScope()
+    LaunchedEffect(selectedPage, isActive) {
+        if (isActive) {
+            pagePosition.animateTo(
+                selectedPage.toFloat(),
+                tween(TOP_LEVEL_PAGE_DURATION_MS, easing = FastOutSlowInEasing),
+            )
+        } else {
+            pagePosition.snapTo(selectedPage.toFloat())
         }
     }
 
-    BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxSize()
-            .clipToBounds(),
-        contentAlignment = Alignment.TopCenter,
-    ) {
+    BoxWithConstraints(modifier.fillMaxSize().clipToBounds()) {
         val pageWidth = maxWidth
         val pageWidthPx = with(LocalDensity.current) { pageWidth.toPx() }
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .draggable(
-                    // A secondary page owns the horizontal gesture for its own predictive back,
-                    // so the strip must not compete with it.
-                    enabled = !isSecondaryDestination(currentRoute, topLevelRouteSet),
-                    orientation = Orientation.Horizontal,
-                    // Foundation reverses both delta and stop velocity; offset below already
-                    // mirrors in RTL, so do not reverse it a second time.
-                    reverseDirection = topLevelDragReversed(LocalLayoutDirection.current),
-                    state = rememberDraggableState { delta ->
-                        pageScope.launch {
-                            pagePosition.snapTo(
-                                topLevelPositionAfterDrag(
-                                    pagePosition.value, delta, pageWidthPx, topLevelRoutes.lastIndex,
-                                ),
-                            )
-                        }
-                    },
-                    onDragStopped = { velocity ->
-                        val target = topLevelTargetAfterDrag(
-                            pagePosition.value, velocity, topLevelRoutes.lastIndex,
+            Modifier.fillMaxSize().draggable(
+                enabled = isActive,
+                orientation = Orientation.Horizontal,
+                reverseDirection = topLevelDragReversed(LocalLayoutDirection.current),
+                state = rememberDraggableState { delta ->
+                    pageScope.launch {
+                        pagePosition.snapTo(
+                            topLevelPositionAfterDrag(
+                                pagePosition.value, delta, pageWidthPx, pageCount - 1,
+                            ),
                         )
-                        val targetRoute = topLevelRoutes[target]
-                        if (targetRoute != currentRoute) {
-                            onNavigate(targetRoute)
-                        } else {
-                            // A drag that settles back on the current page still has to return the
-                            // strip from wherever the finger left it.
-                            pageScope.launch {
-                                pagePosition.animateTo(
-                                    target.toFloat(),
-                                    tween(TOP_LEVEL_PAGE_DURATION_MS, easing = FastOutSlowInEasing),
-                                )
-                            }
-                        }
-                    },
-                ),
-        ) {
-            listOf<@Composable () -> Unit>(
-                { HomeScreen(vm, onAddDevice = onOpenScan) },
-                { DevicesScreen(vm, onAddDevice = onOpenScan) },
-                {
-                    RGBControlScreen(
-                        vm,
-                        // The strip stays composed while a secondary page covers it; without this
-                        // its infinite preview animation would keep running behind that page.
-                        isPageActive = !isSecondaryDestination(currentRoute, topLevelRouteSet),
-                        onConnect = onOpenScan,
-                    )
+                    }
                 },
-                { SettingsScreen(vm, settings, onAbout = onOpenAbout) },
-            ).forEachIndexed { index, content ->
-                Box(
-                    modifier = Modifier
-                        .width(pageWidth)
-                        .fillMaxHeight()
-                        .offset {
-                            IntOffset(
-                                ((index - pagePosition.value) * pageWidthPx).roundToInt(),
-                                0,
+                onDragStopped = { velocity ->
+                    val target = topLevelTargetAfterDrag(pagePosition.value, velocity, pageCount - 1)
+                    if (target != selectedPage) {
+                        onSelectPage(target)
+                    } else {
+                        // The selected state did not change, so LaunchedEffect will not restart.
+                        pageScope.launch {
+                            pagePosition.animateTo(
+                                target.toFloat(),
+                                tween(TOP_LEVEL_PAGE_DURATION_MS, easing = FastOutSlowInEasing),
                             )
-                        },
-                ) { content() }
+                        }
+                    }
+                },
+            ),
+        ) {
+            repeat(pageCount) { index ->
+                Box(
+                    Modifier.width(pageWidth).fillMaxHeight().offset {
+                        // Use the settled position immediately, not one frame after the effect.
+                        val position = if (isActive) pagePosition.value else selectedPage.toFloat()
+                        IntOffset(((index - position) * pageWidthPx).roundToInt(), 0)
+                    },
+                ) { content(index) }
             }
         }
     }

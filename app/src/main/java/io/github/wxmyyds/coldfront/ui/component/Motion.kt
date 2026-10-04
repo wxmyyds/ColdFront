@@ -23,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MotionScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.IntOffset
 
@@ -53,12 +54,9 @@ internal fun navigationOffset(
     } else {
         if (forward) -width else width
     }
-    // Push keeps the established parallax: the detail enters, the parent recedes.
-    NavigationMotionKind.PushDetail -> if (entering) width / 5 else -width / 5
-    // Pop reveals the parent in place. A parent that drifts during the gesture would jump when
-    // the predictive transition hands off to the committed pop transition, because both are
-    // re-evaluated at the same fraction and must describe the same motion to swap invisibly.
-    NavigationMotionKind.PopDetail -> if (entering) 0 else width / 5
+    // Every detail navigation uses centred layers, including an interrupted push.
+    NavigationMotionKind.PushDetail -> 0
+    NavigationMotionKind.PopDetail -> 0
 }
 
 internal fun isSecondaryDestination(route: String?, topLevelRoutes: Set<String>): Boolean =
@@ -109,13 +107,8 @@ internal fun isForwardTopLevelTransition(
     return initialIndex < 0 || targetIndex < 0 || targetIndex >= initialIndex
 }
 
-private fun topLevelIndex(route: String?, routes: List<String>): Int {
-    val rootRoute = when (route) {
-        "about" -> "settings"
-        else -> route
-    }
-    return rootRoute?.let(routes::indexOf) ?: -1
-}
+private fun topLevelIndex(route: String?, routes: List<String>): Int =
+    route?.let(routes::indexOf) ?: -1
 
 internal const val TOP_LEVEL_PAGE_DURATION_MS = 300
 
@@ -141,31 +134,27 @@ internal const val PREDICTIVE_BACK_EXIT_SCALE = 0.9f
 /** The parent starts larger and settles to full size, so the surface appears to settle into place. */
 internal const val PREDICTIVE_BACK_ENTER_START_SCALE = 1.1f
 
-/**
- * Leaving page: shrink from full size to [PREDICTIVE_BACK_EXIT_SCALE] while fading out.
- *
- * The fade is held at full opacity until [PREDICTIVE_BACK_CROSSFADE_AT] and completed by 100%, so at
- * that instant neither page is visible, which is what the spec describes. Scale and alpha both use
- * [PREDICTIVE_BACK_EASING], and both are expressed as seekable specs so the gesture can drive them
- * frame by frame.
- */
+/** All four tracks share the NavHost seek timeline; no MotionScheme spring can extend it. */
+internal fun predictiveBackScaleSpec(): FiniteAnimationSpec<Float> =
+    tween(DETAIL_POP_DURATION_MS, easing = PREDICTIVE_BACK_EASING)
+
+/** Alpha, not scale: the detail fades from 1 to 0 over the first 35% of the timeline. */
 internal fun predictiveBackExitSpec(): FiniteAnimationSpec<Float> = keyframes {
-    // durationMillis must be set before atFraction, so the fraction is resolved against it.
     durationMillis = DETAIL_POP_DURATION_MS
-    1f atFraction 0f
-    1f atFraction PREDICTIVE_BACK_CROSSFADE_AT
-    PREDICTIVE_BACK_EXIT_SCALE atFraction 1f
+    1f atFraction 0f using PREDICTIVE_BACK_EASING
+    0f atFraction PREDICTIVE_BACK_CROSSFADE_AT
+    0f atFraction 1f
 }
 
-/** Parent page: settle from [PREDICTIVE_BACK_ENTER_START_SCALE] down to full size, fading in. */
+/** The parent is transparent until 35%, then fades to 1 over the remaining timeline. */
 internal fun predictiveBackEnterSpec(): FiniteAnimationSpec<Float> = keyframes {
     durationMillis = DETAIL_POP_DURATION_MS
-    PREDICTIVE_BACK_ENTER_START_SCALE atFraction 0f
-    PREDICTIVE_BACK_EXIT_SCALE atFraction PREDICTIVE_BACK_CROSSFADE_AT
+    0f atFraction 0f
+    0f atFraction PREDICTIVE_BACK_CROSSFADE_AT using PREDICTIVE_BACK_EASING
     1f atFraction 1f
 }
 
-/** Resting alpha for the detail page's push fade; the pop direction deliberately does not fade. */
+/** Resting alpha for the detail page's push fade. */
 internal const val DETAIL_FADE_ALPHA = 0.94f
 
 internal fun shouldUsePredictivePop(
@@ -206,10 +195,14 @@ internal object AppMotion {
             // PopDetail never slides; it scales and fades via predictiveBack* instead.
             NavigationMotionKind.PopDetail -> motionScheme.defaultSpatialSpec<IntOffset>()
         }
-        return if (kind == NavigationMotionKind.PopDetail) {
-            predictiveBackEnter(motionScheme)
-        } else {
-            slideInHorizontally(
+        return when (kind) {
+            NavigationMotionKind.PopDetail -> predictiveBackEnter()
+            NavigationMotionKind.PushDetail -> scaleIn(
+                animationSpec = predictiveBackScaleSpec(),
+                initialScale = PREDICTIVE_BACK_ENTER_START_SCALE,
+                transformOrigin = TransformOrigin.Center,
+            ) + effects
+            NavigationMotionKind.TopLevel -> slideInHorizontally(
                 animationSpec = spatialSpec,
                 initialOffsetX = offset,
             ) + effects
@@ -231,10 +224,6 @@ internal object AppMotion {
                 targetAlpha = 0.96f,
             )
             NavigationMotionKind.PushDetail -> ExitTransition.None
-            // No fade on the way out. Dimming the moving page would make the window behind it show
-            // through as a dark veil over the whole surface, which reads as a mask rather than as
-            // the edge treatment the platform draws on a page being swiped away. The page must
-            // stay opaque so only its shadowed edge reads.
             NavigationMotionKind.PopDetail -> ExitTransition.None
         }
         val spatialSpec = when (kind) {
@@ -244,46 +233,41 @@ internal object AppMotion {
             // PopDetail never slides; it scales and fades via predictiveBack* instead.
             NavigationMotionKind.PopDetail -> motionScheme.defaultSpatialSpec<IntOffset>()
         }
-        return if (kind == NavigationMotionKind.PopDetail) {
-            predictiveBackExit(motionScheme)
-        } else {
-            slideOutHorizontally(
+        return when (kind) {
+            NavigationMotionKind.PopDetail -> predictiveBackExit()
+            // Compose retains this exit boundary if a push is reversed before settling. It must
+            // therefore be centred too; a slide here survives a later scale-only popEnter.
+            NavigationMotionKind.PushDetail -> scaleOut(
+                animationSpec = predictiveBackScaleSpec(),
+                targetScale = PREDICTIVE_BACK_EXIT_SCALE,
+                transformOrigin = TransformOrigin.Center,
+            )
+            NavigationMotionKind.TopLevel -> slideOutHorizontally(
                 animationSpec = spatialSpec,
                 targetOffsetX = offset,
             ) + effects
         }
     }
 
-    /**
-     * Gesture-driven exit for a detail page, following the official full-screen surface spec.
-     *
-     * Deliberately a scale and a fade with no horizontal offset: [scaleOut] keeps the page centred,
-     * so the page that is being revealed never slides or gets clipped. Adding a slide here is what
-     * made the parent appear to drift and left an edge of the moving layer exposed at the clip
-     * boundary.
-     */
-    fun predictiveBackExit(motionScheme: MotionScheme): ExitTransition =
-        scaleOut(
-            animationSpec = tween(DETAIL_POP_DURATION_MS, easing = PREDICTIVE_BACK_EASING),
-            targetScale = PREDICTIVE_BACK_EXIT_SCALE,
-        ) + fadeOut(animationSpec = motionScheme.fastEffectsSpec<Float>())
+    /** The only exit tracks during a detail pop: centred scale and timeline-bound alpha. */
+    fun predictiveBackExit(): ExitTransition = detailPopExit
 
-    /**
-     * Gesture-driven enter for the revealed parent, as the counterpart to [predictiveBackExit].
-     *
-     * The parent starts slightly oversized and settles to full size while fading in, so it reads as
-     * uncovered rather than as a new page arriving. It is also centred, so nothing shifts.
-     */
-    fun predictiveBackEnter(motionScheme: MotionScheme): EnterTransition =
+    private val detailPopExit =
+        scaleOut(
+            animationSpec = predictiveBackScaleSpec(),
+            targetScale = PREDICTIVE_BACK_EXIT_SCALE,
+            transformOrigin = TransformOrigin.Center,
+        ) + fadeOut(animationSpec = predictiveBackExitSpec())
+
+    /** The parent uses the same clock and pivot; there is no independent settle animation. */
+    fun predictiveBackEnter(): EnterTransition = detailPopEnter
+
+    private val detailPopEnter =
         scaleIn(
-            // A tween, not the scheme spring: the gesture seeks this every frame and a spring would
-            // overshoot the settle, making the parent pulse instead of resting at full size.
-            animationSpec = tween(DETAIL_POP_DURATION_MS, easing = PREDICTIVE_BACK_EASING),
+            animationSpec = predictiveBackScaleSpec(),
             initialScale = PREDICTIVE_BACK_ENTER_START_SCALE,
-        ) + fadeIn(
-            animationSpec = predictiveBackEnterSpec(),
-            initialAlpha = 0f,
-        )
+            transformOrigin = TransformOrigin.Center,
+        ) + fadeIn(animationSpec = predictiveBackEnterSpec(), initialAlpha = 0f)
 
     /** Restrained spatial continuity for connection/empty-content state changes. */
     fun contentChange(motionScheme: MotionScheme): ContentTransform =
