@@ -1,6 +1,5 @@
 package io.github.wxmyyds.coldfront.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.MaterialTheme
@@ -9,7 +8,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.layout.SubcomposeLayout
 import io.github.wxmyyds.coldfront.ui.component.parentScrimAlphaForProgress
 
@@ -35,24 +34,30 @@ internal fun rememberChromeVisibility(
 }
 
 /**
- * Dims the bar or rail in step with the page it belongs to.
+ * Draws a scrim over the bar or rail, matching the dimming of the page it belongs to.
  *
  * The chrome is a sibling of the NavHost, so it cannot inherit the top-level page's scrim and has to
- * be dimmed separately to match. A scrim is drawn *over* the bar rather than fading the bar itself,
- * for the same reason the page is not faded: lowering the bar's alpha makes it translucent, so the
- * page underneath shows through and it stops reading as a solid surface - at half progress it all
- * but disappears into the page behind it.
+ * be dimmed separately. Two things this deliberately avoids:
  *
- * @param modifier receives [Modifier.matchParentSize] from the caller's [BoxScope], so the scrim
- * covers exactly the bar without the bar's own measurement being affected.
+ *  - Fading the bar. Lowering its alpha makes it translucent, so the page shows through and it stops
+ *    reading as a solid surface - at half progress it all but disappears into the page behind it.
+ *  - An overlaid child sized to the parent. A `matchParentSize` sibling is measured against the
+ *    window's constraints, so it can end up covering far more than the bar and paint the whole strip
+ *    flat black. Drawing inside this node's own bounds cannot exceed the bar.
+ *
+ * [drawWithContent] rather than a `graphicsLayer` alpha: the scrim must be drawn *over* the content,
+ * not applied to it.
  */
 @Composable
-internal fun ChromeDimming(backProgress: State<Float?>, modifier: Modifier = Modifier) {
-    val scrimColor = MaterialTheme.colorScheme.scrim
-    Box(modifier.background(scrimColor).graphicsLayer {
+internal fun rememberChromeScrim(backProgress: State<Float?>): Modifier {
+    val scrim = MaterialTheme.colorScheme.scrim
+    return Modifier.drawWithContent {
+        drawContent()
         val progress = backProgress.value
-        alpha = if (progress == null) 0f else parentScrimAlphaForProgress(progress)
-    })
+        if (progress != null) {
+            drawRect(color = scrim, alpha = parentScrimAlphaForProgress(progress))
+        }
+    }
 }
 
 /**
@@ -65,27 +70,23 @@ internal fun ChromeDimming(backProgress: State<Float?>, modifier: Modifier = Mod
  * of what is being revealed. Only MAIN consumes [PaddingValues]; detail destinations and the NavHost
  * always keep the same bounds and transform centre.
  *
- * @param chromeDimming drawn over the bar or rail, given [Modifier.matchParentSize] so it can
- * cover exactly the bar without affecting the bar's own measurement. The chrome is a sibling of the
- * NavHost, so it cannot inherit the top-level page's scrim and has to be dimmed separately to match.
+ * @param chromeScrim drawn over the bar or rail within its own bounds. The chrome is a sibling of
+ * the NavHost, so it cannot inherit the top-level page's scrim and has to be dimmed separately.
  */
 @Composable
 internal fun NavigationChromeLayout(
     useRail: Boolean,
     showNavigation: Boolean,
     modifier: Modifier = Modifier,
-    chromeDimming: @Composable (Modifier) -> Unit = {},
+    chromeScrim: Modifier = Modifier,
     navigation: @Composable () -> Unit,
     content: @Composable (PaddingValues) -> Unit,
 ) {
     SubcomposeLayout(modifier) { constraints ->
+        // The Box wraps the bar without adding a child of its own: it only carries the scrim, and
+        // wrapping content keeps the bar's measurement exactly as it was.
         val chrome = subcompose(NavigationSlot.Chrome) {
-            Box {
-                navigation()
-                // matchParentSize is a BoxScope member, so the scrim overlays the bar's own bounds
-                // while the bar keeps the size it would have had on its own.
-                chromeDimming(Modifier.matchParentSize())
-            }
+            Box(chromeScrim) { navigation() }
         }.map {
             it.measure(
                 constraints.copy(

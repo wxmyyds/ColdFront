@@ -263,6 +263,17 @@ class PredictiveBackRenderingTest {
                 rule.onAllNodesWithTag("chrome").fetchSemanticsNodes().isNotEmpty(),
             )
         }
+        // It must still read as a dimmed bar, not as a solid black strip. A scrim drawn at the
+        // wrong size turns the whole strip flat black, which is what an overlay sized to the parent
+        // instead of to the bar produced.
+        progress(0.5f, BackEventCompat.EDGE_LEFT)
+        val barStrip = rule.onNodeWithTag("chrome").captureToImage().toPixelMap()
+        val row = barStrip.height / 2
+        val sample = barStrip[barStrip.width / 2, row]
+        assertTrue(
+            "the bar must be dimmed, not flat black (r=${sample.red} g=${sample.green} b=${sample.blue})",
+            sample.red + sample.green + sample.blue > 0.3f,
+        )
         commitAndCheck()
     }
 
@@ -298,7 +309,7 @@ class PredictiveBackRenderingTest {
                     NavigationChromeLayout(
                         useRail = rail.value,
                         showNavigation = chromeVisible.value,
-                        chromeDimming = { bounds -> ChromeDimming(backProgress, bounds) },
+                        chromeScrim = rememberChromeScrim(backProgress),
                         modifier = Modifier.fillMaxSize().background(Color.Blue).testTag("viewport")
                             .onGloballyPositioned { viewport = it },
                         navigation = {
