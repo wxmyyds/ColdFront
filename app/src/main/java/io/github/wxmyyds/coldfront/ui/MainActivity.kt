@@ -89,6 +89,7 @@ import io.github.wxmyyds.coldfront.ui.component.isSecondaryDestination
 import io.github.wxmyyds.coldfront.ui.component.navigationMotionKind
 import io.github.wxmyyds.coldfront.ui.component.isNavHostTransitionPair
 import io.github.wxmyyds.coldfront.ui.component.isRenderedByNavHost
+import io.github.wxmyyds.coldfront.ui.component.showsPrimaryNavigation
 import io.github.wxmyyds.coldfront.ui.component.shouldUsePredictivePop
 import io.github.wxmyyds.coldfront.ui.component.topLevelRouteDistance
 import io.github.wxmyyds.coldfront.ui.component.topLevelDragReversed
@@ -321,12 +322,14 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
     val motionScheme = MaterialTheme.motionScheme
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val useRail = maxWidth >= 600.dp
+        // The bar and the rail are primary navigation, so they belong only to a top-level page.
+        val showPrimaryNavigation = showsPrimaryNavigation(currentRoute, topLevelRouteSet)
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             contentWindowInsets = WindowInsets(left = 0.dp, top = 0.dp, right = 0.dp, bottom = 0.dp),
             bottomBar = {
                 AnimatedVisibility(
-                    visible = !useRail,
+                    visible = !useRail && showPrimaryNavigation,
                     enter = AppMotion.navigationBarEnter(motionScheme),
                     exit = AppMotion.navigationBarExit(motionScheme),
                 ) {
@@ -359,7 +362,7 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                     // see only remaining insets. The bar uses the real navigation inset, at least 12dp.
                     .consumeWindowInsets(inner),
             ) {
-                if (useRail) {
+                if (useRail && showPrimaryNavigation) {
                     NavigationRail(
                         modifier = Modifier
                             .fillMaxHeight()

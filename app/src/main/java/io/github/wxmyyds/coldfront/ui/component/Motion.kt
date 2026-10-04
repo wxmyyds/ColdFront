@@ -84,6 +84,19 @@ internal fun isRenderedByNavHost(route: String?, topLevelRoutes: Set<String>): B
     isSecondaryDestination(route, topLevelRoutes)
 
 /**
+ * Whether the primary navigation affordance belongs on screen.
+ *
+ * The bottom bar and the rail are primary navigation: they switch between top-level destinations.
+ * A secondary page is a detail pushed on top of one of them, so leaving the affordance visible
+ * both offers a way to jump away from the detail and shrinks the page for no reason. Keyed on the
+ * navigation layer rather than on any route name, so a new detail page is covered automatically.
+ */
+internal fun showsPrimaryNavigation(
+    route: String?,
+    topLevelRoutes: Set<String>,
+): Boolean = isTopLevelDestination(route, topLevelRoutes)
+
+/**
  * Whether both ends of a NavHost transition are real NavHost content, so the NavHost may animate
  * the pair on its own.
  *

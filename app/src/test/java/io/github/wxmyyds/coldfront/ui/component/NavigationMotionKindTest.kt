@@ -135,6 +135,34 @@ class NavigationMotionKindTest {
     }
 
     @Test
+    fun primaryNavigationShowsOnlyOnTopLevelPages() {
+        val roots = setOf("home", "devices", "rgb", "settings")
+
+        // Top-level pages own the bar/rail: they are what those affordances navigate between.
+        assertTrue(showsPrimaryNavigation("home", roots))
+        assertTrue(showsPrimaryNavigation("devices", roots))
+        assertTrue(showsPrimaryNavigation("rgb", roots))
+        assertTrue(showsPrimaryNavigation("settings", roots))
+
+        // A detail page is pushed on top of one of them, so the bar must get out of the way.
+        assertFalse(showsPrimaryNavigation("about", roots))
+        assertFalse(showsPrimaryNavigation("scan", roots))
+
+        // No route at all (start of the graph) must not claim the bar either.
+        assertFalse(showsPrimaryNavigation(null, roots))
+    }
+
+    @Test
+    fun primaryNavigationIsKeyedOnLayerNotOnRouteNames() {
+        val roots = setOf("home", "devices", "rgb", "settings")
+
+        // Any route outside the top-level set is a detail, so adding one later needs no change
+        // here. This is what keeps the rule from degrading into per-page special cases.
+        assertFalse(showsPrimaryNavigation("some_future_detail", roots))
+        assertFalse(showsPrimaryNavigation("about", roots))
+    }
+
+    @Test
     fun returningFromAboutToSettingsAnimatesOnlyTheDetailPage() {
         val roots = setOf("home", "devices", "rgb", "settings")
 
