@@ -65,6 +65,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import io.github.wxmyyds.coldfront.ble.BlePermissionManager
 import io.github.wxmyyds.coldfront.data.AppSettings
+import io.github.wxmyyds.coldfront.ui.component.isSecondaryDestination
 import io.github.wxmyyds.coldfront.ui.component.showsPrimaryNavigation
 import io.github.wxmyyds.coldfront.ui.component.topLevelPageIndex
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
@@ -295,6 +296,13 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
             currentRoute ?: NavHostStartDestination,
             navTopLevelRouteSet,
         )
+        // True while a detail page is the one being dismissed, i.e. the gesture pops back onto a
+        // top-level page. Resolved from the navigation layer, so any future detail page is covered
+        // without naming it.
+        val currentIsDetail = isSecondaryDestination(
+            currentRoute ?: NavHostStartDestination,
+            navTopLevelRouteSet,
+        )
         NavigationChromeLayout(
             useRail = useRail,
             showNavigation = showPrimaryNavigation,
@@ -370,8 +378,16 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                             )
                         }
                     }
-                    composable(Routes.SCAN) { AddDeviceScreen(vm, onBack = { nav.popBackStack() }) }
-                    composable(Routes.ABOUT) { AboutScreen(onBack = { nav.popBackStack() }) }
+                    composable(Routes.SCAN) {
+                        DetailDismissSurface(isDismissible = currentIsDetail) {
+                            AddDeviceScreen(vm, onBack = { nav.popBackStack() })
+                        }
+                    }
+                    composable(Routes.ABOUT) {
+                        DetailDismissSurface(isDismissible = currentIsDetail) {
+                            AboutScreen(onBack = { nav.popBackStack() })
+                        }
+                    }
                 }
             }
         }

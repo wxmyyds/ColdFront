@@ -1,5 +1,6 @@
 package io.github.wxmyyds.coldfront.ui.component
 
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.TargetBasedAnimation
 import androidx.compose.animation.core.VectorConverter
@@ -71,68 +72,55 @@ class NavigationMotionKindTest {
     }
 
     @Test
-    fun detailPopNeverRequestsHorizontalOffsets() {
+    fun detailPopTravelsTowardsTheRightAndNeverRequestsADisplacementOnTheParent() {
         for (entering in listOf(false, true)) {
             for (forward in listOf(false, true)) {
+                // The parent is never given a horizontal offset of its own; the page above it
+                // moving away is what reveals it.
                 assertEquals(0, navigationOffset(NavigationMotionKind.PopDetail, entering, forward, 1000))
             }
         }
+        assertEquals(1f, DETAIL_POP_TRAVEL, 0f)
     }
 
     @Test
     fun gestureAndCommittedPopReuseExactlyTheSameTransitions() {
         // Identity here is intentional: no toString normalization can mask a changed spec.
-        assertSame(AppMotion.predictiveBackEnter(), AppMotion.pageEnter(
-            NavigationMotionKind.PopDetail, false, TestMotionScheme, 1,
-        ))
-        assertSame(AppMotion.predictiveBackExit(), AppMotion.pageExit(
+        assertSame(predictiveBackExit(), AppMotion.pageExit(
             NavigationMotionKind.PopDetail, false, TestMotionScheme, 1,
         ))
     }
 
     @Test
-    fun alphaTracksUseTheThresholdAndNeverUseScaleValues() {
-        val exit = animation(predictiveBackExitSpec(), 1f, 0f)
-        val enter = animation(predictiveBackEnterSpec(), 0f, 1f)
-        assertEquals(1f, exit.getValueFromNanos(0), 0f)
-        assertEquals(0f, enter.getValueFromNanos(0), 0f)
-        assertEquals(0f, exit.getValueFromNanos(105_000_000), 0f)
-        assertEquals(0f, enter.getValueFromNanos(105_000_000), 0f)
-        assertEquals(0f, exit.getValueFromNanos(300_000_000), 0f)
-        assertEquals(1f, enter.getValueFromNanos(300_000_000), 0f)
-        assertTrue(exit.getValueFromNanos(50_000_000) in 0.001f..0.999f)
-        assertTrue(enter.getValueFromNanos(200_000_000) in 0.001f..0.999f)
-        var lastExit = 1f
-        var lastEnter = 0f
+    fun theLeavingPageTravelsTheFullWidthAndTheParentStaysPut() {
+        // The page must leave towards the physical right, by its whole width, in one track. The
+        // parent must contribute no transition of its own: it is uncovered, not animated.
+        val travel = animation(detailPopTravelSpec(), 0f, 1f)
+        assertEquals(DETAIL_POP_DURATION_MS * 1_000_000L, travel.durationNanos)
+        assertEquals(0f, travel.getValueFromNanos(0), 0f)
+        assertEquals(1f, travel.getValueFromNanos(300_000_000), 0f)
+        // Never overshoots and never travels backwards, so a released gesture settles instead of
+        // snapping. Progress is clamped before it reaches here, so this stays within one width.
+        var last = 0f
         for (millis in 0..300) {
-            val leaving = exit.getValueFromNanos(millis * 1_000_000L)
-            val parent = enter.getValueFromNanos(millis * 1_000_000L)
-            assertTrue(leaving in 0f..1f && parent in 0f..1f)
-            assertTrue(leaving <= lastExit && parent >= lastEnter)
-            lastExit = leaving
-            lastEnter = parent
+            val value = travel.getValueFromNanos(millis * 1_000_000L)
+            assertTrue("travel out of range at ${millis}ms: $value", value in 0f..1f)
+            assertTrue("travel moved backwards at ${millis}ms", value >= last)
+            last = value
         }
     }
 
     @Test
-    fun scaleAndAlphaShareOneDurationAndReverseWithoutOvershoot() {
-        val exitScale = animation(predictiveBackScaleSpec(), 1f, PREDICTIVE_BACK_EXIT_SCALE)
-        val enterScale = animation(predictiveBackScaleSpec(), PREDICTIVE_BACK_ENTER_START_SCALE, 1f)
-        val exitAlpha = animation(predictiveBackExitSpec(), 1f, 0f)
-        val enterAlpha = animation(predictiveBackEnterSpec(), 0f, 1f)
-        for (track in listOf(exitScale, enterScale, exitAlpha, enterAlpha)) {
-            assertEquals(300_000_000L, track.durationNanos)
-        }
-        // Seek forwards then backwards as a cancelled gesture does; values are timeline-based.
-        for (millis in (0..300) + (300 downTo 0)) {
-            val t = millis * 1_000_000L
-            assertTrue(exitScale.getValueFromNanos(t) in 0.9f..1f)
-            assertTrue(enterScale.getValueFromNanos(t) in 1f..1.1f)
-        }
-        assertEquals(1f, exitScale.getValueFromNanos(0), 0f)
-        assertEquals(1.1f, enterScale.getValueFromNanos(0), 0f)
-        assertEquals(0.9f, exitScale.getValueFromNanos(300_000_000), 0f)
-        assertEquals(1f, enterScale.getValueFromNanos(300_000_000), 0f)
+    fun theParentContributesNoEnterTransition() {
+        // A parent that faded or scaled in would cross-fade with the page leaving, which is the
+        // effect this is meant to replace.
+        assertSame(EnterTransition.None, predictiveBackEnter())
+        assertSame(predictiveBackEnter(), AppMotion.pageEnter(
+            NavigationMotionKind.PopDetail, false, TestMotionScheme, 1,
+        ))
+        assertSame(predictiveBackExit(), AppMotion.pageExit(
+            NavigationMotionKind.PopDetail, false, TestMotionScheme, 1,
+        ))
     }
 
     private fun animation(spec: FiniteAnimationSpec<Float>, from: Float, to: Float) =

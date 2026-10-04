@@ -60,6 +60,10 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.navigation.compose)
+    // Read-only access to the live predictive-back gesture progress. navigation-compose already
+    // depends on this at runtime; declaring it explicitly is what puts the public
+    // NavigationEventDispatcher.transitionState flow on our compile classpath.
+    implementation(libs.androidx.navigationevent.compose)
     implementation(libs.material.kolor)
 
     // Compose（版本由 alpha BOM 托管 → material3 1.5.0-alpha29）

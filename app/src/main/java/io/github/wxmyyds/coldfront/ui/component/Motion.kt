@@ -13,17 +13,12 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
-import androidx.compose.animation.core.keyframes
-import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.scaleIn
 import androidx.compose.animation.core.tween
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MotionScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.IntOffset
 
@@ -118,41 +113,48 @@ internal fun topLevelPageDuration(routeDistance: Int): Int = TOP_LEVEL_PAGE_DURA
 internal const val DETAIL_POP_DURATION_MS = 300
 
 /**
- * The system curve for predictive back, PathInterpolator(.1, .1, 0, 1).
+ * Travel of the leaving page as a function of gesture progress.
  *
- * The official guidance is to feed the raw gesture progress through this rather than using it
- * directly, so the response is most visible at the start of the drag and eases off afterwards.
+ * The page must track the finger, so this is deliberately linear in progress with no easing: at
+ * progress 0.5 the page has moved exactly half its width and still covers half the screen, with the
+ * parent revealed beside it. The system predictive-back curve, CubicBezier(.1, .1, 0, 1), is wrong
+ * for a translation - it reaches 68% of the travel by progress 0.25 and 90% by 0.5, which would put
+ * the page almost entirely off screen halfway through the gesture, the opposite of the intended
+ * reading. That curve still shapes the release animation below, where a settle is wanted.
  */
-internal val PREDICTIVE_BACK_EASING = CubicBezierEasing(0.1f, 0.1f, 0f, 1f)
+internal const val DETAIL_POP_TRAVEL = 1f
 
-/** Progress at which the leaving page is fully faded out and the parent starts fading in. */
-internal const val PREDICTIVE_BACK_CROSSFADE_AT = 0.35f
+/** Easing used only when the gesture is released and the page settles. */
+internal val DETAIL_POP_SETTLE_EASING = FastOutSlowInEasing
 
-/** Exit scale of a full-screen surface over a predictive back, per the official motion spec. */
-internal const val PREDICTIVE_BACK_EXIT_SCALE = 0.9f
+/**
+ * Spec for the leaving page's horizontal travel, as a fraction of its own width.
+ *
+ * Exposed separately from [predictiveBackExit] so the curve can be sampled directly: an
+ * [androidx.compose.animation.ExitTransition] carries its spec inside and exposes no way to read
+ * it back, which is why a previous version of this test could only compare objects by identity.
+ */
+internal fun detailPopTravelSpec(): FiniteAnimationSpec<Float> =
+    tween(DETAIL_POP_DURATION_MS, easing = DETAIL_POP_SETTLE_EASING)
 
-/** The parent starts larger and settles to full size, so the surface appears to settle into place. */
-internal const val PREDICTIVE_BACK_ENTER_START_SCALE = 1.1f
+/**
+ * The leaving page slides out under the finger while the parent is revealed beside it.
+ *
+ * Both halves come from here so the gesture and the committed pop describe one motion and the
+ * hand-off at release is invisible. NavHost seeks this spec with the real gesture progress, so the
+ * slide follows the finger directly; there is no separate hand-written offset animation and no
+ * fade, scale or size change competing with the translation.
+ *
+ * The parent's enter is [EnterTransition.None]: it never moves, it is simply uncovered as the page
+ * above it travels away, which is what keeps the two layers visibly stacked instead of cross-fading.
+ */
+internal fun predictiveBackExit(): ExitTransition = slideOutHorizontally(
+    animationSpec = detailPopTravelSpec(),
+    targetOffsetX = { width -> (width * DETAIL_POP_TRAVEL).toInt() },
+)
 
-/** All four tracks share the NavHost seek timeline; no MotionScheme spring can extend it. */
-internal fun predictiveBackScaleSpec(): FiniteAnimationSpec<Float> =
-    tween(DETAIL_POP_DURATION_MS, easing = PREDICTIVE_BACK_EASING)
-
-/** Alpha, not scale: the detail fades from 1 to 0 over the first 35% of the timeline. */
-internal fun predictiveBackExitSpec(): FiniteAnimationSpec<Float> = keyframes {
-    durationMillis = DETAIL_POP_DURATION_MS
-    1f atFraction 0f using PREDICTIVE_BACK_EASING
-    0f atFraction PREDICTIVE_BACK_CROSSFADE_AT
-    0f atFraction 1f
-}
-
-/** The parent is transparent until 35%, then fades to 1 over the remaining timeline. */
-internal fun predictiveBackEnterSpec(): FiniteAnimationSpec<Float> = keyframes {
-    durationMillis = DETAIL_POP_DURATION_MS
-    0f atFraction 0f
-    0f atFraction PREDICTIVE_BACK_CROSSFADE_AT using PREDICTIVE_BACK_EASING
-    1f atFraction 1f
-}
+/** The parent holds still and is revealed by the page above leaving. */
+internal fun predictiveBackEnter(): EnterTransition = EnterTransition.None
 
 /** Resting alpha for the detail page's push fade. */
 internal const val DETAIL_FADE_ALPHA = 0.94f
@@ -196,11 +198,13 @@ internal object AppMotion {
             NavigationMotionKind.PopDetail -> motionScheme.defaultSpatialSpec<IntOffset>()
         }
         return when (kind) {
+            // The leaving page translates under the finger; see predictiveBackExit.
             NavigationMotionKind.PopDetail -> predictiveBackEnter()
-            NavigationMotionKind.PushDetail -> scaleIn(
-                animationSpec = predictiveBackScaleSpec(),
-                initialScale = PREDICTIVE_BACK_ENTER_START_SCALE,
-                transformOrigin = TransformOrigin.Center,
+            // A push whose reverse is interrupted can have its exit boundary retained by Compose,
+            // so the page that is about to be dismissed must not be off-centre to begin with.
+            NavigationMotionKind.PushDetail -> slideInHorizontally(
+                animationSpec = spatialSpec,
+                initialOffsetX = offset,
             ) + effects
             NavigationMotionKind.TopLevel -> slideInHorizontally(
                 animationSpec = spatialSpec,
@@ -235,39 +239,16 @@ internal object AppMotion {
         }
         return when (kind) {
             NavigationMotionKind.PopDetail -> predictiveBackExit()
-            // Compose retains this exit boundary if a push is reversed before settling. It must
-            // therefore be centred too; a slide here survives a later scale-only popEnter.
-            NavigationMotionKind.PushDetail -> scaleOut(
-                animationSpec = predictiveBackScaleSpec(),
-                targetScale = PREDICTIVE_BACK_EXIT_SCALE,
-                transformOrigin = TransformOrigin.Center,
-            )
+            NavigationMotionKind.PushDetail -> slideOutHorizontally(
+                animationSpec = spatialSpec,
+                targetOffsetX = offset,
+            ) + effects
             NavigationMotionKind.TopLevel -> slideOutHorizontally(
                 animationSpec = spatialSpec,
                 targetOffsetX = offset,
             ) + effects
         }
     }
-
-    /** The only exit tracks during a detail pop: centred scale and timeline-bound alpha. */
-    fun predictiveBackExit(): ExitTransition = detailPopExit
-
-    private val detailPopExit =
-        scaleOut(
-            animationSpec = predictiveBackScaleSpec(),
-            targetScale = PREDICTIVE_BACK_EXIT_SCALE,
-            transformOrigin = TransformOrigin.Center,
-        ) + fadeOut(animationSpec = predictiveBackExitSpec())
-
-    /** The parent uses the same clock and pivot; there is no independent settle animation. */
-    fun predictiveBackEnter(): EnterTransition = detailPopEnter
-
-    private val detailPopEnter =
-        scaleIn(
-            animationSpec = predictiveBackScaleSpec(),
-            initialScale = PREDICTIVE_BACK_ENTER_START_SCALE,
-            transformOrigin = TransformOrigin.Center,
-        ) + fadeIn(animationSpec = predictiveBackEnterSpec(), initialAlpha = 0f)
 
     /** Restrained spatial continuity for connection/empty-content state changes. */
     fun contentChange(motionScheme: MotionScheme): ContentTransform =

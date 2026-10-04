@@ -10,6 +10,7 @@ activityCompose = "1.14.0-alpha03"
 composeBom = "2026.09.01"            # compose-bom-alpha，托管 material3 1.5.0-alpha29
 kotlinxCoroutines = "1.11.0"
 navigationCompose = "2.10.2"
+navigationEventCompose = "1.1.2"
 datastore = "1.2.1"
 materialColorUtilities = "5.0.1"
 # material-kolor 传递依赖 material-color-utilities，提供 dynamicColorScheme 高层 API
@@ -28,6 +29,9 @@ androidx-lifecycle-process = { group = "androidx.lifecycle", name = "lifecycle-p
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
+# Pinned to the exact version navigation-compose 2.10.2 resolves, so the gesture progress we read
+# comes from the same library instance that owns the gesture.
+androidx-navigationevent-compose = { group = "androidx.navigationevent", name = "navigationevent-compose-android", version.ref = "navigationEventCompose" }
 material-color-utilities = { group = "com.materialkolor", name = "material-color-utilities", version.ref = "materialColorUtilities" }
 material-kolor = { group = "com.materialkolor", name = "material-kolor", version.ref = "materialKolor" }
 

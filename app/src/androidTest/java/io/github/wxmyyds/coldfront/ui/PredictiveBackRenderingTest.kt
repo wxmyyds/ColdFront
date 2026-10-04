@@ -2,8 +2,6 @@ package io.github.wxmyyds.coldfront.ui
 
 import androidx.activity.BackEventCompat
 import androidx.activity.ComponentActivity
-import androidx.compose.animation.core.TargetBasedAnimation
-import androidx.compose.animation.core.VectorConverter
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -31,12 +29,12 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import io.github.wxmyyds.coldfront.ui.component.predictiveBackEnterSpec
-import io.github.wxmyyds.coldfront.ui.component.predictiveBackScaleSpec
+import io.github.wxmyyds.coldfront.ui.component.DETAIL_POP_DURATION_MS
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -63,35 +61,36 @@ class PredictiveBackRenderingTest {
         setup()
         openDetail()
         gesture(BackEventCompat.EDGE_LEFT)
-        for (progress in listOf(0.15f, 0.5f, 0.85f)) {
+        val width = viewport.size.width.toFloat()
+        for (progress in listOf(0.15f, 0.35f, 0.5f, 0.85f)) {
             progress(progress, BackEventCompat.EDGE_LEFT)
+            // The parent is revealed, never moved: its centre must stay exactly put at every
+            // progress value, and it must still fill the whole viewport.
             assertCentred(parent)
-            assertCentred(detail)
-            val playTime = (progress * 300_000_000L).toLong()
-            val scale = predictiveBackScaleSpec()
+            assertEquals(1f, horizontalScale(parent), 0.002f)
+            // The page tracks the finger: travel is linear in progress, so at 0.5 it has moved
+            // exactly half its width and still covers half the screen.
+            assertEquals(progress * width, detailOriginX(detail), 1.5f)
             assertEquals(
-                TargetBasedAnimation(scale, Float.VectorConverter, 1.1f, 1f).getValueFromNanos(playTime),
-                horizontalScale(parent), 0.004f,
+                "the page must still cover most of the screen halfway through",
+                (1f - progress) * width,
+                detail.size.width.toFloat(),
+                2f,
             )
-            assertEquals(
-                TargetBasedAnimation(scale, Float.VectorConverter, 1f, 0.9f).getValueFromNanos(playTime),
-                horizontalScale(detail), 0.004f,
+            // The parent's left edge is genuinely uncovered at this progress.
+            val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
+            val y = pixels.height / 2
+            assertTrue(
+                "parent should show through at x=${(progress * width).toInt()}",
+                pixels[(progress * width).toInt() + 2, y].green > 0.5f,
             )
-            assertSymmetricEdges()
-            val edge = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
-            val expectedAlpha = TargetBasedAnimation(
-                predictiveBackEnterSpec(), Float.VectorConverter, 0f, 1f,
-            ).getValueFromNanos(playTime)
-            // The detail has shrunk away from this edge. Green over blue directly measures the
-            // parent's actual rendered alpha, catching the old scale-values-fed-to-fade bug.
-            assertEquals(expectedAlpha, edge[(edge.width * 0.01f).toInt(), edge.height / 2].green, 0.04f)
         }
         rule.runOnUiThread { dispatcher.dispatchOnBackCancelled() }
         frames(600)
         rule.runOnIdle {
             assertEquals("detail", nav.currentDestination?.route)
             assertCentred(detail)
-            assertEquals(1f, horizontalScale(detail), 0.002f)
+            assertEquals(0f, detailOriginX(detail), 1.5f)
             assertFalse("cancel must remove the preview parent", parent.isAttached)
         }
         // Repeated gestures use the same input owner; release must continue, not replay a pop.
@@ -107,7 +106,7 @@ class PredictiveBackRenderingTest {
         gesture(BackEventCompat.EDGE_LEFT)
         progress(0.55f, BackEventCompat.EDGE_LEFT)
         assertCentred(parent)
-        assertCentred(detail)
+        assertEquals(0.55f * viewport.size.width, detailOriginX(detail), 2f)
         commitAndCheck()
     }
 
@@ -122,7 +121,7 @@ class PredictiveBackRenderingTest {
         gesture(BackEventCompat.EDGE_RIGHT)
         progress(0.6f, BackEventCompat.EDGE_RIGHT)
         assertCentred(parent)
-        assertCentred(detail)
+        assertEquals(0.6f * viewport.size.width, detailOriginX(detail), 2f)
         commitAndCheck()
     }
 
@@ -140,7 +139,6 @@ class PredictiveBackRenderingTest {
             // travelling from another tab or showing only its right side at the pager clip edge.
             assertEquals(centre(viewport).x, centre(selectedTab).x, 1f)
         }
-        assertSymmetricEdges()
         commitAndCheck()
     }
 
@@ -151,6 +149,8 @@ class PredictiveBackRenderingTest {
         openDetail()
         gesture(BackEventCompat.EDGE_LEFT)
         progress(0.7f, BackEventCompat.EDGE_LEFT)
+        assertCentred(parent)
+        assertEquals(0.7f * viewport.size.width, detailOriginX(detail), 2f)
         commitAndCheck()
     }
 
@@ -162,9 +162,53 @@ class PredictiveBackRenderingTest {
         openDetail()
         gesture(BackEventCompat.EDGE_RIGHT)
         progress(0.7f, BackEventCompat.EDGE_RIGHT)
+        // A right-edge swipe in RTL still leaves to the physical right: the page's origin moves
+        // towards +x, and the parent is still centred underneath it.
         assertCentred(parent)
-        assertCentred(detail)
+        assertEquals(0.7f * viewport.size.width, detailOriginX(detail), 2f)
         commitAndCheck()
+    }
+
+    @Test
+    fun theLeavingPageIsOnlyRoundedWhileTheGestureRuns() {
+        setup()
+        openDetail()
+        val radius = 28.dp.value * rule.activity.resources.displayMetrics.density
+        // At rest the page is a plain rectangle: no corner is cut, and the pixel at the very
+        // top-left corner belongs to the page.
+        assertCornerPixel(0, 0, isPage = true, radius = radius)
+        gesture(BackEventCompat.EDGE_LEFT)
+        for (progress in listOf(0.25f, 0.5f, 0.75f)) {
+            progress(progress, BackEventCompat.EDGE_LEFT)
+            val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
+            val inset = (radius * progress).toInt()
+            // Just inside the leading corners the page is gone; the parent shows through.
+            assertTrue(
+                "corner must be cut at progress $progress",
+                pixels[inset, inset].green > 0.5f,
+            )
+            // Well inside the page it is still red, so the surface is only clipped, not tinted.
+            assertTrue(
+                "page interior must stay opaque at progress $progress",
+                pixels[(inset + radius).toInt(), pixels.height / 2].red > 0.9f,
+            )
+        }
+        // Releasing restores the rectangular page rather than leaving a rounded shell behind.
+        rule.runOnUiThread { dispatcher.dispatchOnBackCancelled() }
+        frames(600)
+        rule.runOnIdle { assertFalse(parent.isAttached) }
+        assertCornerPixel(0, 0, isPage = true, radius = radius)
+    }
+
+    private fun assertCornerPixel(x: Int, y: Int, isPage: Boolean, radius: Float) {
+        val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
+        val pixel = pixels[x, y]
+        val isPagePixel = pixel.red > 0.9f
+        assertEquals(
+            "corner pixel ($x,$y) should be ${if (isPage) "page" else "parent"}",
+            isPage,
+            isPagePixel,
+        )
     }
 
     private fun setup() {
@@ -206,8 +250,10 @@ class PredictiveBackRenderingTest {
                                 }
                             }
                             composable("detail") {
-                                Box(Modifier.fillMaxSize().background(Color.Red)
-                                    .onGloballyPositioned { detail = it })
+                                DetailDismissSurface(isDismissible = !active) {
+                                    Box(Modifier.fillMaxSize().background(Color.Red)
+                                        .onGloballyPositioned { detail = it })
+                                }
                             }
                         }
                     }
@@ -249,6 +295,7 @@ class PredictiveBackRenderingTest {
         }
         rule.runOnIdle {
             assertEquals("root", nav.currentDestination?.route)
+            assertCentred(parent)
             assertEquals(1f, horizontalScale(parent), 0.002f)
             assertFalse("commit must remove the outgoing detail", detail.isAttached)
         }
@@ -263,6 +310,10 @@ class PredictiveBackRenderingTest {
         Offset(coordinates.size.width / 2f, coordinates.size.height / 2f),
     )
 
+    /** Left edge of the page in viewport coordinates: how far it has travelled to the right. */
+    private fun detailOriginX(coordinates: LayoutCoordinates): Float =
+        coordinates.localToRoot(Offset.Zero).x
+
     private fun horizontalScale(coordinates: LayoutCoordinates): Float =
         (coordinates.localToRoot(Offset(coordinates.size.width.toFloat(), 0f)).x -
             coordinates.localToRoot(Offset.Zero).x) / coordinates.size.width
@@ -271,20 +322,5 @@ class PredictiveBackRenderingTest {
         assertTrue("destination must still be attached", coordinates.isAttached)
         assertEquals("horizontal centre moved", centre(viewport).x, centre(coordinates).x, 1f)
         assertEquals("vertical centre moved", centre(viewport).y, centre(coordinates).y, 1f)
-    }
-
-    private fun assertSymmetricEdges() {
-        // Capture the whole viewport, not the parent's cropped bounds. A unilateral uncovered
-        // region, horizontal offset, or additional clip produces unequal edge colours.
-        val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
-        for (yFraction in listOf(0.25f, 0.5f, 0.75f)) {
-            val y = (pixels.height * yFraction).toInt()
-            val x = (pixels.width * 0.02f).toInt()
-            val left = pixels[x, y]
-            val right = pixels[pixels.width - 1 - x, y]
-            assertEquals("red edge channel", left.red, right.red, 0.025f)
-            assertEquals("green edge channel", left.green, right.green, 0.025f)
-            assertEquals("blue edge channel", left.blue, right.blue, 0.025f)
-        }
     }
 }
