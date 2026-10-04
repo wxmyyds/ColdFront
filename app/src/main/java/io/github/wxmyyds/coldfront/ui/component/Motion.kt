@@ -152,7 +152,15 @@ internal const val DETAIL_POP_WIDTH = 1000
  * The parent's enter is [EnterTransition.None]: it never moves, it is simply uncovered as the page
  * above it travels away, which is what keeps the two layers visibly stacked instead of cross-fading.
  */
-internal fun predictiveBackExit(): ExitTransition = slideOutHorizontally(
+internal fun predictiveBackExit(): ExitTransition = detailPopExit
+
+/**
+ * One shared instance, so the gesture and the committed pop cannot drift apart: `NavHost` seeks
+ * this exact object for the drag and then hands the release to the same transition. Built once
+ * because `slideOutHorizontally` allocates per call, and two equal-looking instances would make
+ * that guarantee untestable.
+ */
+private val detailPopExit: ExitTransition = slideOutHorizontally(
     animationSpec = detailPopTravelSpec(),
     targetOffsetX = { width -> (width * DETAIL_POP_TRAVEL).toInt() },
 )
