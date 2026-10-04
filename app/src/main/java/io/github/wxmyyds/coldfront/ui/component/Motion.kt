@@ -68,18 +68,35 @@ internal fun isTopLevelDestination(route: String?, topLevelRoutes: Set<String>):
     route != null && route in topLevelRoutes
 
 /**
- * Whether the NavHost should animate this destination pair at all.
+ * Whether the NavHost actually draws this destination's content.
  *
- * Top-level destinations are rendered by the pager beside the NavHost, and their NavHost entries
- * are empty placeholders that exist only to hold back stack state. Animating a placeholder stacks a
- * second motion on top of the pager's own offset: returning from a detail page would slide the
- * revealed placeholder back in from the right while the pager's page was already underneath, so the
- * transition appeared to be two animations layered on one another. Only detail pages, which really
- * are drawn by the NavHost, get a transition.
+ * Top-level destinations are rendered by the pager beside the NavHost; their NavHost entries are
+ * empty placeholders that exist only to hold back stack state. Animating a placeholder stacks a
+ * second motion on the pager's own offset, so a parent revealed by a detail pop would appear to
+ * slide back in from the edge while it was already sitting underneath. Only secondary pages are
+ * real NavHost content, so only they may be animated.
+ *
+ * This is deliberately keyed on the route rather than on [NavigationMotionKind]: a detail pop
+ * resolves to [NavigationMotionKind.PopDetail] even though its parent is a top-level placeholder,
+ * so a motion-kind test would let exactly the offending transition through.
  */
-internal fun shouldAnimateNavHostTransition(
-    kind: NavigationMotionKind,
-): Boolean = kind != NavigationMotionKind.TopLevel
+internal fun isRenderedByNavHost(route: String?, topLevelRoutes: Set<String>): Boolean =
+    isSecondaryDestination(route, topLevelRoutes)
+
+/**
+ * Whether both ends of a NavHost transition are real NavHost content, so the NavHost may animate
+ * the pair on its own.
+ *
+ * A transition with a top-level placeholder at either end must be suppressed: the placeholder is
+ * not what the user sees, and animating it would add a motion the pager's own offset already
+ * provides. Suppressing it is what makes a returning detail page the only thing that moves.
+ */
+internal fun isNavHostTransitionPair(
+    initialRoute: String?,
+    targetRoute: String?,
+    topLevelRoutes: Set<String>,
+): Boolean = isRenderedByNavHost(initialRoute, topLevelRoutes) &&
+    isRenderedByNavHost(targetRoute, topLevelRoutes)
 
 internal fun topLevelRouteDistance(
     initialRoute: String?,
@@ -129,14 +146,7 @@ internal const val DETAIL_POP_DURATION_MS = 300
 internal fun detailPopSpatialSpec(): FiniteAnimationSpec<IntOffset> =
     tween(DETAIL_POP_DURATION_MS, easing = FastOutSlowInEasing)
 
-/**
- * Alpha for the pop counterpart of the push fade, on a tween for the same seeking reason as
- * [detailPopSpatialSpec]: a spring would overshoot the dimming and spring back.
- */
-internal fun detailPopEffectsSpec(): FiniteAnimationSpec<Float> =
-    tween(DETAIL_POP_DURATION_MS, easing = FastOutSlowInEasing)
-
-/** Matches the push fade's resting alpha so the pair reads as one reversible motion. */
+/** Resting alpha for the detail page's push fade; the pop direction deliberately does not fade. */
 internal const val DETAIL_FADE_ALPHA = 0.94f
 
 internal fun shouldUsePredictivePop(
@@ -197,11 +207,11 @@ internal object AppMotion {
                 targetAlpha = 0.96f,
             )
             NavigationMotionKind.PushDetail -> ExitTransition.None
-            // Mirror the push fade so the detail dims as it leaves, revealing the parent.
-            NavigationMotionKind.PopDetail -> fadeOut(
-                animationSpec = detailPopEffectsSpec(),
-                targetAlpha = DETAIL_FADE_ALPHA,
-            )
+            // No fade on the way out. Dimming the moving page would make the window behind it show
+            // through as a dark veil over the whole surface, which reads as a mask rather than as
+            // the edge treatment the platform draws on a page being swiped away. The page must
+            // stay opaque so only its shadowed edge reads.
+            NavigationMotionKind.PopDetail -> ExitTransition.None
         }
         val spatialSpec = when (kind) {
             NavigationMotionKind.TopLevel ->

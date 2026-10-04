@@ -1,11 +1,28 @@
 package io.github.wxmyyds.coldfront.ui.component
 
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.TweenSpec
+import androidx.compose.animation.core.tween
+import androidx.compose.material3.MotionScheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+
+/**
+ * Detail pop uses fixed tween specs, so the scheme's own values cannot change these assertions.
+ * Mirrors the six [MotionScheme] members; all specs collapse to a trivial tween.
+ */
+private object TestMotionScheme : MotionScheme {
+    override fun <T> defaultSpatialSpec(): FiniteAnimationSpec<T> = tween(1)
+    override fun <T> fastSpatialSpec(): FiniteAnimationSpec<T> = tween(1)
+    override fun <T> slowSpatialSpec(): FiniteAnimationSpec<T> = tween(1)
+    override fun <T> defaultEffectsSpec(): FiniteAnimationSpec<T> = tween(1)
+    override fun <T> fastEffectsSpec(): FiniteAnimationSpec<T> = tween(1)
+    override fun <T> slowEffectsSpec(): FiniteAnimationSpec<T> = tween(1)
+}
 
 class NavigationMotionKindTest {
     @Test
@@ -106,38 +123,67 @@ class NavigationMotionKindTest {
 
     @Test
     fun topLevelPlaceholdersAreNeverAnimatedByTheNavHost() {
-        // Top-level pages are drawn by the pager; their NavHost entries are empty placeholders.
-        // Animating them stacks a second motion on the pager offset, so the parent appears to
-        // slide back in from the right while it is already revealed underneath.
-        assertFalse(shouldAnimateNavHostTransition(NavigationMotionKind.TopLevel))
+        val roots = setOf("home", "devices", "rgb", "settings")
 
-        // Detail pages are genuinely drawn by the NavHost and keep their transition.
-        assertTrue(shouldAnimateNavHostTransition(NavigationMotionKind.PushDetail))
-        assertTrue(shouldAnimateNavHostTransition(NavigationMotionKind.PopDetail))
+        // Top-level pages are drawn by the pager; their NavHost entries are empty placeholders.
+        assertFalse(isRenderedByNavHost("settings", roots))
+        assertFalse(isRenderedByNavHost("home", roots))
+        assertFalse(isRenderedByNavHost(null, roots))
+
+        // Only secondary pages are real NavHost content.
+        assertTrue(isRenderedByNavHost("about", roots))
+        assertTrue(isRenderedByNavHost("scan", roots))
     }
 
     @Test
     fun returningFromAboutToSettingsAnimatesOnlyTheDetailPage() {
         val roots = setOf("home", "devices", "rgb", "settings")
 
-        // ABOUT -> SETTINGS is a detail pop, so the NavHost animates the leaving detail page...
-        val kind = navigationMotionKind(
-            isPop = true,
-            initialIsSecondary = isSecondaryDestination("about", roots),
-            targetIsSecondary = isSecondaryDestination("settings", roots),
+        // The NavHost must not animate this pair, because one end is the top-level placeholder.
+        // A motion-kind test would wrongly pass it: the pair resolves to PopDetail even though
+        // its parent is a placeholder, which is exactly how the second animation slipped through.
+        assertFalse(
+            isNavHostTransitionPair(
+                initialRoute = "about",
+                targetRoute = "settings",
+                topLevelRoutes = roots,
+            ),
         )
-        assertEquals(NavigationMotionKind.PopDetail, kind)
-        assertTrue(shouldAnimateNavHostTransition(kind))
 
-        // ...and the revealed top-level page stays put, which is what makes the parent read as
-        // revealed rather than entering.
+        // Two detail pages still animate between each other.
+        assertTrue(
+            isNavHostTransitionPair(
+                initialRoute = "about",
+                targetRoute = "scan",
+                topLevelRoutes = roots,
+            ),
+        )
+
+        // The leaving detail page is what moves, and the revealed parent does not move at all.
+        assertEquals(
+            200,
+            navigationOffset(NavigationMotionKind.PopDetail, entering = false, forward = false, width = 1000),
+        )
         assertEquals(
             0,
             navigationOffset(NavigationMotionKind.PopDetail, entering = true, forward = false, width = 1000),
         )
+    }
+
+    @Test
+    fun aDetailPopResolvesToPopDetailEvenThoughItsParentIsAPlaceholder() {
+        val roots = setOf("home", "devices", "rgb", "settings")
+
+        // Documents why the guard cannot be keyed on motion kind: About -> Settings is a
+        // PopDetail, so a kind-based check would let the placeholder through and reintroduce the
+        // second animation.
         assertEquals(
-            200,
-            navigationOffset(NavigationMotionKind.PopDetail, entering = false, forward = false, width = 1000),
+            NavigationMotionKind.PopDetail,
+            navigationMotionKind(
+                isPop = true,
+                initialIsSecondary = isSecondaryDestination("about", roots),
+                targetIsSecondary = isSecondaryDestination("settings", roots),
+            ),
         )
     }
 
@@ -145,15 +191,14 @@ class NavigationMotionKindTest {
     fun switchingBetweenTopLevelTabsIsNotAnimatedTwice() {
         val roots = setOf("home", "devices", "rgb", "settings")
 
-        // Tab switches resolve to TopLevel on both sides, so the NavHost adds no motion on top of
-        // the pager's own page offset.
-        val kind = navigationMotionKind(
-            isPop = false,
-            initialIsSecondary = isSecondaryDestination("home", roots),
-            targetIsSecondary = isSecondaryDestination("settings", roots),
+        // Tab switches are entirely the pager's business; the NavHost adds nothing on top.
+        assertFalse(
+            isNavHostTransitionPair(
+                initialRoute = "home",
+                targetRoute = "settings",
+                topLevelRoutes = roots,
+            ),
         )
-        assertEquals(NavigationMotionKind.TopLevel, kind)
-        assertFalse(shouldAnimateNavHostTransition(kind))
     }
 
     @Test
@@ -203,23 +248,33 @@ class NavigationMotionKindTest {
     @Test
     fun detailPopIsSeekingSafe() {
         val spatial = detailPopSpatialSpec()
-        val effects = detailPopEffectsSpec()
 
         // A spring would overshoot while the predictive gesture seeks every frame, so the page
         // would drift off the finger and rebound after release.
         assertFalse("detail pop spatial must not spring", spatial is SpringSpec<*>)
         assertTrue("detail pop spatial must tween", spatial is TweenSpec<*>)
         assertEquals(DETAIL_POP_DURATION_MS, (spatial as TweenSpec).durationMillis)
-
-        assertFalse("detail pop alpha must not spring", effects is SpringSpec<*>)
-        assertTrue("detail pop alpha must tween", effects is TweenSpec<*>)
-        assertEquals(DETAIL_POP_DURATION_MS, (effects as TweenSpec).durationMillis)
     }
 
     @Test
-    fun detailPopAndPushShareOneFadeLevelSoThePairReverses() {
-        // Push dims the detail in; pop must dim it out by the same amount, otherwise the parent
-        // reveals at a different brightness depending on which direction the user travelled.
+    fun detailPopKeepsThePageOpaqueSoOnlyItsEdgeReads() {
+        // The leaving page must not fade. Dimming it would let the window behind show through as a
+        // dark veil across the surface, which reads as a mask rather than the platform's edge
+        // treatment on a page being swiped away.
+        assertEquals(
+            ExitTransition.None,
+            AppMotion.pageExit(
+                kind = NavigationMotionKind.PopDetail,
+                forward = false,
+                motionScheme = TestMotionScheme,
+                routeDistance = 1,
+            ),
+        )
+    }
+
+    @Test
+    fun detailPushAndPopShareOneFadeLevel() {
+        // Push dims the detail in, so both directions agree on the resting alpha.
         assertEquals(0.94f, DETAIL_FADE_ALPHA, 0f)
     }
 

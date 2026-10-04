@@ -87,7 +87,8 @@ import io.github.wxmyyds.coldfront.ui.component.NavigationMotionKind
 import io.github.wxmyyds.coldfront.ui.component.isForwardTopLevelTransition
 import io.github.wxmyyds.coldfront.ui.component.isSecondaryDestination
 import io.github.wxmyyds.coldfront.ui.component.navigationMotionKind
-import io.github.wxmyyds.coldfront.ui.component.shouldAnimateNavHostTransition
+import io.github.wxmyyds.coldfront.ui.component.isNavHostTransitionPair
+import io.github.wxmyyds.coldfront.ui.component.isRenderedByNavHost
 import io.github.wxmyyds.coldfront.ui.component.shouldUsePredictivePop
 import io.github.wxmyyds.coldfront.ui.component.topLevelRouteDistance
 import io.github.wxmyyds.coldfront.ui.component.topLevelDragReversed
@@ -471,10 +472,7 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                                 initialIsSecondary = isSecondaryDestination(initialRoute, topLevelRouteSet),
                                 targetIsSecondary = isSecondaryDestination(targetRoute, topLevelRouteSet),
                             )
-                            // Top-level destinations are drawn by the pager outside the NavHost;
-                            // their NavHost entries are empty placeholders. Animating a placeholder
-                            // stacks a second motion on the pager's own offset, so leave it alone.
-                            if (!shouldAnimateNavHostTransition(kind)) EnterTransition.None
+                            if (!isRenderedByNavHost(targetRoute, topLevelRouteSet)) EnterTransition.None
                             else AppMotion.pageEnter(
                                 kind = kind,
                                 forward = isForwardTopLevelTransition(initialRoute, targetRoute, topLevelRoutes),
@@ -490,7 +488,9 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                                 initialIsSecondary = isSecondaryDestination(initialRoute, topLevelRouteSet),
                                 targetIsSecondary = isSecondaryDestination(targetRoute, topLevelRouteSet),
                             )
-                            if (!shouldAnimateNavHostTransition(kind)) ExitTransition.None
+                            if (!isNavHostTransitionPair(initialRoute, targetRoute, topLevelRouteSet)) {
+                                ExitTransition.None
+                            }
                             else AppMotion.pageExit(
                                 kind = kind,
                                 forward = isForwardTopLevelTransition(initialRoute, targetRoute, topLevelRoutes),
@@ -509,7 +509,9 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                             // Returning from a detail page reveals a top-level placeholder. The
                             // parent is the pager's own page and must stay put, so a transition
                             // here would slide the revealed page back in from the right.
-                            if (!shouldAnimateNavHostTransition(kind)) EnterTransition.None
+                            if (!isNavHostTransitionPair(initialRoute, targetRoute, topLevelRouteSet)) {
+                                EnterTransition.None
+                            }
                             else AppMotion.pageEnter(
                                 kind = kind,
                                 forward = isForwardTopLevelTransition(initialRoute, targetRoute, topLevelRoutes),
@@ -525,7 +527,9 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                                 initialIsSecondary = isSecondaryDestination(initialRoute, topLevelRouteSet),
                                 targetIsSecondary = isSecondaryDestination(targetRoute, topLevelRouteSet),
                             )
-                            if (!shouldAnimateNavHostTransition(kind)) ExitTransition.None
+                            if (!isNavHostTransitionPair(initialRoute, targetRoute, topLevelRouteSet)) {
+                                ExitTransition.None
+                            }
                             else AppMotion.pageExit(
                                 kind = kind,
                                 forward = isForwardTopLevelTransition(initialRoute, targetRoute, topLevelRoutes),
@@ -533,22 +537,10 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                                 routeDistance = topLevelRouteDistance(initialRoute, targetRoute, topLevelRoutes),
                             )
                         },
-                        predictivePopEnterTransition = { _ ->
-                            if (shouldUsePredictivePop(
-                                    predictiveBackEnabled = predictiveBack,
-                                    currentRoute = initialState.destination.route,
-                                    previousRoute = targetState.destination.route,
-                                    topLevelRoutes = topLevelRouteSet,
-                                )
-                            ) {
-                                AppMotion.pageEnter(
-                                    kind = NavigationMotionKind.PopDetail,
-                                    forward = false,
-                                    motionScheme = motionScheme,
-                                    routeDistance = 1,
-                                )
-                            } else EnterTransition.None
-                        },
+                        // The revealed parent is the pager's own page, already in its final position.
+                        // Animating its placeholder here is the second motion this fix removes, so
+                        // only the leaving detail page moves during the gesture.
+                        predictivePopEnterTransition = { _ -> EnterTransition.None },
                         predictivePopExitTransition = { _ ->
                             if (shouldUsePredictivePop(
                                     predictiveBackEnabled = predictiveBack,
