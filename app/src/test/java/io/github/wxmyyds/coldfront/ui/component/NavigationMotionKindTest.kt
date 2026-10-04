@@ -61,16 +61,17 @@ class NavigationMotionKindTest {
     }
 
     @Test
-    fun predictiveBackRequiresASecondaryCurrentDestinationAndTopLevelParent() {
-        val roots = setOf("home", "devices", "rgb", "settings")
+    fun predictiveBackAppliesOnlyToADetailReturningToItsParent() {
+        // MAIN is the only primary destination, so every detail returns to it.
+        val navTopLevel = setOf("main")
 
         assertEquals(
             true,
             shouldUsePredictivePop(
                 predictiveBackEnabled = true,
                 currentRoute = "about",
-                previousRoute = "settings",
-                topLevelRoutes = roots,
+                previousRoute = "main",
+                topLevelRoutes = navTopLevel,
             ),
         )
         assertEquals(
@@ -78,61 +79,34 @@ class NavigationMotionKindTest {
             shouldUsePredictivePop(
                 predictiveBackEnabled = true,
                 currentRoute = "scan",
-                previousRoute = "devices",
-                topLevelRoutes = roots,
+                previousRoute = "main",
+                topLevelRoutes = navTopLevel,
             ),
         )
+
+        // Switching tabs never touches the NavHost, so there is no back stack and no gesture.
         assertEquals(
             false,
             shouldUsePredictivePop(
                 predictiveBackEnabled = true,
-                currentRoute = "about",
-                previousRoute = "scan",
-                topLevelRoutes = roots,
+                currentRoute = "main",
+                previousRoute = "main",
+                topLevelRoutes = navTopLevel,
             ),
         )
-        assertEquals(
-            false,
-            shouldUsePredictivePop(
-                predictiveBackEnabled = true,
-                currentRoute = "settings",
-                previousRoute = "home",
-                topLevelRoutes = roots,
-            ),
-        )
-        assertEquals(
-            false,
-            shouldUsePredictivePop(
-                predictiveBackEnabled = true,
-                currentRoute = "home",
-                previousRoute = null,
-                topLevelRoutes = roots,
-            ),
-        )
+
+        // The user's setting still turns the gesture off entirely.
         assertEquals(
             false,
             shouldUsePredictivePop(
                 predictiveBackEnabled = false,
                 currentRoute = "about",
-                previousRoute = "settings",
-                topLevelRoutes = roots,
+                previousRoute = "main",
+                topLevelRoutes = navTopLevel,
             ),
         )
     }
 
-    @Test
-    fun topLevelPlaceholdersAreNeverAnimatedByTheNavHost() {
-        val roots = setOf("home", "devices", "rgb", "settings")
-
-        // Top-level pages are drawn by the pager; their NavHost entries are empty placeholders.
-        assertFalse(isRenderedByNavHost("settings", roots))
-        assertFalse(isRenderedByNavHost("home", roots))
-        assertFalse(isRenderedByNavHost(null, roots))
-
-        // Only secondary pages are real NavHost content.
-        assertTrue(isRenderedByNavHost("about", roots))
-        assertTrue(isRenderedByNavHost("scan", roots))
-    }
 
     @Test
     fun primaryNavigationShowsOnlyOnTopLevelPages() {
@@ -176,42 +150,7 @@ class NavigationMotionKindTest {
         assertFalse(showsPrimaryNavigation(null, roots))
     }
 
-    @Test
-    fun returningFromAboutToSettingsKeepsThePredictiveExit() {
-        val roots = setOf("home", "devices", "rgb", "settings")
 
-        // The leaving detail page must still be animated. Its parent is a placeholder, but the
-        // exit is the only motion the user should see: suppressing it would collapse the whole
-        // return into an instant jump with no gesture-driven movement.
-        assertTrue(shouldAnimatePopExit(initialRoute = "about", topLevelRoutes = roots))
-
-        // A top-level page leaving for another top-level page is the pager's business alone.
-        assertFalse(shouldAnimatePopExit(initialRoute = "settings", topLevelRoutes = roots))
-        assertFalse(shouldAnimatePopExit(initialRoute = "home", topLevelRoutes = roots))
-    }
-
-    @Test
-    fun returningFromAboutToSettingsDoesNotAnimateTheRevealedParent() {
-        val roots = setOf("home", "devices", "rgb", "settings")
-
-        // The parent that gets revealed is a placeholder, so the NavHost adds no enter motion and
-        // the pager's own page simply stays where it already is.
-        assertFalse(shouldAnimateNavHostEnter(targetRoute = "settings", topLevelRoutes = roots))
-        assertFalse(shouldAnimateNavHostEnter(targetRoute = "home", topLevelRoutes = roots))
-
-        // Two detail pages still animate between each other.
-        assertTrue(shouldAnimateNavHostEnter(targetRoute = "scan", topLevelRoutes = roots))
-
-        // The leaving detail page moves; the revealed parent does not move at all.
-        assertEquals(
-            200,
-            navigationOffset(NavigationMotionKind.PopDetail, entering = false, forward = false, width = 1000),
-        )
-        assertEquals(
-            0,
-            navigationOffset(NavigationMotionKind.PopDetail, entering = true, forward = false, width = 1000),
-        )
-    }
 
     @Test
     fun aDetailPopResolvesToPopDetailEvenThoughItsParentIsAPlaceholder() {
@@ -230,14 +169,6 @@ class NavigationMotionKindTest {
         )
     }
 
-    @Test
-    fun switchingBetweenTopLevelTabsIsNotAnimatedTwice() {
-        val roots = setOf("home", "devices", "rgb", "settings")
-
-        // Tab switches are entirely the pager's business; the NavHost adds nothing on top.
-        assertFalse(shouldAnimatePopExit(initialRoute = "home", topLevelRoutes = roots))
-        assertFalse(shouldAnimateNavHostEnter(targetRoute = "settings", topLevelRoutes = roots))
-    }
 
     @Test
     fun primaryNavigationVisibilityIsTheOnlyInputToTheBar() {
@@ -248,6 +179,82 @@ class NavigationMotionKindTest {
         val roots = setOf("home", "devices", "rgb", "settings")
         assertTrue(showsPrimaryNavigation("settings", roots))
         assertFalse(showsPrimaryNavigation("about", roots))
+    }
+
+    @Test
+    fun theNavHostHasOnePrimaryDestinationAndEverythingElseIsADetail() {
+        // The four tabs are pages inside MAIN, so MAIN is the only primary destination. Every
+        // other destination is a detail page with a real parent underneath it, which is what lets
+        // a predictive pop reveal a page that genuinely exists.
+        val navTopLevel = setOf("main")
+
+        assertTrue(isTopLevelDestination("main", navTopLevel))
+        assertFalse(isTopLevelDestination("about", navTopLevel))
+        assertFalse(isTopLevelDestination("scan", navTopLevel))
+
+        assertTrue(isSecondaryDestination("about", navTopLevel))
+        assertTrue(isSecondaryDestination("scan", navTopLevel))
+        assertFalse(isSecondaryDestination("main", navTopLevel))
+    }
+
+    @Test
+    fun returningToMainIsAPopDetailThatMovesOnlyTheLeavingPage() {
+        val navTopLevel = setOf("main")
+
+        // ABOUT -> MAIN is a detail pop, so the leaving page gets the pop motion.
+        assertEquals(
+            NavigationMotionKind.PopDetail,
+            navigationMotionKind(
+                isPop = true,
+                initialIsSecondary = isSecondaryDestination("about", navTopLevel),
+                targetIsSecondary = isSecondaryDestination("main", navTopLevel),
+            ),
+        )
+
+        // The leaving detail page slides out; the revealed parent does not move at all, because it
+        // is uncovered rather than entered.
+        assertEquals(
+            200,
+            navigationOffset(NavigationMotionKind.PopDetail, entering = false, forward = false, width = 1000),
+        )
+        assertEquals(
+            0,
+            navigationOffset(NavigationMotionKind.PopDetail, entering = true, forward = false, width = 1000),
+        )
+    }
+
+    @Test
+    fun switchingPrimaryTabsIsPagerStateAndNotNavigation() {
+        val tabs = listOf("home", "devices", "rgb", "settings")
+
+        // Tab identity lives inside the pager, so it maps to a page index rather than to a route.
+        assertEquals(0, topLevelPageIndex("home", tabs))
+        assertEquals(3, topLevelPageIndex("settings", tabs))
+        assertEquals(-1, topLevelPageIndex("about", tabs))
+
+        // Jumping tabs costs the same time regardless of distance, so crossing several pages reads
+        // as one action instead of a chain of them.
+        assertEquals(TOP_LEVEL_PAGE_DURATION_MS, topLevelPageDuration(1))
+        assertEquals(TOP_LEVEL_PAGE_DURATION_MS, topLevelPageDuration(3))
+    }
+
+    @Test
+    fun theStripPassesThroughPagesInBetween() {
+        val tabs = listOf("home", "devices", "rgb", "settings")
+        val width = 1000f
+        val from = topLevelPageIndex("home", tabs)
+        val to = topLevelPageIndex("settings", tabs)
+        val mid = topLevelPageIndex("devices", tabs)
+
+        // Mid-drag, every page sits at its own offset, so the pages in between are genuinely
+        // travelled through instead of being cut away.
+        val position = from + 0.5f
+        val offsets = tabs.indices.associateWith { index ->
+            ((index - position) * width).toInt()
+        }
+        assertTrue("start is left of centre", offsets.getValue(from) > 0)
+        assertTrue("target is right of centre", offsets.getValue(to) < 0)
+        assertEquals(0, offsets.getValue(mid))
     }
 
     @Test

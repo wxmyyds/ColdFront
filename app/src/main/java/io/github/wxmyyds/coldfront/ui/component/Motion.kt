@@ -64,22 +64,6 @@ internal fun isTopLevelDestination(route: String?, topLevelRoutes: Set<String>):
     route != null && route in topLevelRoutes
 
 /**
- * Whether the NavHost actually draws this destination's content.
- *
- * Top-level destinations are rendered by the pager beside the NavHost; their NavHost entries are
- * empty placeholders that exist only to hold back stack state. Animating a placeholder stacks a
- * second motion on the pager's own offset, so a parent revealed by a detail pop would appear to
- * slide back in from the edge while it was already sitting underneath. Only secondary pages are
- * real NavHost content, so only they may be animated.
- *
- * This is deliberately keyed on the route rather than on [NavigationMotionKind]: a detail pop
- * resolves to [NavigationMotionKind.PopDetail] even though its parent is a top-level placeholder,
- * so a motion-kind test would let exactly the offending transition through.
- */
-internal fun isRenderedByNavHost(route: String?, topLevelRoutes: Set<String>): Boolean =
-    isSecondaryDestination(route, topLevelRoutes)
-
-/**
  * Whether the primary navigation affordance belongs on screen.
  *
  * The bottom bar and the rail are primary navigation: they switch between top-level destinations.
@@ -96,29 +80,6 @@ internal fun showsPrimaryNavigation(
     route: String?,
     topLevelRoutes: Set<String>,
 ): Boolean = isTopLevelDestination(route, topLevelRoutes)
-
-/**
- * Whether the NavHost may run a transition's enter motion.
- *
- * An entering top-level destination is a placeholder being revealed by the pager's own layout, so
- * the NavHost must add nothing on top of it. Two detail pages, or a detail being pushed onto a
- * top-level page, still animate.
- */
-internal fun shouldAnimateNavHostEnter(targetRoute: String?, topLevelRoutes: Set<String>): Boolean =
-    isRenderedByNavHost(targetRoute, topLevelRoutes)
-
-/**
- * Whether the NavHost may run a transition's exit motion.
- *
- * Keyed on the route that is *leaving*, not on both ends of the pair. A detail pop is
- * [about -> settings], where only [about] is real NavHost content and [settings] is a placeholder
- * the pager already has on screen. Requiring both ends would suppress the pop exit, which is the
- * only motion the user should see, and the whole return would collapse into an instant jump with
- * no predictive gesture. So the leaving page alone decides: it moves, and the placeholder it
- * uncovers stays exactly where it is.
- */
-internal fun shouldAnimatePopExit(initialRoute: String?, topLevelRoutes: Set<String>): Boolean =
-    isRenderedByNavHost(initialRoute, topLevelRoutes)
 
 internal fun topLevelRouteDistance(
     initialRoute: String?,
