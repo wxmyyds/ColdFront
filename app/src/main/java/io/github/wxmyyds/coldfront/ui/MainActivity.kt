@@ -311,7 +311,7 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
         // The gesture is revealing the top-level page only when it is popping a detail off one.
         // Keying this on "some back gesture is running" instead also fires on the finger-down that
         // opens a detail, which put the bar and its scrim over the page being pushed in.
-        val returningToTopLevel = backProgress.value != null
+        val returningToTopLevel = backProgress.value != null && currentIsDetail
         val showPrimaryNavigation = rememberChromeVisibility(
             isTopLevelCurrent = topLevelIsCurrent,
             revealByGesture = returningToTopLevel,
