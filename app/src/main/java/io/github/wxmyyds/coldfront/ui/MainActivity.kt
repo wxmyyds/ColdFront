@@ -74,7 +74,6 @@ import androidx.navigation.compose.rememberNavController
 import io.github.wxmyyds.coldfront.ble.BlePermissionManager
 import io.github.wxmyyds.coldfront.data.AppSettings
 import io.github.wxmyyds.coldfront.ui.component.AppMotion
-import io.github.wxmyyds.coldfront.ui.component.NavigationMotionKind
 import io.github.wxmyyds.coldfront.ui.component.isForwardTopLevelTransition
 import io.github.wxmyyds.coldfront.ui.component.isSecondaryDestination
 import io.github.wxmyyds.coldfront.ui.component.navigationMotionKind
@@ -461,10 +460,21 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                                 routeDistance = topLevelRouteDistance(initialRoute, targetRoute, tabRoutes),
                             )
                         },
-                        // The revealed parent is the pager's own page, already in its final position.
-                        // Animating its placeholder here is the second motion this fix removes, so
-                        // only the leaving detail page moves during the gesture.
-                        predictivePopEnterTransition = { _ -> EnterTransition.None },
+                        // Gesture-driven return. Both halves come from AppMotion so the gesture and
+                        // the committed pop describe exactly the same motion and the hand-off at
+                        // release is invisible. The parent is a real destination, so it is revealed
+                        // by its own scale-in rather than by a slide, and stays centred.
+                        predictivePopEnterTransition = { _ ->
+                            if (shouldUsePredictivePop(
+                                    predictiveBackEnabled = predictiveBack,
+                                    currentRoute = initialState.destination.route,
+                                    previousRoute = targetState.destination.route,
+                                    topLevelRoutes = navTopLevelRouteSet,
+                                )
+                            ) {
+                                AppMotion.predictiveBackEnter(motionScheme)
+                            } else EnterTransition.None
+                        },
                         predictivePopExitTransition = { _ ->
                             if (shouldUsePredictivePop(
                                     predictiveBackEnabled = predictiveBack,
@@ -473,12 +483,7 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                                     topLevelRoutes = navTopLevelRouteSet,
                                 )
                             ) {
-                                AppMotion.pageExit(
-                                    kind = NavigationMotionKind.PopDetail,
-                                    forward = false,
-                                    motionScheme = motionScheme,
-                                    routeDistance = 1,
-                                )
+                                AppMotion.predictiveBackExit(motionScheme)
                             } else ExitTransition.None
                         },
                         // Constrain the child, not the weighted slot: retain centering on wide windows.

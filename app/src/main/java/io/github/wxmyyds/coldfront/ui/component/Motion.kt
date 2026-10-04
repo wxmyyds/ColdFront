@@ -13,6 +13,10 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.keyframes
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.core.tween
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -121,13 +125,42 @@ internal fun topLevelPageDuration(routeDistance: Int): Int = TOP_LEVEL_PAGE_DURA
 internal const val DETAIL_POP_DURATION_MS = 300
 
 /**
- * Detail pop runs on a tween rather than a spring. The predictive gesture seeks this transition
- * on every frame, and a spring overshoots and settles back, so the page drifts off the finger and
- * rebounds after release. A tween keeps the drag linear with the finger and lets the committed
- * animation finish the remaining distance on the same curve, so the hand-off stays invisible.
+ * The system curve for predictive back, PathInterpolator(.1, .1, 0, 1).
+ *
+ * The official guidance is to feed the raw gesture progress through this rather than using it
+ * directly, so the response is most visible at the start of the drag and eases off afterwards.
  */
-internal fun detailPopSpatialSpec(): FiniteAnimationSpec<IntOffset> =
-    tween(DETAIL_POP_DURATION_MS, easing = FastOutSlowInEasing)
+internal val PREDICTIVE_BACK_EASING = CubicBezierEasing(0.1f, 0.1f, 0f, 1f)
+
+/** Progress at which the leaving page is fully faded out and the parent starts fading in. */
+internal const val PREDICTIVE_BACK_CROSSFADE_AT = 0.35f
+
+/** Exit scale of a full-screen surface over a predictive back, per the official motion spec. */
+internal const val PREDICTIVE_BACK_EXIT_SCALE = 0.9f
+
+/** The parent starts larger and settles to full size, so the surface appears to settle into place. */
+internal const val PREDICTIVE_BACK_ENTER_START_SCALE = 1.1f
+
+/**
+ * Leaving page: shrink from full size to [PREDICTIVE_BACK_EXIT_SCALE] while fading out.
+ *
+ * The fade is held at full opacity until [PREDICTIVE_BACK_CROSSFADE_AT] and completed by 100%, so at
+ * that instant neither page is visible, which is what the spec describes. Scale and alpha both use
+ * [PREDICTIVE_BACK_EASING], and both are expressed as seekable specs so the gesture can drive them
+ * frame by frame.
+ */
+internal fun predictiveBackExitSpec(): FiniteAnimationSpec<Float> = keyframes {
+    durationMillis = DETAIL_POP_DURATION_MS
+    PREDICTIVE_BACK_CROSSFADE_AT at 1f
+    1f at PREDICTIVE_BACK_EXIT_SCALE
+}
+
+/** Parent page: settle from [PREDICTIVE_BACK_ENTER_START_SCALE] down to full size, fading in. */
+internal fun predictiveBackEnterSpec(): FiniteAnimationSpec<Float> = keyframes {
+    durationMillis = DETAIL_POP_DURATION_MS
+    1f at PREDICTIVE_BACK_ENTER_START_SCALE
+    PREDICTIVE_BACK_CROSSFADE_AT at PREDICTIVE_BACK_EXIT_SCALE
+}
 
 /** Resting alpha for the detail page's push fade; the pop direction deliberately does not fade. */
 internal const val DETAIL_FADE_ALPHA = 0.94f
@@ -167,12 +200,17 @@ internal object AppMotion {
             NavigationMotionKind.TopLevel ->
                 tween<IntOffset>(topLevelPageDuration(routeDistance), easing = FastOutSlowInEasing)
             NavigationMotionKind.PushDetail -> motionScheme.slowSpatialSpec<IntOffset>()
-            NavigationMotionKind.PopDetail -> detailPopSpatialSpec()
+            // PopDetail never slides; it scales and fades via predictiveBack* instead.
+            NavigationMotionKind.PopDetail -> motionScheme.defaultSpatialSpec<IntOffset>()
         }
-        return slideInHorizontally(
-            animationSpec = spatialSpec,
-            initialOffsetX = offset,
-        ) + effects
+        return if (kind == NavigationMotionKind.PopDetail) {
+            predictiveBackEnter(motionScheme)
+        } else {
+            slideInHorizontally(
+                animationSpec = spatialSpec,
+                initialOffsetX = offset,
+            ) + effects
+        }
     }
 
     fun pageExit(
@@ -200,13 +238,47 @@ internal object AppMotion {
             NavigationMotionKind.TopLevel ->
                 tween<IntOffset>(topLevelPageDuration(routeDistance), easing = FastOutSlowInEasing)
             NavigationMotionKind.PushDetail -> motionScheme.slowSpatialSpec<IntOffset>()
-            NavigationMotionKind.PopDetail -> detailPopSpatialSpec()
+            // PopDetail never slides; it scales and fades via predictiveBack* instead.
+            NavigationMotionKind.PopDetail -> motionScheme.defaultSpatialSpec<IntOffset>()
         }
-        return slideOutHorizontally(
-            animationSpec = spatialSpec,
-            targetOffsetX = offset,
-        ) + effects
+        return if (kind == NavigationMotionKind.PopDetail) {
+            predictiveBackExit(motionScheme)
+        } else {
+            slideOutHorizontally(
+                animationSpec = spatialSpec,
+                targetOffsetX = offset,
+            ) + effects
+        }
     }
+
+    /**
+     * Gesture-driven exit for a detail page, following the official full-screen surface spec.
+     *
+     * Deliberately a scale and a fade with no horizontal offset: [scaleOut] keeps the page centred,
+     * so the page that is being revealed never slides or gets clipped. Adding a slide here is what
+     * made the parent appear to drift and left an edge of the moving layer exposed at the clip
+     * boundary.
+     */
+    fun predictiveBackExit(motionScheme: MotionScheme): ExitTransition =
+        scaleOut(
+            animationSpec = predictiveBackExitSpec(),
+            targetScale = PREDICTIVE_BACK_EXIT_SCALE,
+        ) + fadeOut(animationSpec = motionScheme.fastEffectsSpec<Float>())
+
+    /**
+     * Gesture-driven enter for the revealed parent, as the counterpart to [predictiveBackExit].
+     *
+     * The parent starts slightly oversized and settles to full size while fading in, so it reads as
+     * uncovered rather than as a new page arriving. It is also centred, so nothing shifts.
+     */
+    fun predictiveBackEnter(motionScheme: MotionScheme): EnterTransition =
+        scaleIn(
+            animationSpec = motionScheme.defaultSpatialSpec<Float>(),
+            initialScale = PREDICTIVE_BACK_ENTER_START_SCALE,
+        ) + fadeIn(
+            animationSpec = predictiveBackEnterSpec(),
+            initialAlpha = 0f,
+        )
 
     /** Restrained spatial continuity for connection/empty-content state changes. */
     fun contentChange(motionScheme: MotionScheme): ContentTransform =

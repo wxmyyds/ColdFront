@@ -1,8 +1,7 @@
 package io.github.wxmyyds.coldfront.ui.component
 
 import androidx.compose.animation.core.FiniteAnimationSpec
-import androidx.compose.animation.core.SpringSpec
-import androidx.compose.animation.core.TweenSpec
+import androidx.compose.animation.core.KeyframesSpec
 import androidx.compose.animation.core.tween
 import androidx.compose.material3.MotionScheme
 import org.junit.Assert.assertEquals
@@ -307,30 +306,53 @@ class NavigationMotionKindTest {
     }
 
     @Test
-    fun detailPopIsSeekingSafe() {
-        val spatial = detailPopSpatialSpec()
+    fun theExitScaleIsHeldUntilTheCrossfadeThreshold() {
+        val exit = predictiveBackExitSpec() as KeyframesSpec<Float>
 
-        // A spring would overshoot while the predictive gesture seeks every frame, so the page
-        // would drift off the finger and rebound after release.
-        assertFalse("detail pop spatial must not spring", spatial is SpringSpec<*>)
-        assertTrue("detail pop spatial must tween", spatial is TweenSpec<*>)
-        assertEquals(DETAIL_POP_DURATION_MS, (spatial as TweenSpec).durationMillis)
+        // The official spec holds the leaving page at full opacity until 35% of the gesture, then
+        // fades it to nothing by the end. At that instant neither page is visible.
+        assertEquals(0.35f, exit.keyframes.first().fraction, 0.001f)
+        assertEquals(1f, exit.keyframes.first().valuePair.second, 0.001f)
+        assertEquals(DETAIL_POP_DURATION_MS, exit.durationMillis)
     }
 
     @Test
-    fun detailPopKeepsThePageOpaqueSoOnlyItsEdgeReads() {
-        // The leaving page must not fade. Dimming it would let the window behind show through as a
-        // dark veil across the surface, which reads as a mask rather than the platform's edge
-        // treatment on a page being swiped away. The exit is a pure slide, so the page stays
-        // opaque and only its shadowed edge reads while it moves.
-        val exit = AppMotion.pageExit(
+    fun theEnterScaleSettlesFromOversizedToFullSize() {
+        val enter = predictiveBackEnterSpec() as KeyframesSpec<Float>
+
+        // The parent starts slightly larger and is still smaller than full at the crossfade point,
+        // settling to full size only once the leaving page has gone.
+        assertEquals(1.1f, enter.keyframes.first().valuePair.second, 0.001f)
+        assertEquals(0.9f, enter.keyframes.last().valuePair.second, 0.001f)
+    }
+
+    @Test
+    fun theDetailPopDoesNotSlideHorizontally() {
+        // A slide is what made the parent appear to drift and left the moving layer's edge exposed
+        // at the clip boundary. Both directions of the pop must be a scale and a fade only.
+        val exit = AppMotion.predictiveBackExit(TestMotionScheme).toString()
+        assertTrue("exit must scale", exit.contains("Scale"))
+        assertFalse("exit must not slide", exit.contains("Slide"))
+
+        val enter = AppMotion.predictiveBackEnter(TestMotionScheme).toString()
+        assertTrue("enter must scale", enter.contains("Scale"))
+        assertFalse("enter must not slide", enter.contains("Slide"))
+    }
+
+    @Test
+    fun theGestureAndTheCommittedPopDescribeTheSameMotion() {
+        // NavHost re-evaluates the predictive and the committed transition at the same fraction when
+        // the gesture is released, so any difference between them shows up as a jump.
+        val committed = AppMotion.pageExit(
             kind = NavigationMotionKind.PopDetail,
             forward = false,
             motionScheme = TestMotionScheme,
             routeDistance = 1,
-        )
-        assertTrue("detail pop must slide", exit.toString().contains("Slide"))
-        assertFalse("detail pop must not fade", exit.toString().contains("Fade - Fade"))
+        ).toString()
+        val gesture = AppMotion.predictiveBackExit(TestMotionScheme).toString()
+
+        assertEquals("committed pop must match the gesture", gesture, committed)
+        assertFalse("committed pop must not slide", committed.contains("Slide"))
     }
 
     @Test
