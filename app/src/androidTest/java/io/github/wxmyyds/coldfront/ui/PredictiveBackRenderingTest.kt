@@ -580,11 +580,17 @@ class PredictiveBackRenderingTest {
         assertEquals("the parent must not scale", 1f, horizontalScale(parent), 0.002f)
     }
 
-    /** The top-level page is exactly back in place, as after the return completes. */
+    /**
+     * The top-level page is exactly back where it was laid out, as after a return completes.
+     *
+     * Compared against the position recorded in [setup] rather than the window centre: the page is
+     * laid out beside the bar or rail and inside the viewport's width cap, so its own resting centre
+     * is legitimately not the window's.
+     */
     private fun assertStationary(coordinates: LayoutCoordinates) {
         assertTrue("destination must still be attached", coordinates.isAttached)
-        assertEquals("horizontal centre moved", centre(viewport).x, centre(coordinates).x, 1.5f)
-        assertEquals("vertical centre moved", centre(viewport).y, centre(coordinates).y, 1f)
+        assertEquals("horizontal centre moved", parentRestX, centre(coordinates).x, 1.5f)
+        assertEquals("vertical centre moved", parentRestY, centre(coordinates).y, 1f)
     }
 
     /** A destination that must be centred in the viewport, such as a detail page. */
