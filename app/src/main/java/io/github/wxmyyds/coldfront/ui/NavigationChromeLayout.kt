@@ -82,9 +82,9 @@ internal fun NavigationChromeLayout(
         val chrome = subcompose(NavigationSlot.Chrome) {
             Box {
                 navigation()
-                // matchParentSize comes from this BoxScope, so the scrim overlays the bar's own
-                // bounds; the bar keeps the size it would have had on its own.
-                chromeDimming(matchParentSize())
+                // matchParentSize is a BoxScope member, so the scrim overlays the bar's own bounds
+                // while the bar keeps the size it would have had on its own.
+                chromeDimming(Modifier.matchParentSize())
             }
         }.map {
             it.measure(
