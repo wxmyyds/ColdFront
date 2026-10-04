@@ -20,11 +20,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.widthIn
@@ -220,6 +222,37 @@ private object Routes {
 /** Kept in one place so the NavHost and the not-yet-resolved route can never disagree. */
 private const val NavHostStartDestination = Routes.MAIN
 
+/**
+ * The four primary tabs, inside the top-level destination.
+ *
+ * [WindowInsets.navigationBars] is consumed here rather than by an outer layout: the bar that draws
+ * over that inset is now a sibling of this content inside MAIN, so the two belong to one page and
+ * must reserve the inset between them - the content pads away from it and the bar sits on top of it.
+ */
+@Composable
+private fun MainPage(
+    vm: CoolerViewModel,
+    settings: AppSettings,
+    isActive: Boolean,
+    selectedPage: Int,
+    onSelectPage: (Int) -> Unit,
+    onOpenScan: () -> Unit,
+    onOpenAbout: () -> Unit,
+) {
+    val contentInsets = WindowInsets.navigationBars
+    Box(Modifier.fillMaxSize().padding(contentInsets).consumeWindowInsets(contentInsets)) {
+        TopLevelPager(
+            vm = vm,
+            settings = settings,
+            isActive = isActive,
+            selectedPage = selectedPage,
+            onSelectPage = onSelectPage,
+            onOpenScan = onOpenScan,
+            onOpenAbout = onOpenAbout,
+        )
+    }
+}
+
 /** Identifies the primary tabs inside the pager; these are not NavHost routes. */
 private object TabRoutes {
     const val HOME = "home"
@@ -288,11 +321,6 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
     // Keep one NavHost at the same composition location across window resizing.
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val useRail = maxWidth >= 600.dp
-        // The bar belongs to the top-level page, so it must be visible whenever that page is the
-        // one on screen - including while a back gesture is uncovering it. The route alone cannot
-        // answer that: during the drag the current destination is still the detail page, and the
-        // route only becomes top-level once the pop commits, which would hide the bar for the whole
-        // gesture and pop it in at the end instead of revealing it under the leaving page.
         // Which layer is current, from the route alone. A null route means the back stack has not
         // emitted yet, which is the first frame of a cold start; the graph's start destination is a
         // top-level page, so resolve to it rather than treating the frame as "no page".
@@ -300,7 +328,6 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
             currentRoute ?: NavHostStartDestination,
             navTopLevelRouteSet,
         )
-        val backProgress = rememberRunningBackProgress(observeBackGesture = true)
         // True while a detail page is the one being dismissed, i.e. the gesture pops back onto a
         // top-level page. Resolved from the navigation layer, so any future detail page is covered
         // without naming it.
@@ -308,25 +335,8 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
             currentRoute ?: NavHostStartDestination,
             navTopLevelRouteSet,
         )
-        // The gesture is revealing the top-level page only when it is popping a detail off one.
-        // Keying this on "some back gesture is running" instead also fires on the finger-down that
-        // opens a detail, which put the bar and its scrim over the page being pushed in.
-        val returningToTopLevel = backProgress.value != null && currentIsDetail
-        val showPrimaryNavigation = rememberChromeVisibility(
-            isTopLevelCurrent = topLevelIsCurrent,
-            revealByGesture = returningToTopLevel,
-        )
-        NavigationChromeLayout(
-            useRail = useRail,
-            showNavigation = showPrimaryNavigation.value,
-            scrim = if (returningToTopLevel) {
-                Modifier.chromeScrim(backProgress)
-            } else {
-                Modifier
-            },
-            modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
-            navigation = {
-                if (!useRail) {
+        val chrome = @Composable {
+            if (!useRail) {
                     NavigationBar(
                         modifier = Modifier.semantics { isTraversalGroup = true },
                         containerColor = MaterialTheme.colorScheme.background,
@@ -345,33 +355,33 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                             )
                         }
                     }
-                } else {
-                    NavigationRail(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .semantics { isTraversalGroup = true },
-                        containerColor = MaterialTheme.colorScheme.background,
+            } else {
+                NavigationRail(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .semantics { isTraversalGroup = true },
+                    containerColor = MaterialTheme.colorScheme.background,
+                ) {
+                    // Scroll only the rail contents: keep system insets and the sibling NavHost fixed.
+                    Column(
+                        modifier = Modifier.verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        // Match NavigationRail's native spacing inside the scroll container.
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        // Scroll only the rail contents: keep system insets and the sibling NavHost fixed.
-                        Column(
-                            modifier = Modifier.verticalScroll(rememberScrollState()),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            // Match NavigationRail's native spacing inside the scroll container.
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            items.forEach { (route, icon, label) ->
-                                NavigationRailItem(
-                                    selected = tabRoutes.getOrNull(selectedPage.intValue) == route,
-                                    onClick = { navigateToTab(route) },
-                                    icon = { Icon(icon, contentDescription = null) },
-                                    label = { Text(label()) },
-                                )
-                            }
+                        items.forEach { (route, icon, label) ->
+                            NavigationRailItem(
+                                selected = tabRoutes.getOrNull(selectedPage.intValue) == route,
+                                onClick = { navigateToTab(route) },
+                                icon = { Icon(icon, contentDescription = null) },
+                                label = { Text(label()) },
+                            )
                         }
                     }
                 }
-            },
-        ) { primaryPadding ->
+            }
+        }
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                 AppNavHost(
                     navController = nav,
@@ -382,23 +392,47 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                         .semantics { isTraversalGroup = true },
                 ) {
                     composable(Routes.MAIN) {
-                        // The scrim wraps the padding rather than sitting inside it, so it covers the
-                        // strip the bar occupies as well as the page's own content. Dimming only the
-                        // padded content left the bar's footprint bright, which is visible for the
-                        // whole gesture and made the parent look half-dimmed.
+                        // The bar lives *inside* the top-level page, not beside the NavHost. As a
+                        // sibling of the transition viewport it was drawn after every destination and
+                        // therefore always on top, so it could cover a detail page instead of
+                        // belonging to the page it navigates. Here the detail covers it along with
+                        // the rest of MAIN, and a returning gesture uncovers the two together.
+                        //
+                        // Safe inside the transition viewport: NavHost clips each destination to its
+                        // own bounds (EnterExitTransition.kt:1292), and MAIN is the full viewport, so
+                        // nothing here is cropped; MAIN's pop-enter is None, so it is not offset
+                        // either. Both are asserted by the rendering tests.
                         ParentScrimSurface(isCovered = !topLevelIsCurrent) {
-                            // Reserve chrome in the parent itself, even while a detail is on top.
-                            // The NavHost viewport never resizes when the bar/rail is placed on commit.
-                            Box(Modifier.fillMaxSize().padding(primaryPadding).consumeWindowInsets(primaryPadding)) {
-                                TopLevelPager(
-                                    vm = vm,
-                                    settings = settings,
-                                    isActive = topLevelIsCurrent,
-                                    selectedPage = selectedPage.intValue,
-                                    onSelectPage = { selectedPage.intValue = it },
-                                    onOpenScan = { nav.navigate(Routes.SCAN) { launchSingleTop = true } },
-                                    onOpenAbout = { nav.navigate(Routes.ABOUT) { launchSingleTop = true } },
-                                )
+                            if (useRail) {
+                                Row(Modifier.fillMaxSize()) {
+                                    Box(Modifier.weight(1f).fillMaxHeight()) {
+                                        MainPage(
+                                            vm = vm,
+                                            settings = settings,
+                                            isActive = topLevelIsCurrent,
+                                            selectedPage = selectedPage.intValue,
+                                            onSelectPage = { selectedPage.intValue = it },
+                                            onOpenScan = { nav.navigate(Routes.SCAN) { launchSingleTop = true } },
+                                            onOpenAbout = { nav.navigate(Routes.ABOUT) { launchSingleTop = true } },
+                                        )
+                                    }
+                                    chrome()
+                                }
+                            } else {
+                                Column(Modifier.fillMaxSize()) {
+                                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                                        MainPage(
+                                            vm = vm,
+                                            settings = settings,
+                                            isActive = topLevelIsCurrent,
+                                            selectedPage = selectedPage.intValue,
+                                            onSelectPage = { selectedPage.intValue = it },
+                                            onOpenScan = { nav.navigate(Routes.SCAN) { launchSingleTop = true } },
+                                            onOpenAbout = { nav.navigate(Routes.ABOUT) { launchSingleTop = true } },
+                                        )
+                                    }
+                                    chrome()
+                                }
                             }
                         }
                     }

@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
@@ -334,49 +334,35 @@ class PredictiveBackRenderingTest {
                     nav = rememberNavController()
                     val entry by nav.currentBackStackEntryAsState()
                     val active = (entry?.destination?.route ?: "root") == "root"
-                    val backProgress = rememberRunningBackProgress(observeBackGesture = true)
-                    // Mirrors production: only a gesture popping a detail off "root" reveals it.
-                    val returningToTopLevel = backProgress.value != null && !active
-                    val chromeVisible = rememberChromeVisibility(
-                        isTopLevelCurrent = active,
-                        revealByGesture = returningToTopLevel,
-                    )
-                    NavigationChromeLayout(
-                        useRail = rail.value,
-                        showNavigation = chromeVisible.value,
-                        scrim = if (returningToTopLevel) {
-                            Modifier.chromeScrim(backProgress)
-                        } else {
-                            Modifier
-                        },
-                        modifier = Modifier.fillMaxSize().background(Color.Blue).testTag("viewport")
-                            .onGloballyPositioned { viewport = it },
-                        navigation = {
-                            Box(
-                                (if (rail.value) Modifier.width(80.dp).fillMaxHeight()
-                                else Modifier.fillMaxWidth().height(80.dp))
-                                .background(Color.Cyan).testTag("chrome"),
-                            )
-                        },
-                    ) { chromePadding ->
+                    Box(Modifier.fillMaxSize().background(Color.Blue).testTag("viewport")
+                        .onGloballyPositioned { viewport = it }) {
                         AppNavHost(nav, "root", setOf("root"), predictiveBack = true) {
                             composable("root") {
-                                // Mirrors production: the scrim wraps the chrome padding, so it
-                                // covers the bar's footprint and not just the page content.
+                                // Mirrors production: the bar is a *sibling of the content inside
+                                // this destination*, so the detail covers the two together. That is
+                                // the whole point - as a sibling of the NavHost it was drawn last
+                                // and therefore on top of every detail page.
                                 ParentScrimSurface(isCovered = !active) {
-                                    Box(Modifier.fillMaxSize().background(Color.Green)
-                                        .onGloballyPositioned { parent = it }) {
-                                        Box(Modifier.padding(chromePadding)) {
-                                            PrimaryPageStrip(
-                                                pageCount = 4,
-                                                selectedPage = selected.intValue,
-                                                isActive = active,
-                                                onSelectPage = { selected.intValue = it },
-                                            ) { index ->
-                                                Box(Modifier.fillMaxSize()
-                                                    .background(if (index == selected.intValue) Color.Green else Color.Magenta)
-                                                    .onGloballyPositioned { if (index == selected.intValue) selectedTab = it })
+                                    val chrome = @Composable {
+                                        Box(
+                                            (if (rail.value) Modifier.width(80.dp).fillMaxHeight()
+                                            else Modifier.fillMaxWidth().height(80.dp))
+                                                .background(Color.Cyan).testTag("chrome"),
+                                        )
+                                    }
+                                    if (rail.value) {
+                                        Row(Modifier.fillMaxSize()) {
+                                            Box(Modifier.weight(1f).fillMaxHeight()) {
+                                                RootPage(active)
                                             }
+                                            chrome()
+                                        }
+                                    } else {
+                                        Column(Modifier.fillMaxSize()) {
+                                            Box(Modifier.weight(1f).fillMaxWidth()) {
+                                                RootPage(active)
+                                            }
+                                            chrome()
                                         }
                                     }
                                 }
@@ -400,6 +386,23 @@ class PredictiveBackRenderingTest {
         }
         rule.waitForIdle()
         rule.mainClock.autoAdvance = false
+    }
+
+    @Composable
+    private fun RootPage(isActive: Boolean) {
+        Box(Modifier.fillMaxSize().background(Color.Green)
+            .onGloballyPositioned { parent = it }) {
+            PrimaryPageStrip(
+                pageCount = 4,
+                selectedPage = selected.intValue,
+                isActive = isActive,
+                onSelectPage = { selected.intValue = it },
+            ) { index ->
+                Box(Modifier.fillMaxSize()
+                    .background(if (index == selected.intValue) Color.Green else Color.Magenta)
+                    .onGloballyPositioned { if (index == selected.intValue) selectedTab = it })
+            }
+        }
     }
 
     private fun openDetail(settleMillis: Long = 800) {
