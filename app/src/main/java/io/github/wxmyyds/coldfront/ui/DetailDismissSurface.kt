@@ -48,8 +48,8 @@ internal fun DetailDismissSurface(
                     val corner = CornerSize(radius)
                     AbsoluteRoundedCornerShape(
                         topLeft = corner,
-                        topRight = CornerSize.Zero,
-                        bottomRight = CornerSize.Zero,
+                        topRight = CornerSize(0f),
+                        bottomRight = CornerSize(0f),
                         bottomLeft = corner,
                     )
                 } else {
