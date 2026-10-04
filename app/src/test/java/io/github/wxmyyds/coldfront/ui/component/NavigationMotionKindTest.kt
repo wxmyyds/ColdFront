@@ -330,22 +330,10 @@ class NavigationMotionKindTest {
     }
 
     @Test
-    fun theDetailPopDoesNotSlideHorizontally() {
-        // A slide is what made the parent appear to drift and left the moving layer's edge exposed
-        // at the clip boundary. Both directions of the pop must be a scale and a fade only.
-        val exit = AppMotion.predictiveBackExit(TestMotionScheme).toString()
-        assertTrue("exit must scale", exit.contains("Scale"))
-        assertFalse("exit must not slide", exit.contains("Slide"))
-
-        val enter = AppMotion.predictiveBackEnter(TestMotionScheme).toString()
-        assertTrue("enter must scale", enter.contains("Scale"))
-        assertFalse("enter must not slide", enter.contains("Slide"))
-    }
-
-    @Test
     fun theGestureAndTheCommittedPopDescribeTheSameMotion() {
         // NavHost re-evaluates the predictive and the committed transition at the same fraction when
-        // the gesture is released, so any difference between them shows up as a jump.
+        // the gesture is released, so any difference between them shows up as a jump. Both must come
+        // from the same source, which is the scale-and-fade pair rather than a slide.
         val committed = AppMotion.pageExit(
             kind = NavigationMotionKind.PopDetail,
             forward = false,
@@ -355,13 +343,22 @@ class NavigationMotionKindTest {
         val gesture = AppMotion.predictiveBackExit(TestMotionScheme).toString()
 
         assertEquals("committed pop must match the gesture", gesture, committed)
-        assertFalse("committed pop must not slide", committed.contains("Slide"))
-    }
 
-    @Test
-    fun detailPushAndPopShareOneFadeLevel() {
-        // Push dims the detail in, so both directions agree on the resting alpha.
-        assertEquals(0.94f, DETAIL_FADE_ALPHA, 0f)
+        // The transition carries a scale in both halves; the slide slot stays empty, which is the
+        // whole point: no horizontal motion runs during the return.
+        assertTrue("exit must scale", gesture.contains("Scale - Scale"))
+        assertFalse("exit must not slide", gesture.contains("Slide - SlideConfig"))
+        val committedEnter = AppMotion.pageEnter(
+            kind = NavigationMotionKind.PopDetail,
+            forward = false,
+            motionScheme = TestMotionScheme,
+            routeDistance = 1,
+        ).toString()
+        assertEquals(
+            "committed pop enter must match the gesture",
+            AppMotion.predictiveBackEnter(TestMotionScheme).toString(),
+            committedEnter,
+        )
     }
 
     @Test
