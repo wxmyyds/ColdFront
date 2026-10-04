@@ -53,8 +53,12 @@ internal fun navigationOffset(
     } else {
         if (forward) -width else width
     }
+    // Push keeps the established parallax: the detail enters, the parent recedes.
     NavigationMotionKind.PushDetail -> if (entering) width / 5 else -width / 5
-    NavigationMotionKind.PopDetail -> if (entering) -width / 5 else width / 5
+    // Pop reveals the parent in place. A parent that drifts during the gesture would jump when
+    // the predictive transition hands off to the committed pop transition, because both are
+    // re-evaluated at the same fraction and must describe the same motion to swap invisibly.
+    NavigationMotionKind.PopDetail -> if (entering) 0 else width / 5
 }
 
 internal fun isSecondaryDestination(route: String?, topLevelRoutes: Set<String>): Boolean =
@@ -100,6 +104,27 @@ internal const val TOP_LEVEL_PAGE_DURATION_MS = 300
 @Suppress("UNUSED_PARAMETER")
 internal fun topLevelPageDuration(routeDistance: Int): Int = TOP_LEVEL_PAGE_DURATION_MS
 
+internal const val DETAIL_POP_DURATION_MS = 300
+
+/**
+ * Detail pop runs on a tween rather than a spring. The predictive gesture seeks this transition
+ * on every frame, and a spring overshoots and settles back, so the page drifts off the finger and
+ * rebounds after release. A tween keeps the drag linear with the finger and lets the committed
+ * animation finish the remaining distance on the same curve, so the hand-off stays invisible.
+ */
+internal fun detailPopSpatialSpec(): FiniteAnimationSpec<IntOffset> =
+    tween(DETAIL_POP_DURATION_MS, easing = FastOutSlowInEasing)
+
+/**
+ * Alpha for the pop counterpart of the push fade, on a tween for the same seeking reason as
+ * [detailPopSpatialSpec]: a spring would overshoot the dimming and spring back.
+ */
+internal fun detailPopEffectsSpec(): FiniteAnimationSpec<Float> =
+    tween(DETAIL_POP_DURATION_MS, easing = FastOutSlowInEasing)
+
+/** Matches the push fade's resting alpha so the pair reads as one reversible motion. */
+internal const val DETAIL_FADE_ALPHA = 0.94f
+
 internal fun shouldUsePredictivePop(
     predictiveBackEnabled: Boolean,
     currentRoute: String?,
@@ -123,7 +148,7 @@ internal object AppMotion {
         val effects = when (kind) {
             NavigationMotionKind.PushDetail -> fadeIn(
                 animationSpec = motionScheme.defaultEffectsSpec<Float>(),
-                initialAlpha = 0.94f,
+                initialAlpha = DETAIL_FADE_ALPHA,
             )
             NavigationMotionKind.TopLevel -> fadeIn(
                 animationSpec = tween(topLevelPageDuration(routeDistance), easing = FastOutSlowInEasing),
@@ -135,7 +160,7 @@ internal object AppMotion {
             NavigationMotionKind.TopLevel ->
                 tween<IntOffset>(topLevelPageDuration(routeDistance), easing = FastOutSlowInEasing)
             NavigationMotionKind.PushDetail -> motionScheme.slowSpatialSpec<IntOffset>()
-            NavigationMotionKind.PopDetail -> motionScheme.defaultSpatialSpec<IntOffset>()
+            NavigationMotionKind.PopDetail -> detailPopSpatialSpec()
         }
         return slideInHorizontally(
             animationSpec = spatialSpec,
@@ -153,18 +178,22 @@ internal object AppMotion {
             navigationOffset(kind, entering = false, forward = forward, width = width)
         }
         val effects = when (kind) {
-            NavigationMotionKind.PopDetail -> ExitTransition.None
             NavigationMotionKind.TopLevel -> fadeOut(
                 animationSpec = tween(topLevelPageDuration(routeDistance), easing = FastOutSlowInEasing),
                 targetAlpha = 0.96f,
             )
             NavigationMotionKind.PushDetail -> ExitTransition.None
+            // Mirror the push fade so the detail dims as it leaves, revealing the parent.
+            NavigationMotionKind.PopDetail -> fadeOut(
+                animationSpec = detailPopEffectsSpec(),
+                targetAlpha = DETAIL_FADE_ALPHA,
+            )
         }
         val spatialSpec = when (kind) {
             NavigationMotionKind.TopLevel ->
                 tween<IntOffset>(topLevelPageDuration(routeDistance), easing = FastOutSlowInEasing)
             NavigationMotionKind.PushDetail -> motionScheme.slowSpatialSpec<IntOffset>()
-            NavigationMotionKind.PopDetail -> motionScheme.defaultSpatialSpec<IntOffset>()
+            NavigationMotionKind.PopDetail -> detailPopSpatialSpec()
         }
         return slideOutHorizontally(
             animationSpec = spatialSpec,

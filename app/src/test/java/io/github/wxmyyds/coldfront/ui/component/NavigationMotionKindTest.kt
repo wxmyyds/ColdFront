@@ -1,6 +1,10 @@
 package io.github.wxmyyds.coldfront.ui.component
 
+import androidx.compose.animation.core.SpringSpec
+import androidx.compose.animation.core.TweenSpec
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NavigationMotionKindTest {
@@ -132,13 +136,39 @@ class NavigationMotionKindTest {
     }
 
     @Test
-    fun detailPushAndPopUseReverseSpatialOffsets() {
+    fun detailPushKeepsParallaxButPopRevealsTheParentInPlace() {
         val width = 1000
 
+        // Push: the detail enters from the right while the parent recedes left.
         assertEquals(200, navigationOffset(NavigationMotionKind.PushDetail, true, true, width))
         assertEquals(-200, navigationOffset(NavigationMotionKind.PushDetail, false, true, width))
-        assertEquals(-200, navigationOffset(NavigationMotionKind.PopDetail, true, false, width))
+
+        // Pop: the parent does not drift, so it reads as revealed rather than moving on its own.
+        assertEquals(0, navigationOffset(NavigationMotionKind.PopDetail, true, false, width))
         assertEquals(200, navigationOffset(NavigationMotionKind.PopDetail, false, false, width))
+    }
+
+    @Test
+    fun detailPopIsSeekingSafe() {
+        val spatial = detailPopSpatialSpec()
+        val effects = detailPopEffectsSpec()
+
+        // A spring would overshoot while the predictive gesture seeks every frame, so the page
+        // would drift off the finger and rebound after release.
+        assertFalse("detail pop spatial must not spring", spatial is SpringSpec<*>)
+        assertTrue("detail pop spatial must tween", spatial is TweenSpec<*>)
+        assertEquals(DETAIL_POP_DURATION_MS, (spatial as TweenSpec).durationMillis)
+
+        assertFalse("detail pop alpha must not spring", effects is SpringSpec<*>)
+        assertTrue("detail pop alpha must tween", effects is TweenSpec<*>)
+        assertEquals(DETAIL_POP_DURATION_MS, (effects as TweenSpec).durationMillis)
+    }
+
+    @Test
+    fun detailPopAndPushShareOneFadeLevelSoThePairReverses() {
+        // Push dims the detail in; pop must dim it out by the same amount, otherwise the parent
+        // reveals at a different brightness depending on which direction the user travelled.
+        assertEquals(0.94f, DETAIL_FADE_ALPHA, 0f)
     }
 
     @Test
