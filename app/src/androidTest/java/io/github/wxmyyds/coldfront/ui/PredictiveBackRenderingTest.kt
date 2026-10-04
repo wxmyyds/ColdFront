@@ -169,9 +169,12 @@ class PredictiveBackRenderingTest {
         gesture(BackEventCompat.EDGE_LEFT)
         progress(0.65f, BackEventCompat.EDGE_LEFT)
         rule.runOnIdle {
-            // Bottom chrome only affects Y. The selected tab must be centred in X, not still
-            // travelling from another tab or showing only its right side at the pager clip edge.
-            assertEquals(centre(viewport).x, centre(selectedTab).x, 1f)
+            // Bottom chrome only affects Y. The selected tab must be centred within the *parent*,
+            // not within the viewport: the parent is stepped back by a fifth of the width while the
+            // detail above it is leaving, and the tab moves with its page. What must not happen is
+            // the tab still travelling from another pager page, or sitting half-clipped at the
+            // pager's edge - both of which shift it within the parent itself.
+            assertEquals(centre(parent).x, centre(selectedTab).x, 1f)
         }
         commitAndCheck()
     }
