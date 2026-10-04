@@ -1,6 +1,5 @@
 package io.github.wxmyyds.coldfront.ui.component
 
-import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.TweenSpec
@@ -260,16 +259,16 @@ class NavigationMotionKindTest {
     fun detailPopKeepsThePageOpaqueSoOnlyItsEdgeReads() {
         // The leaving page must not fade. Dimming it would let the window behind show through as a
         // dark veil across the surface, which reads as a mask rather than the platform's edge
-        // treatment on a page being swiped away.
-        assertEquals(
-            ExitTransition.None,
-            AppMotion.pageExit(
-                kind = NavigationMotionKind.PopDetail,
-                forward = false,
-                motionScheme = TestMotionScheme,
-                routeDistance = 1,
-            ),
+        // treatment on a page being swiped away. The exit is a pure slide, so the page stays
+        // opaque and only its shadowed edge reads while it moves.
+        val exit = AppMotion.pageExit(
+            kind = NavigationMotionKind.PopDetail,
+            forward = false,
+            motionScheme = TestMotionScheme,
+            routeDistance = 1,
         )
+        assertTrue("detail pop must slide", exit.toString().contains("Slide"))
+        assertFalse("detail pop must not fade", exit.toString().contains("Fade - Fade"))
     }
 
     @Test
