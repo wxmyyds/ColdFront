@@ -315,7 +315,7 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
         NavigationChromeLayout(
             useRail = useRail,
             showNavigation = showPrimaryNavigation.value,
-            chromeDimming = chromeDimming(backProgress),
+            chromeDimming = Modifier.chromeDimming(backProgress),
             modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
             navigation = {
                 if (!useRail) {
