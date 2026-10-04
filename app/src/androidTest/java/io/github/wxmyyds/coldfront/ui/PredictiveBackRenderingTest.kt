@@ -81,12 +81,14 @@ class PredictiveBackRenderingTest {
                 renderedPageWidth().toFloat(),
                 4f,
             )
-            // The parent's left edge is genuinely uncovered at this progress.
+            // The parent is genuinely visible to the left of the page's leading edge, which is
+            // what makes the two layers read as stacked.
+            val travel = renderedTravelX()
             val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
             val y = pixels.height / 2
             assertTrue(
-                "parent should show through at x=${(progress * width).toInt()}",
-                pixels[(progress * width).toInt() + 2, y].green > 0.5f,
+                "parent must be uncovered left of the page edge at progress $progress",
+                travel > 2 && pixels[travel - 2, y].green > 0.5f,
             )
         }
         rule.runOnUiThread { dispatcher.dispatchOnBackCancelled() }
