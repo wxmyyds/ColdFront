@@ -589,8 +589,8 @@ class PredictiveBackRenderingTest {
      */
     private fun assertStationary(coordinates: LayoutCoordinates) {
         assertTrue("destination must still be attached", coordinates.isAttached)
-        assertEquals("horizontal centre moved", parentRestX, centre(coordinates).x, 1.5f)
-        assertEquals("vertical centre moved", parentRestY, centre(coordinates).y, 1f)
+        assertEquals("horizontal centre moved", requireNotNull(parentRestX), centre(coordinates).x, 1.5f)
+        assertEquals("vertical centre moved", requireNotNull(parentRestY), centre(coordinates).y, 1f)
     }
 
     /** A destination that must be centred in the viewport, such as a detail page. */
