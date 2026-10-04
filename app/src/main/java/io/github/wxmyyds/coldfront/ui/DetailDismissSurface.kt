@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.AbsoluteRoundedCornerShape
 import androidx.compose.foundation.shape.CornerSize
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
@@ -42,12 +41,16 @@ internal fun DetailDismissSurface(
             .graphicsLayer {
                 // Read the State, not a by-delegate local, so a drag does not recompose the page.
                 val radius = DetailDismissCornerRadius.toPx() * progress.value
-                // AbsoluteRoundedCornerShape resolves start/end against the ambient layout
-                // direction, so the corner stays on the leading edge in RTL too.
+                // AbsoluteRoundedCornerShape takes its corners positionally as topLeft,
+                // topRight, bottomRight, bottomLeft, and resolves "start" against the ambient
+                // layout direction, so the corner stays on the leading edge in RTL too.
                 shape = if (radius > 0f) {
+                    val corner = CornerSize(radius)
                     AbsoluteRoundedCornerShape(
-                        topStart = CornerSize(radius),
-                        bottomStart = CornerSize(radius),
+                        topLeft = corner,
+                        topRight = CornerSize.Zero,
+                        bottomRight = CornerSize.Zero,
+                        bottomLeft = corner,
                     )
                 } else {
                     RectangleShape
