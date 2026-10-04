@@ -233,14 +233,38 @@ class PredictiveBackRenderingTest {
     fun theBarBelongsToTheTopLevelPageAndNeverCoversADetail() {
         setup()
         assertTrue("the bar belongs to the top-level page", barIsOnScreen())
+        // The regression: as a sibling of the NavHost the bar was drawn after every destination, so
+        // it sat on top of the detail page instead of under it. Being inside the top-level page now
+        // means the detail covers it exactly as it covers the rest of that page.
         openDetail()
         rule.runOnIdle { assertEquals("detail", nav.currentDestination?.route) }
         assertFalse("the bar must not be drawn over a detail page", barIsOnScreen())
-        // The bar returns with the page it belongs to, during the gesture rather than after it.
+        // Returning reveals the bar together with the page it belongs to, rather than after the
+        // gesture. Mid-gesture it is only partly uncovered, so what is asserted is that the
+        // revealed strip has grown - not that the whole bar is already visible.
         gesture(BackEventCompat.EDGE_LEFT)
-        assertTrue("the bar must appear while the return uncovers the page", barIsOnScreen())
+        progress(0.5f, BackEventCompat.EDGE_LEFT)
+        val half = revealedBarWidth()
+        progress(0.85f, BackEventCompat.EDGE_LEFT)
+        val most = revealedBarWidth()
+        assertTrue(
+            "the bar must be uncovered with the page (half=$half, most=$most)",
+            most > half,
+        )
         commitAndCheck()
         assertTrue("the bar must be back on the top-level page", barIsOnScreen())
+    }
+
+    /** How much of the bar's colour is on screen, used to check it is uncovered progressively. */
+    private fun revealedBarWidth(): Int {
+        val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
+        val row = (pixels.height - 40).coerceIn(0, pixels.height - 1)
+        var count = 0
+        for (x in 0 until pixels.width) {
+            val pixel = pixels[x, row]
+            if (pixel.red < 0.35f && pixel.green > 0.35f && pixel.blue > 0.35f) count++
+        }
+        return count
     }
 
     /**
