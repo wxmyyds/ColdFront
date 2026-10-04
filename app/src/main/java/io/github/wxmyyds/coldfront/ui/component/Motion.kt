@@ -13,7 +13,8 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
-import androidx.compose.animation.core.keyframes
+import androidx.compose.animation.core.Keyframe
+import androidx.compose.animation.core.KeyframesSpec
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.scaleIn
@@ -149,18 +150,28 @@ internal const val PREDICTIVE_BACK_ENTER_START_SCALE = 1.1f
  * [PREDICTIVE_BACK_EASING], and both are expressed as seekable specs so the gesture can drive them
  * frame by frame.
  */
-internal fun predictiveBackExitSpec(): FiniteAnimationSpec<Float> = keyframes {
-    durationMillis = DETAIL_POP_DURATION_MS
-    PREDICTIVE_BACK_CROSSFADE_AT at 1f
-    1f at PREDICTIVE_BACK_EXIT_SCALE
-}
+internal fun predictiveBackExitSpec(): FiniteAnimationSpec<Float> = KeyframesSpec(
+    durationMillis = DETAIL_POP_DURATION_MS,
+    delay = 0,
+    easing = PREDICTIVE_BACK_EASING,
+    keyframes = listOf(
+        Keyframe(0f, 1f),
+        Keyframe(PREDICTIVE_BACK_CROSSFADE_AT, 1f),
+        Keyframe(1f, PREDICTIVE_BACK_EXIT_SCALE),
+    ),
+)
 
 /** Parent page: settle from [PREDICTIVE_BACK_ENTER_START_SCALE] down to full size, fading in. */
-internal fun predictiveBackEnterSpec(): FiniteAnimationSpec<Float> = keyframes {
-    durationMillis = DETAIL_POP_DURATION_MS
-    1f at PREDICTIVE_BACK_ENTER_START_SCALE
-    PREDICTIVE_BACK_CROSSFADE_AT at PREDICTIVE_BACK_EXIT_SCALE
-}
+internal fun predictiveBackEnterSpec(): FiniteAnimationSpec<Float> = KeyframesSpec(
+    durationMillis = DETAIL_POP_DURATION_MS,
+    delay = 0,
+    easing = PREDICTIVE_BACK_EASING,
+    keyframes = listOf(
+        Keyframe(0f, PREDICTIVE_BACK_ENTER_START_SCALE),
+        Keyframe(PREDICTIVE_BACK_CROSSFADE_AT, PREDICTIVE_BACK_EXIT_SCALE),
+        Keyframe(1f, 1f),
+    ),
+)
 
 /** Resting alpha for the detail page's push fade; the pop direction deliberately does not fade. */
 internal const val DETAIL_FADE_ALPHA = 0.94f

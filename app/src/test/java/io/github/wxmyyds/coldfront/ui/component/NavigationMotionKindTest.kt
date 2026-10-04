@@ -311,8 +311,10 @@ class NavigationMotionKindTest {
 
         // The official spec holds the leaving page at full opacity until 35% of the gesture, then
         // fades it to nothing by the end. At that instant neither page is visible.
-        assertEquals(0.35f, exit.keyframes.first().fraction, 0.001f)
-        assertEquals(1f, exit.keyframes.first().valuePair.second, 0.001f)
+        // Opaque from the start, still opaque at 35%, then down to the exit scale.
+        val atThreshold = exit.keyframes.first { it.fraction == PREDICTIVE_BACK_CROSSFADE_AT }
+        assertEquals(1f, atThreshold.valuePair.second, 0.001f)
+        assertEquals(PREDICTIVE_BACK_EXIT_SCALE, exit.keyframes.last().valuePair.second, 0.001f)
         assertEquals(DETAIL_POP_DURATION_MS, exit.durationMillis)
     }
 
@@ -322,8 +324,13 @@ class NavigationMotionKindTest {
 
         // The parent starts slightly larger and is still smaller than full at the crossfade point,
         // settling to full size only once the leaving page has gone.
-        assertEquals(1.1f, enter.keyframes.first().valuePair.second, 0.001f)
-        assertEquals(0.9f, enter.keyframes.last().valuePair.second, 0.001f)
+        assertEquals(PREDICTIVE_BACK_ENTER_START_SCALE, enter.keyframes.first().valuePair.second, 0.001f)
+        assertEquals(
+            PREDICTIVE_BACK_EXIT_SCALE,
+            enter.keyframes.first { it.fraction == PREDICTIVE_BACK_CROSSFADE_AT }.valuePair.second,
+            0.001f,
+        )
+        assertEquals(1f, enter.keyframes.last().valuePair.second, 0.001f)
     }
 
     @Test
