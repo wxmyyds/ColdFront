@@ -1,5 +1,6 @@
 package io.github.wxmyyds.coldfront.ui.component
 
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.TweenSpec
@@ -226,6 +227,21 @@ class NavigationMotionKindTest {
                 topLevelRoutes = roots,
             ),
         )
+    }
+
+    @Test
+    fun navigationBarOnlyAnimatesOnTheWayOut() {
+        // Returning to a top-level page must place the bar at the bottom immediately: the route
+        // already names that page once the pop commits, so an enter animation would add an upward
+        // slide and an inset change on top of the page motion.
+        assertEquals(
+            EnterTransition.None,
+            AppMotion.navigationBarEnter(),
+        )
+
+        // Hiding stays animated so leaving a detail page still feels deliberate.
+        val exit = AppMotion.navigationBarExit(TestMotionScheme)
+        assertTrue("hiding the bar must animate", exit.toString().contains("Shrink"))
     }
 
     @Test

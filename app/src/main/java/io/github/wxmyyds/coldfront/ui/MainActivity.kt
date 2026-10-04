@@ -330,7 +330,13 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
             bottomBar = {
                 AnimatedVisibility(
                     visible = !useRail && showPrimaryNavigation,
-                    enter = AppMotion.navigationBarEnter(motionScheme),
+                    // Appears immediately, with no enter animation. The bar is anchored to a
+                    // top-level page, so once the pop commits the route already names that page
+                    // and the bar belongs at the bottom straight away. Animating it in would add an
+                    // upward slide and a Scaffold inset change on top of the page motion, which
+                    // reads as a second animation. Hiding it stays animated so leaving a detail
+                    // page still feels deliberate.
+                    enter = AppMotion.navigationBarEnter(),
                     exit = AppMotion.navigationBarExit(motionScheme),
                 ) {
                     NavigationBar(

@@ -4,7 +4,6 @@ import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
@@ -238,14 +237,14 @@ internal object AppMotion {
         ) + effects
     }
 
-    fun navigationBarEnter(motionScheme: MotionScheme) =
-        expandVertically(
-            animationSpec = motionScheme.fastSpatialSpec<IntSize>(),
-            expandFrom = Alignment.Bottom,
-        ) + slideInVertically(
-            animationSpec = motionScheme.fastSpatialSpec<IntOffset>(),
-            initialOffsetY = { it / 3 },
-        ) + fadeIn(animationSpec = motionScheme.fastEffectsSpec<Float>())
+    /**
+     * The bottom bar reappears with no motion.
+     *
+     * It is anchored to a top-level page, so as soon as the pop commits the current route already
+     * names that page and the bar belongs at the bottom. Animating it in would play an upward slide
+     * and a Scaffold inset change on top of the page motion, which reads as a second animation.
+     */
+    fun navigationBarEnter(): EnterTransition = EnterTransition.None
 
     fun navigationBarExit(motionScheme: MotionScheme) =
         shrinkVertically(
