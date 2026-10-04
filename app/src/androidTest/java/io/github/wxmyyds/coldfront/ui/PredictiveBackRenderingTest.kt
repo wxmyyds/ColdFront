@@ -487,12 +487,15 @@ class PredictiveBackRenderingTest {
         val originalSize = viewport.size
         val originalCentre = centre(viewport)
         rule.runOnUiThread { dispatcher.onBackPressed() }
+        // Per-frame: the NavHost must not resize or shift the viewport while the pop settles.
+        // The parent is deliberately *not* asserted here: it animates back to rest over
+        // PARENT_STEP_BACK_MS after the finger lifts, so the first frames legitimately show it
+        // still mid-return. Its final resting place is asserted once the settle has elapsed below.
         repeat(25) {
             frames(16)
             rule.runOnIdle {
                 assertEquals(originalSize, viewport.size)
                 assertEquals(originalCentre, centre(viewport))
-                assertStationary(parent)
             }
         }
         rule.runOnIdle {
