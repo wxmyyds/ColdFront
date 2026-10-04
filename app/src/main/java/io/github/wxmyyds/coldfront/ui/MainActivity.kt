@@ -301,7 +301,7 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
     val selectedPage = rememberSaveable { mutableIntStateOf(routePage.coerceAtLeast(0)) }
     // Returning to MAIN from a secondary page adopts whichever tab the route names.
     LaunchedEffect(routePage) {
-        if (routePage >= 0) selectedPage.value = routePage
+        if (routePage >= 0) selectedPage.intValue = routePage
     }
 
     // Switching tabs stays inside MAIN: no navigation, so no NavHost transition and no predictive
@@ -309,7 +309,7 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
     val navigateToTab: (String) -> Unit = { route ->
         topLevelPageIndex(route, tabRoutes)
             .takeIf { it >= 0 }
-            ?.let { selectedPage.value = it }
+            ?.let { selectedPage.intValue = it }
     }
 
     // Use existing foundation/Material3 APIs, without adding a window-size dependency.
@@ -493,7 +493,7 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                                 settings = settings,
                                 currentRoute = currentRoute,
                                 topLevelRoutes = tabRoutes,
-                                selectedPage = selectedPage.value,
+                                selectedPage = selectedPage.intValue,
                                 onNavigate = navigateToTab,
                                 onOpenScan = { nav.navigate(Routes.SCAN) { launchSingleTop = true } },
                                 onOpenAbout = { nav.navigate(Routes.ABOUT) { launchSingleTop = true } },

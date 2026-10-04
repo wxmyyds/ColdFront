@@ -230,7 +230,10 @@ class NavigationMotionKindTest {
         // Tab identity lives inside the pager, so it maps to a page index rather than to a route.
         assertEquals(0, topLevelPageIndex("home", tabs))
         assertEquals(3, topLevelPageIndex("settings", tabs))
-        assertEquals(-1, topLevelPageIndex("about", tabs))
+
+        // ABOUT is not a tab, but it is reached from the settings tab, so it resolves to that tab.
+        assertEquals(3, topLevelPageIndex("about", tabs))
+        assertEquals(-1, topLevelPageIndex("scan", tabs))
 
         // Jumping tabs costs the same time regardless of distance, so crossing several pages reads
         // as one action instead of a chain of them.
@@ -247,13 +250,14 @@ class NavigationMotionKindTest {
         val mid = topLevelPageIndex("devices", tabs)
 
         // Mid-drag, every page sits at its own offset, so the pages in between are genuinely
-        // travelled through instead of being cut away.
+        // travelled through instead of being cut away. Moving towards a later page drags the
+        // starting page right and pulls the target in from the right.
         val position = from + 0.5f
         val offsets = tabs.indices.associateWith { index ->
             ((index - position) * width).toInt()
         }
-        assertTrue("start is left of centre", offsets.getValue(from) > 0)
-        assertTrue("target is right of centre", offsets.getValue(to) < 0)
+        assertTrue("start moves right", offsets.getValue(from) > 0)
+        assertTrue("target is still off to the right", offsets.getValue(to) < 0)
         assertEquals(0, offsets.getValue(mid))
     }
 
