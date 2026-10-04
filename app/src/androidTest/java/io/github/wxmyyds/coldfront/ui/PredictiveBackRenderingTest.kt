@@ -18,6 +18,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Pixel
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -70,9 +71,12 @@ class PredictiveBackRenderingTest {
             assertEquals(1f, horizontalScale(parent), 0.002f)
             // The page tracks the finger: travel is linear in progress, so at 0.5 it has moved
             // exactly half its width and still covers half the screen.
-            assertEquals(progress * width, detailOriginX(detail), 1.5f)
+            assertEquals("page must track the finger at $progress",
+                (progress * width).toInt(), renderedTravelX { it.red > 0.9f }, 3)
+            // The page must still be covering most of the screen, and the parent visible beside
+            // it, so the two layers read as stacked rather than cross-faded.
             assertEquals(
-                "the page must still cover most of the screen halfway through",
+                "the page must still cover most of the screen",
                 (1f - progress) * width,
                 detail.size.width.toFloat(),
                 2f,
@@ -90,9 +94,12 @@ class PredictiveBackRenderingTest {
         rule.runOnIdle {
             assertEquals("detail", nav.currentDestination?.route)
             assertCentred(detail)
-            assertEquals(0f, detailOriginX(detail), 1.5f)
             assertFalse("cancel must remove the preview parent", parent.isAttached)
         }
+        // captureToImage reads the real surface, so it must be sampled on the UI thread rather
+        // than from inside runOnIdle.
+        assertEquals("cancel must restore the page to its resting position",
+            0, renderedTravelX { it.red > 0.9f }, 3)
         // Repeated gestures use the same input owner; release must continue, not replay a pop.
         gesture(BackEventCompat.EDGE_RIGHT)
         progress(0.65f, BackEventCompat.EDGE_RIGHT)
@@ -106,7 +113,8 @@ class PredictiveBackRenderingTest {
         gesture(BackEventCompat.EDGE_LEFT)
         progress(0.55f, BackEventCompat.EDGE_LEFT)
         assertCentred(parent)
-        assertEquals(0.55f * viewport.size.width, detailOriginX(detail), 2f)
+        assertEquals("page must track the finger at 0.55f",
+            (0.55f * viewport.size.width).toInt(), renderedTravelX { it.red > 0.9f }, 3)
         commitAndCheck()
     }
 
@@ -121,7 +129,8 @@ class PredictiveBackRenderingTest {
         gesture(BackEventCompat.EDGE_RIGHT)
         progress(0.6f, BackEventCompat.EDGE_RIGHT)
         assertCentred(parent)
-        assertEquals(0.6f * viewport.size.width, detailOriginX(detail), 2f)
+        assertEquals("page must track the finger at 0.6f",
+            (0.6f * viewport.size.width).toInt(), renderedTravelX { it.red > 0.9f }, 3)
         commitAndCheck()
     }
 
@@ -150,7 +159,8 @@ class PredictiveBackRenderingTest {
         gesture(BackEventCompat.EDGE_LEFT)
         progress(0.7f, BackEventCompat.EDGE_LEFT)
         assertCentred(parent)
-        assertEquals(0.7f * viewport.size.width, detailOriginX(detail), 2f)
+        assertEquals("page must track the finger at 0.7f",
+            (0.7f * viewport.size.width).toInt(), renderedTravelX { it.red > 0.9f }, 3)
         commitAndCheck()
     }
 
@@ -162,10 +172,11 @@ class PredictiveBackRenderingTest {
         openDetail()
         gesture(BackEventCompat.EDGE_RIGHT)
         progress(0.7f, BackEventCompat.EDGE_RIGHT)
-        // A right-edge swipe in RTL still leaves to the physical right: the page's origin moves
-        // towards +x, and the parent is still centred underneath it.
+        // The page always leaves towards the physical right, whatever the layout direction or the
+        // edge the swipe started from; the parent stays centred underneath it.
         assertCentred(parent)
-        assertEquals(0.7f * viewport.size.width, detailOriginX(detail), 2f)
+        assertEquals("page must track the finger at 0.7f",
+            (0.7f * viewport.size.width).toInt(), renderedTravelX { it.red > 0.9f }, 3)
         commitAndCheck()
     }
 
@@ -180,12 +191,11 @@ class PredictiveBackRenderingTest {
         for (progress in listOf(0.25f, 0.5f, 0.75f)) {
             progress(progress, BackEventCompat.EDGE_LEFT)
             val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
-            // The corner is cut relative to the page's own position, which has moved right.
-            val left = detailOriginX(detail)
-            val inset = (left + radius * progress).toInt()
+            // The corner is cut relative to the page's rendered leading edge, which has moved.
+            val inset = renderedTravelX { it.red > 0.9f } + (radius * progress).toInt()
             assertTrue(
                 "corner must be cut at progress $progress (x=$inset)",
-                pixels[inset, inset].green > 0.5f,
+                inset < pixels.width && pixels[inset, inset].green > 0.5f,
             )
             // Well inside the page it is still the page itself, so it is clipped, not tinted.
             val inside = (inset + (radius * 2).toInt()).coerceAtMost(pixels.width - 1)
@@ -310,9 +320,21 @@ class PredictiveBackRenderingTest {
         Offset(coordinates.size.width / 2f, coordinates.size.height / 2f),
     )
 
-    /** Left edge of the page in viewport coordinates: how far it has travelled to the right. */
-    private fun detailOriginX(coordinates: LayoutCoordinates): Float =
-        coordinates.localToRoot(Offset.Zero).x
+    /**
+     * How far the leaving page has travelled, measured from the rendered pixels.
+     *
+     * `localToRoot` reports layout position, which deliberately excludes a graphics-layer
+     * translation, so it cannot see this slide at all. The first column that is still the page's
+     * own colour is the page's leading edge, which is what actually moves on screen.
+     */
+    private fun renderedTravelX(pageIsRed: (Pixel) -> Boolean): Int {
+        val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
+        val y = pixels.height / 2
+        for (x in 0 until pixels.width) {
+            if (pageIsRed(pixels[x, y])) return x
+        }
+        return pixels.width
+    }
 
     private fun horizontalScale(coordinates: LayoutCoordinates): Float =
         (coordinates.localToRoot(Offset(coordinates.size.width.toFloat(), 0f)).x -

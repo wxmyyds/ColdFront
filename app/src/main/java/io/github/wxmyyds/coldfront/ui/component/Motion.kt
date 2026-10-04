@@ -12,6 +12,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.tween
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -124,19 +125,24 @@ internal const val DETAIL_POP_DURATION_MS = 300
  */
 internal const val DETAIL_POP_TRAVEL = 1f
 
-/** Easing used only when the gesture is released and the page settles. */
-internal val DETAIL_POP_SETTLE_EASING = FastOutSlowInEasing
-
 /**
  * Spec for the leaving page's travel, as a horizontal offset in pixels.
  *
+ * The easing must be [LinearEasing]. NavHost drives this transition by seeking it with the raw
+ * gesture progress, and a tween applies its easing to whatever fraction it is seeked to - so a
+ * curved easing would be applied *on top of* the finger position, not to it. With
+ * FastOutSlowInEasing the page reaches 83% of its travel by gesture progress 0.55, which is not
+ * tracking the finger. LinearEasing makes the offset equal the finger's own progress exactly.
+ *
+ * The release is therefore linear too. That is what keeps a committed pop describing the same
+ * motion the gesture ended on, so the hand-off at release stays invisible.
+ *
  * Exposed separately from [predictiveBackExit] so the curve can be sampled directly: an
  * [androidx.compose.animation.ExitTransition] carries its spec inside and exposes no way to read
- * it back, which is why a previous version of this test could only compare objects by identity.
- * [DETAIL_POP_WIDTH] is the page width the spec is evaluated against when sampling.
+ * it back. [DETAIL_POP_WIDTH] is the page width the spec is evaluated against when sampling.
  */
 internal fun detailPopTravelSpec(): FiniteAnimationSpec<IntOffset> =
-    tween(DETAIL_POP_DURATION_MS, easing = DETAIL_POP_SETTLE_EASING)
+    tween(DETAIL_POP_DURATION_MS, easing = LinearEasing)
 
 /** Page width the travel spec is sampled against, in pixels. */
 internal const val DETAIL_POP_WIDTH = 1000
@@ -151,8 +157,7 @@ internal const val DETAIL_POP_WIDTH = 1000
  *
  * The parent's enter is [EnterTransition.None]: it never moves, it is simply uncovered as the page
  * above it travels away, which is what keeps the two layers visibly stacked instead of cross-fading.
- */
-internal fun predictiveBackExit(): ExitTransition = detailPopExit
+ */internal fun predictiveBackExit(): ExitTransition = detailPopExit
 
 /**
  * One shared instance, so the gesture and the committed pop cannot drift apart: `NavHost` seeks

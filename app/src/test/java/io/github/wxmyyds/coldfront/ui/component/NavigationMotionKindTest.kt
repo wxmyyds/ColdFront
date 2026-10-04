@@ -117,6 +117,18 @@ class NavigationMotionKindTest {
             assertTrue("travel moved backwards at ${millis}ms", value.x >= last)
             last = value.x.toFloat()
         }
+        // Strictly linear: NavHost seeks this with the raw finger progress, so any easing here
+        // would be applied on top of the finger position instead of shaping it. Sampling a curved
+        // spec proved this by failing - the page reached 83% of its travel at progress 0.55.
+        for (progress in listOf(0.05f, 0.25f, 0.5f, 0.55f, 0.75f)) {
+            val nanos = (DETAIL_POP_DURATION_MS * 1_000_000L * progress).toLong()
+            assertEquals(
+                "travel must equal gesture progress at $progress",
+                width * progress,
+                travel.getValueFromNanos(nanos).x.toFloat(),
+                1.5f,
+            )
+        }
     }
 
     @Test
