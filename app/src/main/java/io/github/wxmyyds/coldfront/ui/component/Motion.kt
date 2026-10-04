@@ -6,7 +6,6 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -20,10 +19,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MotionScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
 
 internal enum class NavigationMotionKind {
     TopLevel,
@@ -249,24 +246,6 @@ internal object AppMotion {
             targetOffsetX = offset,
         ) + effects
     }
-
-    /**
-     * The bottom bar reappears with no motion.
-     *
-     * It is anchored to a top-level page, so as soon as the pop commits the current route already
-     * names that page and the bar belongs at the bottom. Animating it in would play an upward slide
-     * and a Scaffold inset change on top of the page motion, which reads as a second animation.
-     */
-    fun navigationBarEnter(): EnterTransition = EnterTransition.None
-
-    fun navigationBarExit(motionScheme: MotionScheme) =
-        shrinkVertically(
-            animationSpec = motionScheme.fastSpatialSpec<IntSize>(),
-            shrinkTowards = Alignment.Bottom,
-        ) + slideOutVertically(
-            animationSpec = motionScheme.fastSpatialSpec<IntOffset>(),
-            targetOffsetY = { it / 3 },
-        ) + fadeOut(animationSpec = motionScheme.fastEffectsSpec<Float>())
 
     /** Restrained spatial continuity for connection/empty-content state changes. */
     fun contentChange(motionScheme: MotionScheme): ContentTransform =

@@ -58,7 +58,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.ui.Alignment
@@ -337,17 +336,13 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
             containerColor = MaterialTheme.colorScheme.background,
             contentWindowInsets = WindowInsets(left = 0.dp, top = 0.dp, right = 0.dp, bottom = 0.dp),
             bottomBar = {
-                AnimatedVisibility(
-                    visible = !useRail && showPrimaryNavigation,
-                    // Appears immediately, with no enter animation. The bar is anchored to a
-                    // top-level page, so once the pop commits the route already names that page
-                    // and the bar belongs at the bottom straight away. Animating it in would add an
-                    // upward slide and a Scaffold inset change on top of the page motion, which
-                    // reads as a second animation. Hiding it stays animated so leaving a detail
-                    // page still feels deliberate.
-                    enter = AppMotion.navigationBarEnter(),
-                    exit = AppMotion.navigationBarExit(motionScheme),
-                ) {
+                // Deliberately a plain `if`, not AnimatedVisibility. AnimatedVisibility is an
+                // animation state machine: even with enter = None it keeps the exiting content in
+                // the layout while it transitions, so the bar and the Scaffold inset that reserves
+                // its height both keep changing after the pop commits. That reads as the bar
+                // sliding up into place. A bare conditional places the bar at its final position in
+                // the same frame the route becomes top-level, with nothing left to animate.
+                if (!useRail && showPrimaryNavigation) {
                     NavigationBar(
                         modifier = Modifier.semantics { isTraversalGroup = true },
                         containerColor = MaterialTheme.colorScheme.background,
