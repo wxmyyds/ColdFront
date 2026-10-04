@@ -240,18 +240,24 @@ class PredictiveBackRenderingTest {
     }
 
     /**
-     * Whether the bar is actually placed on screen.
+     * Whether the bar's own colour reaches the bottom of the screen.
      *
-     * Existence in the semantics tree is not the question: [NavigationChromeLayout] subcomposes the
-     * bar unconditionally and simply skips placing it when hidden, so the node is present either
-     * way. A placed bar sits at the bottom of the window, so its root bounds tell the two apart.
+     * Placement cannot be read from the semantics tree: [NavigationChromeLayout] subcomposes the
+     * bar unconditionally and only skips placing it, so the node exists with stale bounds whether
+     * or not it is drawn. Rendering is the only honest signal - a covered bar is not on screen.
+     * Cyan survives both a lit bar and a dimmed one, and nothing else in this harness is cyan.
      */
     private fun barIsOnScreen(): Boolean {
-        val node = rule.onAllNodesWithTag("chrome").fetchSemanticsNodes().firstOrNull()
-            ?: return false
-        val bounds = node.boundsInRoot
-        val viewportHeight = rule.onNodeWithTag("viewport").fetchSemanticsNode().boundsInRoot.height
-        return bounds.height > 0f && bounds.top > viewportHeight / 2f
+        val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
+        val from = (pixels.height * 3 / 4).coerceIn(0, pixels.height)
+        for (y in from until pixels.height) {
+            for (x in 0 until pixels.width step 8) {
+                val pixel = pixels[x, y]
+                // Cyan: low red, high green and blue. The bar is the only cyan thing here.
+                if (pixel.red < 0.35f && pixel.green > 0.35f && pixel.blue > 0.35f) return true
+            }
+        }
+        return false
     }
 
     @Test
