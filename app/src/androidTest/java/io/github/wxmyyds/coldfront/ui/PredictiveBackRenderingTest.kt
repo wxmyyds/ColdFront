@@ -225,6 +225,35 @@ class PredictiveBackRenderingTest {
     }
 
     @Test
+    fun diagnoseBottomRegion() {
+        setup()
+        openDetail()
+        gesture(BackEventCompat.EDGE_LEFT)
+        progress(0.5f, BackEventCompat.EDGE_LEFT)
+        val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
+        val sb = StringBuilder("viewport=${pixels.width}x${pixels.height}\n")
+        for (y in pixels.height - 1 downTo pixels.height * 3 / 4 step 16) {
+            sb.append("y=$y ")
+            for (x in 0 until pixels.width step 24) {
+                sb.append(letter(pixels[x, y]))
+            }
+            sb.append('\n')
+        }
+        throw AssertionError(sb.toString())
+    }
+
+    private fun letter(p: Color): Char = when {
+        p.red > 0.6f && p.green > 0.6f && p.blue < 0.4f -> 'R'
+        p.blue > 0.6f && p.green > 0.6f && p.red < 0.4f -> 'C'
+        p.green > 0.6f && p.red < 0.4f && p.blue < 0.4f -> 'G'
+        p.red > 0.6f && p.green < 0.4f && p.blue > 0.6f -> 'M'
+        p.blue > 0.6f && p.red < 0.4f && p.green < 0.4f -> 'B'
+        p.red > 0.6f && p.green > 0.6f && p.blue > 0.6f -> 'W'
+        p.red < 0.4f && p.green < 0.4f && p.blue < 0.4f -> 'K'
+        else -> '.'
+    }
+
+    @Test
     fun theParentDimsUnderneathThePageAndRestoresAsItLeaves() {
         setup()
         openDetail()
