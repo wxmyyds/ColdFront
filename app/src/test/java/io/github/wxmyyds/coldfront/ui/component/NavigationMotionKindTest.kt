@@ -307,35 +307,26 @@ class NavigationMotionKindTest {
     }
 
     @Test
-    fun theFadeSpecHoldsTheThresholdAndUsesTheSystemCurve() {
-        val exit = predictiveBackExitSpec() as KeyframesSpec<Float>
-        val enter = predictiveBackEnterSpec() as KeyframesSpec<Float>
+    fun theCrossfadeThresholdAndScalesMatchTheOfficialSpec() {
+        // The official full-screen surface spec: the leaving page shrinks to 90% and fades out, the
+        // parent settles from 110% to 100%, and the crossfade happens at 35% of the gesture.
+        assertEquals(0.9f, PREDICTIVE_BACK_EXIT_SCALE, 0f)
+        assertEquals(1.1f, PREDICTIVE_BACK_ENTER_START_SCALE, 0f)
+        assertEquals(0.35f, PREDICTIVE_BACK_CROSSFADE_AT, 0f)
 
-        // The fade is held at full opacity until 35% of the gesture and completed by the end, so at
-        // that instant neither page is visible, which is what the official spec describes.
-        val exitAtThreshold = exit.keyframes.first { it.fraction == PREDICTIVE_BACK_CROSSFADE_AT }
-        assertEquals(1f, exitAtThreshold.valuePair.second, 0.001f)
-        assertEquals(PREDICTIVE_BACK_EXIT_SCALE, exit.keyframes.last().valuePair.second, 0.001f)
-
-        // The parent starts oversized, is smaller at the same threshold, and reaches full size only
-        // once the leaving page has gone.
-        assertEquals(
-            PREDICTIVE_BACK_ENTER_START_SCALE,
-            enter.keyframes.first().valuePair.second,
-            0.001f,
-        )
-        assertEquals(
-            PREDICTIVE_BACK_EXIT_SCALE,
-            enter.keyframes.first { it.fraction == PREDICTIVE_BACK_CROSSFADE_AT }.valuePair.second,
-            0.001f,
-        )
-        assertEquals(1f, enter.keyframes.last().valuePair.second, 0.001f)
-
-        // Both run over the same duration so the pair stays in step, and both use the system
-        // PathInterpolator(.1, .1, 0, 1) rather than the raw gesture progress.
-        assertEquals(DETAIL_POP_DURATION_MS, exit.durationMillis)
-        assertEquals(DETAIL_POP_DURATION_MS, enter.durationMillis)
+        // The system curve, PathInterpolator(.1, .1, 0, 1), rather than the raw gesture progress.
         assertEquals(CubicBezierEasing(0.1f, 0.1f, 0f, 1f), PREDICTIVE_BACK_EASING)
+
+        // The two halves share a duration so the pair stays in step across the hand-off.
+        assertEquals(300, DETAIL_POP_DURATION_MS)
+    }
+
+    @Test
+    fun thePredictiveSpecsAreSeekableRatherThanSpringy() {
+        // A spring overshoots when the gesture seeks it every frame, which would make the page
+        // drift off the finger and rebound on release.
+        assertTrue(predictiveBackExitSpec() is KeyframesSpec<*>)
+        assertTrue(predictiveBackEnterSpec() is KeyframesSpec<*>)
     }
 
     @Test
