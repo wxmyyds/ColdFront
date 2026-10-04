@@ -57,6 +57,9 @@ class PredictiveBackRenderingTest {
     private val selected = mutableIntStateOf(3)
     private val rail = mutableStateOf(false)
     private val rtl = mutableStateOf(false)
+    /** Where the top-level page area sits at rest, so the step-back is measured from it. */
+    private var parentRestX: Float? = null
+    private var parentRestY: Float? = null
     private val dispatcher get() = rule.activity.onBackPressedDispatcher
 
     @Test
@@ -435,6 +438,11 @@ class PredictiveBackRenderingTest {
             }
         }
         rule.waitForIdle()
+        // Recorded while nothing is moving, so the step-back is measured from the page's true resting
+        // position. Capturing it at first assertion instead would bake in whatever shift had already
+        // happened and then assert nothing.
+        parentRestX = centre(parent).x
+        parentRestY = centre(parent).y
         rule.mainClock.autoAdvance = false
     }
 
@@ -555,10 +563,20 @@ class PredictiveBackRenderingTest {
      */
     private fun assertSteppedBack(progress: Float) {
         assertTrue("destination must still be attached", parent.isAttached)
-        val restCentre = centre(viewport).x
+        // Likewise horizontal: with a rail the page area is laid out beside it, so the page's own
+        // rest centre is not the window's. The shift measured from there, not from the centre.
+        val restCentre = parentRestX ?: centre(parent).x
         val expected = restCentre - PARENT_PARALLAX_FRACTION * viewport.size.width * (1f - progress)
         assertEquals("parent must step back a fifth of the width", expected, centre(parent).x, 1.5f)
-        assertEquals("the parent must not move vertically", centre(viewport).y, centre(parent).y, 1f)
+        // Vertical is compared against where the page content actually sits, not the window centre:
+        // the page fills the space the bottom bar leaves, so its vertical centre is legitimately
+        // above the window's. Only a *change* in it would be a bug.
+        assertEquals(
+            "the parent must not move vertically",
+            parentRestY ?: centre(parent).y,
+            centre(parent).y,
+            1f,
+        )
         assertEquals("the parent must not scale", 1f, horizontalScale(parent), 0.002f)
     }
 
