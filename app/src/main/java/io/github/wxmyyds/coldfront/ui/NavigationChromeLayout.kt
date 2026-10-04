@@ -34,12 +34,7 @@ private enum class NavigationSlot { Chrome, Content }
 internal fun rememberChromeVisibility(
     isTopLevelCurrent: Boolean,
     revealByGesture: Boolean,
-): State<Boolean> = rememberUpdatedState(
-    // Combined inside the state, not in the arguments: evaluating `||` here would freeze the
-    // decision at composition time, and on a push the route has not caught up yet, so the bar would
-    // be placed for the frame that shows the detail arriving.
-    isTopLevelCurrent = isTopLevelCurrent || revealByGesture,
-)
+): State<Boolean> = rememberUpdatedState(isTopLevelCurrent || revealByGesture)
 
 /**
  * Draws a scrim over the bar or rail, matching the dimming of the page it belongs to.
