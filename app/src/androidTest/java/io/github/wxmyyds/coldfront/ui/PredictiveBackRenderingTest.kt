@@ -227,9 +227,10 @@ class PredictiveBackRenderingTest {
     @Test
     fun theParentDimsUnderneathThePageAndRestoresAsItLeaves() {
         setup()
-        // At rest the page is covered by the detail, so the parent must already read as dimmed.
-        val dimmed = renderedParentBrightness()
         openDetail()
+        // Sampled only once the push has settled: mid-push the parent is covered by the incoming
+        // page, so nothing of it is on screen to measure yet.
+        val dimmed = renderedParentBrightness()
         gesture(BackEventCompat.EDGE_LEFT)
         var last = dimmed
         for (progress in listOf(0.25f, 0.5f, 0.75f)) {
@@ -270,6 +271,8 @@ class PredictiveBackRenderingTest {
             total += (pixel.red.toInt() + pixel.green.toInt() + pixel.blue.toInt()) / 3
             count++
         }
+        // With no exposed parent yet, the reading would be meaningless; report a saturated value so
+        // the "must brighten" assertion fails loudly instead of silently comparing 0 to 0.
         if (count == 0) return 255
         return total / count
     }
@@ -315,7 +318,10 @@ class PredictiveBackRenderingTest {
                                 }
                             }
                             composable("detail") {
-                                DetailDismissSurface(isDismissible = !active) {
+                                DetailDismissSurface(
+                                    isDismissible = active.not(),
+                                    isLeaving = active.not(),
+                                ) {
                                     Box(Modifier.fillMaxSize().background(Color.Red)
                                         .onGloballyPositioned { detail = it })
                                 }

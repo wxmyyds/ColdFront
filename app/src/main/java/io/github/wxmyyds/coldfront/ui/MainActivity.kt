@@ -381,12 +381,18 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                         }
                     }
                     composable(Routes.SCAN) {
-                        DetailDismissSurface(isDismissible = currentIsDetail) {
+                        DetailDismissSurface(
+                            isDismissible = currentIsDetail,
+                            isLeaving = !currentIsDetail,
+                        ) {
                             AddDeviceScreen(vm, onBack = { nav.popBackStack() })
                         }
                     }
                     composable(Routes.ABOUT) {
-                        DetailDismissSurface(isDismissible = currentIsDetail) {
+                        DetailDismissSurface(
+                            isDismissible = currentIsDetail,
+                            isLeaving = !currentIsDetail,
+                        ) {
                             AboutScreen(onBack = { nav.popBackStack() })
                         }
                     }

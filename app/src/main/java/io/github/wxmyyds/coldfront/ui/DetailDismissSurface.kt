@@ -27,16 +27,31 @@ internal val DetailDismissCornerRadius = 28.dp
  * Only the leading corners are rounded: the trailing edge travels off-screen, so rounding it would
  * be invisible, and a rounded trailing edge is what makes a page look like it shrank rather than
  * moved.
+ *
+ * @param isDismissible whether a back gesture on this page would dismiss it, and so whether this
+ * page should react to the gesture at all. `false` for the page being uncovered: it is not what the
+ * gesture dismisses, but it still has to brighten while the gesture runs.
+ *
+ * @param isLeaving whether a gesture has already dismissed this page, so it is on its way out
+ * rather than being cancelled. This is read from the navigation layer rather than from the gesture
+ * because [androidx.navigationevent.NavigationEventTransitionState] cannot express it: the
+ * dispatcher goes back to `Idle` for a commit and for a cancel alike, so the two are
+ * indistinguishable from progress alone. A leaving page keeps its corner until it is gone; a
+ * cancelled one un-rounds as it slides back.
  */
 @Composable
 internal fun DetailDismissSurface(
     isDismissible: Boolean,
+    isLeaving: Boolean,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
     // Settles rather than tracks: the dispatcher zeroes progress the instant the finger lifts, so
     // a raw read would snap this page square while it was still visibly sliding away.
-    val progress = rememberGestureSettleProgress(isDismissible, settleTo = 1f)
+    val progress = rememberGestureSettleProgress(
+        observeBackGesture = isDismissible,
+        settleTo = if (isLeaving) 1f else 0f,
+    )
     Box(
         modifier
             .fillMaxSize()

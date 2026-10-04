@@ -33,7 +33,7 @@ internal fun ParentScrimSurface(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    val progress = rememberRunningBackProgress(isDismissible = false)
+    val progress = rememberRunningBackProgress(observeBackGesture = true)
     // While a detail covers the page, the scrim is a pure function of the gesture; snap(), not a
     // tween, because easing it would slide the backdrop out of step with the page above it.
     // When nothing covers the page there is nothing to track, so the scrim animates itself out.

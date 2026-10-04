@@ -149,7 +149,7 @@ class NavigationMotionKindTest {
         // The parent's dimming must track the finger exactly, for the same reason the travel does:
         // NavHost has already placed the page correctly this frame, so easing here would desync
         // the page from its own backdrop and the two layers would appear to slide independently.
-        var last = -1f
+        var last = Float.MAX_VALUE
         for (progress in listOf(0f, 0.15f, 0.35f, 0.5f, 0.75f, 1f)) {
             val alpha = parentScrimAlphaForProgress(progress)
             assertTrue("scrim must never exceed its maximum", alpha <= PARENT_SCRIM_ALPHA + 1e-6f)
