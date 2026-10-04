@@ -34,7 +34,9 @@ internal fun DetailDismissSurface(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    val progress = rememberBackGestureProgress(isDismissible)
+    // Settles rather than tracks: the dispatcher zeroes progress the instant the finger lifts, so
+    // a raw read would snap this page square while it was still visibly sliding away.
+    val progress = rememberGestureSettleProgress(isDismissible, settleTo = 1f)
     Box(
         modifier
             .fillMaxSize()
