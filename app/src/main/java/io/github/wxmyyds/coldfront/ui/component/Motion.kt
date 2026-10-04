@@ -64,8 +64,7 @@ internal fun navigationOffset(
     NavigationMotionKind.PushDetail -> if (entering) {
         if (forward) width else -width
     } else {
-        // The parent, exiting as a detail arrives, steps aside by a fifth of the width.
-        parentParallaxOffset(covered = true, width = width)
+        0
     }
     NavigationMotionKind.PopDetail -> 0
 }
