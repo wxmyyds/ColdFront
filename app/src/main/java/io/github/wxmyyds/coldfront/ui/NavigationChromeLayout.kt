@@ -1,7 +1,10 @@
 package io.github.wxmyyds.coldfront.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
@@ -35,16 +38,23 @@ internal fun rememberChromeVisibility(
 /**
  * Dims the bar or rail in step with the page it belongs to.
  *
- * The bar is a sibling of the NavHost rather than a child of the top-level page, so it does not
- * inherit that page's scrim. Without this it would appear at full brightness under a dimmed parent,
- * and being drawn last it would sit on top of the leaving page's own edge. Reading the progress
- * inside the layer block keeps this off the recomposition path entirely.
+ * The chrome is a sibling of the NavHost, so it cannot inherit the top-level page's scrim and has to
+ * be dimmed separately to match. A scrim is drawn *over* the bar rather than fading the bar itself,
+ * for the same reason the page is not faded: lowering the bar's alpha makes it translucent, so the
+ * page underneath shows through and it stops reading as a solid surface - at half progress it all
+ * but disappears into the page behind it.
+ *
+ * @param modifier receives [Modifier.matchParentSize] from the caller's [BoxScope], so the scrim
+ * covers exactly the bar without the bar's own measurement being affected.
  */
-internal fun Modifier.chromeDimming(backProgress: State<Float?>): Modifier =
-    graphicsLayer {
+@Composable
+internal fun ChromeDimming(backProgress: State<Float?>, modifier: Modifier = Modifier) {
+    val scrimColor = MaterialTheme.colorScheme.scrim
+    Box(modifier.background(scrimColor).graphicsLayer {
         val progress = backProgress.value
-        alpha = if (progress == null) 1f else parentScrimAlphaForProgress(progress)
-    }
+        alpha = if (progress == null) 0f else parentScrimAlphaForProgress(progress)
+    })
+}
 
 /**
  * Navigation chrome is a sibling of the full-window transition viewport, not its size owner.
@@ -56,23 +66,24 @@ internal fun Modifier.chromeDimming(backProgress: State<Float?>): Modifier =
  * of what is being revealed. Only MAIN consumes [PaddingValues]; detail destinations and the NavHost
  * always keep the same bounds and transform centre.
  *
- * @param chromeDimming applied to the bar or rail itself. The chrome is a sibling of the NavHost, so
- * it cannot inherit the top-level page's scrim and has to be dimmed separately to match.
+ * @param chromeDimming drawn over the bar or rail. The chrome is a sibling of the NavHost, so it
+ * cannot inherit the top-level page's scrim and has to be dimmed separately to match.
  */
 @Composable
 internal fun NavigationChromeLayout(
     useRail: Boolean,
     showNavigation: Boolean,
     modifier: Modifier = Modifier,
-    chromeDimming: Modifier = Modifier,
+    chromeDimming: @Composable BoxScope.() -> Unit = {},
     navigation: @Composable () -> Unit,
     content: @Composable (PaddingValues) -> Unit,
 ) {
     SubcomposeLayout(modifier) { constraints ->
-        // Box wraps its content, so the bar keeps the size its own constraints give it here; the
-        // wrapper only exists to carry the dimming layer.
         val chrome = subcompose(NavigationSlot.Chrome) {
-            Box(Modifier.then(chromeDimming)) { navigation() }
+            Box {
+                navigation()
+                chromeDimming()
+            }
         }.map {
             it.measure(
                 constraints.copy(

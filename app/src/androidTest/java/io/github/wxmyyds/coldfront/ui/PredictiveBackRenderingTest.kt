@@ -255,9 +255,11 @@ class PredictiveBackRenderingTest {
         val barRow = (barPixelsNow.height - chromeHeightPx() / 2).coerceIn(0, barPixelsNow.height - 1)
         val barColumn = (renderedTravelX() / 2).coerceIn(0, barPixelsNow.width - 1)
         val barPixel = barPixelsNow[barColumn, barRow]
+        // Still recognisably the bar - a faded bar would blend into the parent behind it and read
+        // as green, which is precisely the bug this asserts against.
         assertTrue(
             "the bar must be on screen during the return (r=${barPixel.red} g=${barPixel.green} b=${barPixel.blue})",
-            barPixel.blue > 0.4f && barPixel.red < 0.4f,
+            barPixel.blue > 0.3f && barPixel.green > 0.3f && barPixel.red < barPixel.green,
         )
 
         // The bar's own footprint must be dimmed too. The parent is laid out with chrome padding
@@ -322,7 +324,7 @@ class PredictiveBackRenderingTest {
                     NavigationChromeLayout(
                         useRail = rail.value,
                         showNavigation = chromeVisible.value,
-                        chromeDimming = Modifier.chromeDimming(backProgress),
+                        chromeDimming = { ChromeDimming(backProgress, matchParentSize()) },
                         modifier = Modifier.fillMaxSize().background(Color.Blue).testTag("viewport")
                             .onGloballyPositioned { viewport = it },
                         navigation = {
