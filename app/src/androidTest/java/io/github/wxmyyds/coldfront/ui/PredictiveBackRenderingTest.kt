@@ -226,7 +226,7 @@ class PredictiveBackRenderingTest {
     }
 
     @Test
-    fun theBarStaysWithTheTopLevelPageAcrossAPushAndAPop() {
+    fun theBarBelongsToTheTopLevelPageAndNeverCoversADetail() {
         setup()
         rule.runOnIdle {
             assertTrue(
@@ -234,33 +234,25 @@ class PredictiveBackRenderingTest {
                 rule.onAllNodesWithTag("chrome").fetchSemanticsNodes().isNotEmpty(),
             )
         }
-        // Push a detail while a gesture is running. The finger-down that opens a detail is reported
-        // by the platform exactly like a back gesture, so treating "a back gesture is running" as
-        // "a top-level page is coming back" would place the bar here - and since the chrome slot is
-        // drawn after the NavHost, it would sit on top of the page being pushed in.
-        rule.runOnUiThread {
-            dispatcher.dispatchOnBackStarted(BackEventCompat(0f, 400f, 0f, BackEventCompat.EDGE_LEFT))
-            nav.navigate("detail")
-        }
-        frames(48)
+        // A push settles before anything else happens: the finger-down that opens a detail is a
+        // gesture the platform reports, but it ends before the page arrives, and nothing about the
+        // back stack has changed underneath.
+        openDetail()
         rule.runOnIdle {
             assertEquals("detail", nav.currentDestination?.route)
             assertTrue(
-                "the bar must not appear over a detail page being pushed in",
+                "the bar must not sit on top of a detail page",
                 rule.onAllNodesWithTag("chrome").fetchSemanticsNodes().isEmpty(),
             )
         }
-        // And once the detail is up, the bar stays off it.
-        rule.runOnUiThread { dispatcher.dispatchOnBackCancelled() }
-        frames(800)
+        // The bar returns with the page it belongs to, during the gesture rather than after it.
+        gesture(BackEventCompat.EDGE_LEFT)
         rule.runOnIdle {
-            assertEquals("detail", nav.currentDestination?.route)
             assertTrue(
-                "the bar must stay hidden on a detail page",
-                rule.onAllNodesWithTag("chrome").fetchSemanticsNodes().isEmpty(),
+                "the bar must appear while the return uncovers the top-level page",
+                rule.onAllNodesWithTag("chrome").fetchSemanticsNodes().isNotEmpty(),
             )
         }
-        // Coming back, the bar belongs to the page being uncovered and must reappear.
         commitAndCheck()
         rule.runOnIdle {
             assertTrue(
