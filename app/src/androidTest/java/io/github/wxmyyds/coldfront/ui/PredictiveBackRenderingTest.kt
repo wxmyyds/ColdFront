@@ -2,6 +2,8 @@ package io.github.wxmyyds.coldfront.ui
 
 import androidx.activity.BackEventCompat
 import androidx.activity.ComponentActivity
+import androidx.compose.animation.core.TargetBasedAnimation
+import androidx.compose.animation.core.VectorConverter
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -33,7 +35,10 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import io.github.wxmyyds.coldfront.ui.component.predictiveBackEnterSpec
+import io.github.wxmyyds.coldfront.ui.component.predictiveBackScaleSpec
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -62,7 +67,24 @@ class PredictiveBackRenderingTest {
             progress(progress, BackEventCompat.EDGE_LEFT)
             assertCentred(parent)
             assertCentred(detail)
+            val playTime = (progress * 300_000_000L).toLong()
+            val scale = predictiveBackScaleSpec()
+            assertEquals(
+                TargetBasedAnimation(scale, Float.VectorConverter, 1.1f, 1f).getValueFromNanos(playTime),
+                horizontalScale(parent), 0.004f,
+            )
+            assertEquals(
+                TargetBasedAnimation(scale, Float.VectorConverter, 1f, 0.9f).getValueFromNanos(playTime),
+                horizontalScale(detail), 0.004f,
+            )
             assertSymmetricEdges()
+            val edge = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
+            val expectedAlpha = TargetBasedAnimation(
+                predictiveBackEnterSpec(), Float.VectorConverter, 0f, 1f,
+            ).getValueFromNanos(playTime)
+            // The detail has shrunk away from this edge. Green over blue directly measures the
+            // parent's actual rendered alpha, catching the old scale-values-fed-to-fade bug.
+            assertEquals(expectedAlpha, edge[(edge.width * 0.01f).toInt(), edge.height / 2].green, 0.04f)
         }
         rule.runOnUiThread { dispatcher.dispatchOnBackCancelled() }
         frames(600)
@@ -70,6 +92,7 @@ class PredictiveBackRenderingTest {
             assertEquals("detail", nav.currentDestination?.route)
             assertCentred(detail)
             assertEquals(1f, horizontalScale(detail), 0.002f)
+            assertFalse("cancel must remove the preview parent", parent.isAttached)
         }
         // Repeated gestures use the same input owner; release must continue, not replay a pop.
         gesture(BackEventCompat.EDGE_RIGHT)
@@ -227,6 +250,7 @@ class PredictiveBackRenderingTest {
         rule.runOnIdle {
             assertEquals("root", nav.currentDestination?.route)
             assertEquals(1f, horizontalScale(parent), 0.002f)
+            assertFalse("commit must remove the outgoing detail", detail.isAttached)
         }
     }
 
