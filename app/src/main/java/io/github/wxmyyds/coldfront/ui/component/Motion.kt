@@ -111,7 +111,16 @@ internal const val TOP_LEVEL_PAGE_DURATION_MS = 300
 @Suppress("UNUSED_PARAMETER")
 internal fun topLevelPageDuration(routeDistance: Int): Int = TOP_LEVEL_PAGE_DURATION_MS
 
-internal const val DETAIL_POP_DURATION_MS = 300
+/**
+ * Duration of the settle that follows releasing the gesture.
+ *
+ * This is not the speed of the drag itself: while the finger is down, NavHost seeks the transition
+ * with the raw gesture progress, so the page tracks the finger exactly and this value has no
+ * effect on it. It governs only how long the page takes to reach its destination after release -
+ * either completing the return or sliding back - and 200ms keeps that hand-off quick without
+ * feeling abrupt, matching the system's predictive-back spring (stiffness 1600, damping 1.0).
+ */
+internal const val DETAIL_POP_DURATION_MS = 200
 
 /**
  * Travel of the leaving page as a function of gesture progress.
