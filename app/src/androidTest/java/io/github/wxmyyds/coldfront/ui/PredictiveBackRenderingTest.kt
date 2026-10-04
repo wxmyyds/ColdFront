@@ -17,11 +17,9 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
@@ -52,7 +50,6 @@ class PredictiveBackRenderingTest {
     private lateinit var parent: LayoutCoordinates
     private lateinit var detail: LayoutCoordinates
     private lateinit var selectedTab: LayoutCoordinates
-    private var chromeBounds: Rect? = null
     private val selected = mutableIntStateOf(3)
     private val rail = mutableStateOf(false)
     private val rtl = mutableStateOf(false)
@@ -252,23 +249,22 @@ class PredictiveBackRenderingTest {
         }
         // The bar belongs to the top-level page, so it must already be on screen *during* the
         // return - hidden until the pop commits, it would appear only after the gesture finished.
-        // Compared against the same strip once the pop is done and the bar is lit: a dimmed bar
-        // reads darker than a lit one, and that difference is the only thing asserted here, so the
-        // test does not depend on what colour the bar happens to be drawn in.
+        // Located by scanning for the bar's own colour rather than by assuming a row, and compared
+        // against the same reading once the pop is done and the bar is lit.
         progress(0.5f, BackEventCompat.EDGE_LEFT)
-        val duringStrip = sampleBottomStrip()
+        val during = dimmestCyanInBarStrip()
+        assertTrue("the bar must be on screen during the return", during >= 0)
         commitAndCheck()
-        val litStrip = sampleBottomStrip()
-        assertTrue(
-            "the bar must be dimmed during the return (during=$duringStrip, lit=$litStrip)",
-            duringStrip.all { it < litStrip.max() - 8 },
-        )
-        // The top-level page is back with no scrim, so the bar strip is at its resting brightness.
+        val lit = dimmestCyanInBarStrip()
         assertEquals(
             "the bar must be fully lit once the detail is gone",
             255.0,
-            litStrip.max().toDouble(),
+            lit.toDouble(),
             2.0,
+        )
+        assertTrue(
+            "the bar must be dimmed during the return (during=$during, lit=$lit)",
+            during < lit - 8,
         )
     }
 
@@ -280,17 +276,28 @@ class PredictiveBackRenderingTest {
      * averaging RGB cannot tell "dimmed green" from "nothing drawn here", which is what made an
      * earlier version of this test report a meaningless 0.
      */
-    /** Brightness of the bottom bar strip at three points across it, from rendered pixels. */
-    private fun sampleBottomStrip(): List<Int> {
+    /**
+     * Brightness of the dimmest cyan pixel found in the bottom strip, or -1 if there is none.
+     *
+     * Scans for the bar instead of assuming where it is: rows guessed from the nominal 80dp landed
+     * above the bar and measured the page behind it, which made the readings identical whether the
+     * bar was present or not. Cyan survives dimming - a dimmed cyan keeps a high blue channel and
+     * no red - so it can be told apart from both the green parent and a grey scrim.
+     */
+    private fun dimmestCyanInBarStrip(): Int {
         val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
-        val chrome = chromeBounds ?: return List(3) { -1 }
-        // A row well inside the bar's own bounds: the topmost row can be an antialiased edge, and
-        // one pixel above it is the page rather than the bar.
-        val row = (chrome.center.y).toInt().coerceIn(0, pixels.height - 1)
-        return listOf(0.15f, 0.35f, 0.5f).map { fraction ->
-            val x = (pixels.width * fraction).toInt().coerceIn(0, pixels.width - 1)
-            (pixels[x, row].red * 255f).toInt()
+        val from = (pixels.height * 3 / 4).coerceIn(0, pixels.height - 1)
+        var dimmest = -1
+        for (y in from until pixels.height) {
+            for (x in 0 until pixels.width step 8) {
+                val pixel = pixels[x, y]
+                if (pixel.blue > 0.5f && pixel.red < 0.3f && pixel.green > 0.3f) {
+                    val brightness = (pixel.red.toInt() + pixel.green + pixel.blue.toInt()) / 3
+                    if (dimmest < 0 || brightness < dimmest) dimmest = brightness
+                }
+            }
         }
+        return dimmest
     }
 
     private fun renderedParentBrightness(): Int {
@@ -323,8 +330,7 @@ class PredictiveBackRenderingTest {
                         navigation = {
                             Box(
                                 (if (rail.value) Modifier.width(80.dp).fillMaxHeight()
-                                else Modifier.fillMaxWidth().height(80.dp)).background(Color.Cyan)
-                                    .onGloballyPositioned { chromeBounds = it.boundsInRoot() },
+                                else Modifier.fillMaxWidth().height(80.dp)).background(Color.Cyan),
                             )
                         },
                     ) { chromePadding ->
