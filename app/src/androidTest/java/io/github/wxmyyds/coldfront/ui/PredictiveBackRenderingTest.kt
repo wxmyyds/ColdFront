@@ -53,6 +53,8 @@ class PredictiveBackRenderingTest {
     private lateinit var parent: LayoutCoordinates
     private lateinit var detail: LayoutCoordinates
     private lateinit var selectedTab: LayoutCoordinates
+    /** Where the top-level destination was laid out, so later frames can be compared against it. */
+    private var parentRest: Offset? = null
     private val selected = mutableIntStateOf(3)
     private val rail = mutableStateOf(false)
     private val rtl = mutableStateOf(false)
