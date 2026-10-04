@@ -392,8 +392,9 @@ class PredictiveBackRenderingTest {
 
     @Composable
     private fun RootPage(isActive: Boolean) {
-        Box(Modifier.fillMaxSize().background(Color.Green)
-            .onGloballyPositioned { parent = it }) {
+        // `parent` must be the whole MAIN destination, not just the page area within it: the bar is
+        // now a sibling of that area, and the assertions are about the destination staying put.
+        Box(Modifier.fillMaxSize().onGloballyPositioned { parent = it }) {
             PrimaryPageStrip(
                 pageCount = 4,
                 selectedPage = selected.intValue,
