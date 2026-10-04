@@ -123,7 +123,7 @@ internal fun topLevelPageDuration(routeDistance: Int): Int = TOP_LEVEL_PAGE_DURA
 internal const val DETAIL_POP_DURATION_MS = 200
 
 /**
- * Opacity of the scrim that dims the parent while a detail page sits on top of it.
+ * Opacity of the black scrim that dims the top-level page while a detail page covers it.
  *
  * The parent must read as *background*, which means darker than its own resting appearance rather
  * than merely faded: fading it would let whatever is behind the NavHost show through and would
@@ -135,12 +135,11 @@ internal const val PARENT_SCRIM_ALPHA = 0.32f
 internal const val PARENT_SCRIM_DURATION_MS = 300
 
 /**
- * Scrim opacity for a given back-gesture progress, where `0f` is a fully dimmed parent and `1f` a
- * fully restored one.
+ * How strongly a top-level page - its content *and* its navigation bar - is dimmed right now.
  *
- * Linear in progress so the parent's brightness tracks the finger exactly, matching the leaving
- * page's own travel: at progress 0.5 the page has crossed half the screen and the parent is half
- * restored. Kept as a pure function so the curve can be sampled in a plain JVM test.
+ * `0f` means the page is at full brightness, [PARENT_SCRIM_ALPHA] means fully dimmed. Linear in
+ * gesture progress, so the parent brightens exactly as fast as the page above it slides away and
+ * one finger drives both. Kept as a pure function so the curve can be sampled in a JVM test.
  */
 internal fun parentScrimAlphaForProgress(progress: Float): Float =
     PARENT_SCRIM_ALPHA * (1f - progress.coerceIn(0f, 1f))

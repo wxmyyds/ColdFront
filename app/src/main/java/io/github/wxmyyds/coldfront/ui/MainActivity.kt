@@ -288,13 +288,22 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
     // Keep one NavHost at the same composition location across window resizing.
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val useRail = maxWidth >= 600.dp
-        // The bar and the rail are primary navigation, so they belong only to a top-level page.
-        // A null route means the back stack has not emitted yet, which is the first frame of a cold
-        // start. The graph's start destination is a top-level page, so resolve to it instead of
-        // hiding the bar for a frame and revealing it afterwards.
-        val showPrimaryNavigation = showsPrimaryNavigation(
+        // The bar belongs to the top-level page, so it must be visible whenever that page is the
+        // one on screen - including while a back gesture is uncovering it. The route alone cannot
+        // answer that: during the drag the current destination is still the detail page, and the
+        // route only becomes top-level once the pop commits, which would hide the bar for the whole
+        // gesture and pop it in at the end instead of revealing it under the leaving page.
+        // Which layer is current, from the route alone. A null route means the back stack has not
+        // emitted yet, which is the first frame of a cold start; the graph's start destination is a
+        // top-level page, so resolve to it rather than treating the frame as "no page".
+        val topLevelIsCurrent = showsPrimaryNavigation(
             currentRoute ?: NavHostStartDestination,
             navTopLevelRouteSet,
+        )
+        val backProgress = rememberRunningBackProgress(observeBackGesture = true)
+        val showPrimaryNavigation = rememberChromeVisibility(
+            isTopLevelCurrent = topLevelIsCurrent,
+            backProgress = backProgress,
         )
         // True while a detail page is the one being dismissed, i.e. the gesture pops back onto a
         // top-level page. Resolved from the navigation layer, so any future detail page is covered
@@ -305,7 +314,8 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
         )
         NavigationChromeLayout(
             useRail = useRail,
-            showNavigation = showPrimaryNavigation,
+            showNavigation = showPrimaryNavigation.value,
+            chromeDimming = chromeDimming(backProgress),
             modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
             navigation = {
                 if (!useRail) {
@@ -368,14 +378,14 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                         // strip the bar occupies as well as the page's own content. Dimming only the
                         // padded content left the bar's footprint bright, which is visible for the
                         // whole gesture and made the parent look half-dimmed.
-                        ParentScrimSurface(isCovered = showPrimaryNavigation.not()) {
+                        ParentScrimSurface(isCovered = !topLevelIsCurrent) {
                             // Reserve chrome in the parent itself, even while a detail is on top.
                             // The NavHost viewport never resizes when the bar/rail is placed on commit.
                             Box(Modifier.fillMaxSize().padding(primaryPadding).consumeWindowInsets(primaryPadding)) {
                                 TopLevelPager(
                                     vm = vm,
                                     settings = settings,
-                                    isActive = showPrimaryNavigation,
+                                    isActive = topLevelIsCurrent,
                                     selectedPage = selectedPage.intValue,
                                     onSelectPage = { selectedPage.intValue = it },
                                     onOpenScan = { nav.navigate(Routes.SCAN) { launchSingleTop = true } },

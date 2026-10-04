@@ -247,6 +247,19 @@ class PredictiveBackRenderingTest {
             )
             last = brightness
         }
+        // The bar belongs to the top-level page, so it must already be on screen *during* the
+        // return - hidden until the pop commits, it would appear only after the gesture finished.
+        // It is cyan, so its blue channel distinguishes it from the green parent beneath it.
+        progress(0.5f, BackEventCompat.EDGE_LEFT)
+        val barPixelsNow = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
+        val barRow = (barPixelsNow.height - chromeHeightPx() / 2).coerceIn(0, barPixelsNow.height - 1)
+        val barColumn = (renderedTravelX() / 2).coerceIn(0, barPixelsNow.width - 1)
+        val barPixel = barPixelsNow[barColumn, barRow]
+        assertTrue(
+            "the bar must be on screen during the return (r=${barPixel.red} g=${barPixel.green} b=${barPixel.blue})",
+            barPixel.blue > 0.4f && barPixel.red < 0.4f,
+        )
+
         // The bar's own footprint must be dimmed too. The parent is laid out with chrome padding
         // reserved at the bottom, and a scrim applied inside that padding would leave this strip at
         // full brightness for the whole gesture - the parent would look half-dimmed.
@@ -301,9 +314,15 @@ class PredictiveBackRenderingTest {
                     nav = rememberNavController()
                     val entry by nav.currentBackStackEntryAsState()
                     val active = (entry?.destination?.route ?: "root") == "root"
+                    val backProgress = rememberRunningBackProgress(observeBackGesture = true)
+                    val chromeVisible = rememberChromeVisibility(
+                        isTopLevelCurrent = active,
+                        backProgress = backProgress,
+                    )
                     NavigationChromeLayout(
                         useRail = rail.value,
-                        showNavigation = active,
+                        showNavigation = chromeVisible.value,
+                        chromeDimming = chromeDimming(backProgress),
                         modifier = Modifier.fillMaxSize().background(Color.Blue).testTag("viewport")
                             .onGloballyPositioned { viewport = it },
                         navigation = {
