@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import io.github.wxmyyds.coldfront.ui.component.PARENT_PARALLAX_FRACTION
 import io.github.wxmyyds.coldfront.ui.component.parentScrimAlphaForProgress
 
 /**
@@ -43,7 +44,28 @@ internal fun ParentScrimSurface(
         animationSpec = if (isCovered) snap() else tween(PARENT_SCRIM_SETTLE_MS),
         label = "parentScrimAlpha",
     )
-    Box(modifier.fillMaxSize()) {
+    // How far this page has stepped back, 1f when a detail fully covers it.
+    //
+    // Applied as a graphics layer rather than as a NavHost transition on purpose. The transition
+    // API was tried first and is wrong here: an exit offset is retained by Compose and re-applied
+    // when the push is interrupted, which slid the parent over the page being dragged and made it
+    // vanish mid-gesture. A layer here also keeps the parent exactly in place at rest, so repeated
+    // push/pop cycles cannot accumulate a drift.
+    val stepBack by animateFloatAsState(
+        // 1f while a detail covers this page, easing to 0 as a gesture uncovers it. The route only
+        // reports the cover once the push has finished, so before that the page reads as uncovered
+        // and animates in - which is exactly the step-back a push should produce.
+        targetValue = if (isCovered) 1f - (progress.value ?: 0f) else 0f,
+        // While a gesture uncovers the page the value is already right for this frame; any easing
+        // would be applied on top of the finger. On a push nothing is moving the page, so it eases.
+        animationSpec = if (progress.value != null) snap() else tween(PARENT_STEP_BACK_MS),
+        label = "parentStepBack",
+    )
+    Box(
+        modifier.fillMaxSize().graphicsLayer {
+            translationX = -size.width * PARENT_PARALLAX_FRACTION * stepBack
+        },
+    ) {
         content()
         Box(
             Modifier.fillMaxSize()
@@ -57,3 +79,6 @@ internal fun ParentScrimSurface(
 
 /** How long the scrim takes to appear or clear when no gesture is driving it. */
 private const val PARENT_SCRIM_SETTLE_MS = 200
+
+/** How long the parent takes to step back when a detail arrives, and to return. */
+private const val PARENT_STEP_BACK_MS = 300

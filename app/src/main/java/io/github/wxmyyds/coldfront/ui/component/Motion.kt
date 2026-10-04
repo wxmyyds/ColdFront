@@ -64,6 +64,10 @@ internal fun navigationOffset(
     NavigationMotionKind.PushDetail -> if (entering) {
         if (forward) width else -width
     } else {
+        // Only ever the parent stepping aside under a push. Returning 0 here rather than the
+        // parallax is deliberate: NavHost consults this same exit when a push is interrupted, and
+        // moving the parent then slid it over the page being dragged, which made the detail
+        // disappear from the screen mid-gesture.
         0
     }
     NavigationMotionKind.PopDetail -> 0
