@@ -29,7 +29,6 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -225,6 +224,56 @@ class PredictiveBackRenderingTest {
         )
     }
 
+    @Test
+    fun theParentDimsUnderneathThePageAndRestoresAsItLeaves() {
+        setup()
+        // At rest the page is covered by the detail, so the parent must already read as dimmed.
+        val dimmed = renderedParentBrightness()
+        openDetail()
+        gesture(BackEventCompat.EDGE_LEFT)
+        var last = dimmed
+        for (progress in listOf(0.25f, 0.5f, 0.75f)) {
+            progress(progress, BackEventCompat.EDGE_LEFT)
+            val brightness = renderedParentBrightness()
+            assertTrue(
+                "parent must brighten as the page leaves (progress=$progress, $brightness)",
+                brightness > last,
+            )
+            last = brightness
+        }
+        // A cancelled gesture must put the parent's brightness back exactly where it started,
+        // not leave it half restored.
+        rule.runOnUiThread { dispatcher.dispatchOnBackCancelled() }
+        frames(600)
+        assertEquals(
+            "cancel must restore the parent's brightness",
+            dimmed.toFloat(),
+            renderedParentBrightness().toFloat(),
+            2f,
+        )
+    }
+
+    /**
+     * Brightness of the exposed strip of parent, from rendered pixels.
+     *
+     * Sampled in the region the page has vacated, i.e. left of its leading edge, which is the only
+     * place the parent is visible during the gesture.
+     */
+    private fun renderedParentBrightness(): Int {
+        val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
+        val travel = renderedTravelX()
+        val y = pixels.height / 2
+        var total = 0
+        var count = 0
+        for (x in 0 until travel - 4) {
+            val pixel = pixels[x, y]
+            total += (pixel.red.toInt() + pixel.green.toInt() + pixel.blue.toInt()) / 3
+            count++
+        }
+        if (count == 0) return 255
+        return total / count
+    }
+
     private fun setup() {
         rule.setContent {
             CompositionLocalProvider(
@@ -248,18 +297,20 @@ class PredictiveBackRenderingTest {
                     ) { chromePadding ->
                         AppNavHost(nav, "root", setOf("root"), predictiveBack = true) {
                             composable("root") {
-                                Box(Modifier.fillMaxSize().background(Color.Green)
-                                    .onGloballyPositioned { parent = it }) {
-                                    PrimaryPageStrip(
-                                        pageCount = 4,
-                                        selectedPage = selected.intValue,
-                                        isActive = active,
-                                        onSelectPage = { selected.intValue = it },
-                                        modifier = Modifier.padding(chromePadding),
-                                    ) { index ->
-                                        Box(Modifier.fillMaxSize()
-                                            .background(if (index == selected.intValue) Color.Green else Color.Magenta)
-                                            .onGloballyPositioned { if (index == selected.intValue) selectedTab = it })
+                                ParentScrimSurface(isCovered = !active) {
+                                    Box(Modifier.fillMaxSize().background(Color.Green)
+                                        .onGloballyPositioned { parent = it }) {
+                                        PrimaryPageStrip(
+                                            pageCount = 4,
+                                            selectedPage = selected.intValue,
+                                            isActive = active,
+                                            onSelectPage = { selected.intValue = it },
+                                            modifier = Modifier.padding(chromePadding),
+                                        ) { index ->
+                                            Box(Modifier.fillMaxSize()
+                                                .background(if (index == selected.intValue) Color.Green else Color.Magenta)
+                                                .onGloballyPositioned { if (index == selected.intValue) selectedTab = it })
+                                        }
                                     }
                                 }
                             }

@@ -123,6 +123,29 @@ internal fun topLevelPageDuration(routeDistance: Int): Int = TOP_LEVEL_PAGE_DURA
 internal const val DETAIL_POP_DURATION_MS = 200
 
 /**
+ * Opacity of the scrim that dims the parent while a detail page sits on top of it.
+ *
+ * The parent must read as *background*, which means darker than its own resting appearance rather
+ * than merely faded: fading it would let whatever is behind the NavHost show through and would
+ * look lighter, not dimmer. A scrim colour is used so this darkens correctly in both themes.
+ */
+internal const val PARENT_SCRIM_ALPHA = 0.32f
+
+/** How long the parent takes to dim as a detail page arrives over it. */
+internal const val PARENT_SCRIM_DURATION_MS = 300
+
+/**
+ * Scrim opacity for a given back-gesture progress, where `0f` is a fully dimmed parent and `1f` a
+ * fully restored one.
+ *
+ * Linear in progress so the parent's brightness tracks the finger exactly, matching the leaving
+ * page's own travel: at progress 0.5 the page has crossed half the screen and the parent is half
+ * restored. Kept as a pure function so the curve can be sampled in a plain JVM test.
+ */
+internal fun parentScrimAlphaForProgress(progress: Float): Float =
+    PARENT_SCRIM_ALPHA * (1f - progress.coerceIn(0f, 1f))
+
+/**
  * Travel of the leaving page as a function of gesture progress.
  *
  * The page must track the finger, so this is deliberately linear in progress with no easing: at

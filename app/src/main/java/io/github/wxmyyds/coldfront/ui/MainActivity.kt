@@ -367,15 +367,17 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                         // Reserve chrome in the parent itself, even while a detail is on top.
                         // The NavHost viewport never resizes when the bar/rail is placed on commit.
                         Box(Modifier.fillMaxSize().padding(primaryPadding).consumeWindowInsets(primaryPadding)) {
-                            TopLevelPager(
-                                vm = vm,
-                                settings = settings,
-                                isActive = showPrimaryNavigation,
-                                selectedPage = selectedPage.intValue,
-                                onSelectPage = { selectedPage.intValue = it },
-                                onOpenScan = { nav.navigate(Routes.SCAN) { launchSingleTop = true } },
-                                onOpenAbout = { nav.navigate(Routes.ABOUT) { launchSingleTop = true } },
-                            )
+                            ParentScrimSurface(isCovered = showPrimaryNavigation.not()) {
+                                TopLevelPager(
+                                    vm = vm,
+                                    settings = settings,
+                                    isActive = showPrimaryNavigation,
+                                    selectedPage = selectedPage.intValue,
+                                    onSelectPage = { selectedPage.intValue = it },
+                                    onOpenScan = { nav.navigate(Routes.SCAN) { launchSingleTop = true } },
+                                    onOpenAbout = { nav.navigate(Routes.ABOUT) { launchSingleTop = true } },
+                                )
+                            }
                         }
                     }
                     composable(Routes.SCAN) {

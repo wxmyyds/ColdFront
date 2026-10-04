@@ -143,4 +143,31 @@ class NavigationMotionKindTest {
             NavigationMotionKind.PopDetail, false, TestMotionScheme, 1,
         ))
     }
+
+    @Test
+    fun theParentBrightensInStepWithTheLeavingPage() {
+        // The parent's dimming must track the finger exactly, for the same reason the travel does:
+        // NavHost has already placed the page correctly this frame, so easing here would desync
+        // the page from its own backdrop and the two layers would appear to slide independently.
+        var last = -1f
+        for (progress in listOf(0f, 0.15f, 0.35f, 0.5f, 0.75f, 1f)) {
+            val alpha = parentScrimAlphaForProgress(progress)
+            assertTrue("scrim must never exceed its maximum", alpha <= PARENT_SCRIM_ALPHA + 1e-6f)
+            assertTrue("scrim must stay non-negative", alpha >= 0f)
+            assertTrue("scrim must brighten as the page leaves", alpha <= last + 1e-6f)
+            assertEquals(
+                "scrim must match the page's own progress at $progress",
+                PARENT_SCRIM_ALPHA * (1f - progress),
+                alpha,
+                1e-5f,
+            )
+            last = alpha
+        }
+        // A covered parent at rest is dimmed, and a fully returned one is exactly untouched.
+        assertEquals(PARENT_SCRIM_ALPHA, parentScrimAlphaForProgress(0f), 1e-5f)
+        assertEquals(0f, parentScrimAlphaForProgress(1f), 1e-5f)
+        // Out-of-range gesture values must not be able to invert or overshoot the effect.
+        assertEquals(0f, parentScrimAlphaForProgress(1.4f), 1e-5f)
+        assertEquals(PARENT_SCRIM_ALPHA, parentScrimAlphaForProgress(-0.3f), 1e-5f)
+    }
 }
