@@ -18,7 +18,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Pixel
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -186,7 +185,7 @@ class PredictiveBackRenderingTest {
             progress(progress, BackEventCompat.EDGE_LEFT)
             val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
             // The corner is cut relative to the page's rendered leading edge, which has moved.
-            val inset = renderedTravelX { it.red > 0.9f } + (radius * progress).toInt()
+            val inset = renderedTravelX() + (radius * progress).toInt()
             assertTrue(
                 "corner must be cut at progress $progress (x=$inset)",
                 inset < pixels.width && pixels[inset, inset].green > 0.5f,
@@ -319,7 +318,7 @@ class PredictiveBackRenderingTest {
         assertEquals(
             "$message (expected ${expectedPixels}px)",
             expectedPixels.toFloat(),
-            renderedTravelX { it.red > 0.9f }.toFloat(),
+            renderedTravelX().toFloat(),
             3f,
         )
     }
@@ -331,11 +330,11 @@ class PredictiveBackRenderingTest {
      * translation, so it cannot see this slide at all. The first column that is still the page's
      * own colour is the page's leading edge, which is what actually moves on screen.
      */
-    private fun renderedTravelX(pageIsRed: (Pixel) -> Boolean): Int {
+    private fun renderedTravelX(): Int {
         val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
         val y = pixels.height / 2
         for (x in 0 until pixels.width) {
-            if (pageIsRed(pixels[x, y])) return x
+            if (pixels[x, y].red > 0.9f) return x
         }
         return pixels.width
     }
