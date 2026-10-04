@@ -73,11 +73,13 @@ class PredictiveBackRenderingTest {
             assertTravel("page must track the finger at $progress", (progress * width).toInt())
             // The page must still be covering most of the screen, and the parent visible beside
             // it, so the two layers read as stacked rather than cross-faded.
+            // Rendered coverage, not layout width: the slide is a graphics-layer transform, so
+            // the page's layout width never changes while it visibly shrinks on screen.
             assertEquals(
                 "the page must still cover most of the screen",
                 (1f - progress) * width,
-                detail.size.width.toFloat(),
-                2f,
+                renderedPageWidth().toFloat(),
+                4f,
             )
             // The parent's left edge is genuinely uncovered at this progress.
             val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
@@ -184,17 +186,24 @@ class PredictiveBackRenderingTest {
         for (progress in listOf(0.25f, 0.5f, 0.75f)) {
             progress(progress, BackEventCompat.EDGE_LEFT)
             val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
-            // The corner is cut relative to the page's rendered leading edge, which has moved.
-            val inset = renderedTravelX() + (radius * progress).toInt()
+            val travel = renderedTravelX()
+            val corner = (radius * progress).toInt()
+            // Sample the very top row: a rounded corner's leftmost extent sits one full radius in
+            // from the page's leading edge, whereas mid-height it sits at the edge itself. Using
+            // one pixel diagonally would land deep inside the page and prove nothing.
             assertTrue(
-                "corner must be cut at progress $progress (x=$inset)",
-                inset < pixels.width && pixels[inset, inset].green > 0.5f,
+                "corner must be cut at progress $progress (travel=$travel, r=$corner)",
+                corner > 0 && pixels[travel + 1, 0].green > 0.5f,
             )
-            // Well inside the page it is still the page itself, so it is clipped, not tinted.
-            val inside = (inset + (radius * 2).toInt()).coerceAtMost(pixels.width - 1)
+            // One radius in, along the top edge, the page is present again.
             assertTrue(
-                "page interior must stay opaque at progress $progress",
-                pixels[inside, pixels.height / 2].red > 0.9f,
+                "page must be present one radius in at progress $progress",
+                pixels[(travel + corner + 2).coerceAtMost(pixels.width - 1), 0].red > 0.9f,
+            )
+            // Mid-height the page is not clipped at all.
+            assertTrue(
+                "page must be unclipped mid-height at progress $progress",
+                pixels[travel, pixels.height / 2].red > 0.9f,
             )
         }
         // Releasing restores the rectangular page rather than leaving a rounded shell behind.
@@ -337,6 +346,17 @@ class PredictiveBackRenderingTest {
             if (pixels[x, y].red > 0.9f) return x
         }
         return pixels.width
+    }
+
+    /** How much of the viewport the page still covers, measured from rendered pixels. */
+    private fun renderedPageWidth(): Int {
+        val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
+        val y = pixels.height / 2
+        var count = 0
+        for (x in 0 until pixels.width) {
+            if (pixels[x, y].red > 0.9f) count++
+        }
+        return count
     }
 
     private fun horizontalScale(coordinates: LayoutCoordinates): Float =
