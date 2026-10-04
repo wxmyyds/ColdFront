@@ -149,18 +149,32 @@ class NavigationMotionKindTest {
         assertFalse(showsPrimaryNavigation("about", roots))
         assertFalse(showsPrimaryNavigation("scan", roots))
 
-        // No route at all (start of the graph) must not claim the bar either.
+        // The predicate itself rejects null; the caller resolves the cold-start frame to the
+        // graph's start destination rather than relying on this to guess.
         assertFalse(showsPrimaryNavigation(null, roots))
     }
 
     @Test
-    fun primaryNavigationIsKeyedOnLayerNotOnRouteNames() {
-        val roots = setOf("home", "devices", "rgb", "settings")
+    fun primaryNavigationIsKeyedOnLayerNotOnRouteNames() {        val roots = setOf("home", "devices", "rgb", "settings")
 
         // Any route outside the top-level set is a detail, so adding one later needs no change
         // here. This is what keeps the rule from degrading into per-page special cases.
         assertFalse(showsPrimaryNavigation("some_future_detail", roots))
         assertFalse(showsPrimaryNavigation("about", roots))
+    }
+
+    @Test
+    fun primaryNavigationIsVisibleOnTheFirstFrameOfAColdStart() {
+        val roots = setOf("home", "devices", "rgb", "settings")
+
+        // currentBackStackEntryAsState collects with a null seed, so the first frame has no route.
+        // Resolving that frame to the graph's start destination keeps the bar visible from frame
+        // one; passing null through would hide it and reveal it a frame later.
+        assertTrue(showsPrimaryNavigation("home", roots))
+
+        // Only the not-yet-resolved case is substituted, never a real detail route.
+        assertFalse(showsPrimaryNavigation("about", roots))
+        assertFalse(showsPrimaryNavigation(null, roots))
     }
 
     @Test

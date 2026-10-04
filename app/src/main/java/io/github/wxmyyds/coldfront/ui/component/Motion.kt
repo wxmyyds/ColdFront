@@ -89,6 +89,11 @@ internal fun isRenderedByNavHost(route: String?, topLevelRoutes: Set<String>): B
  * A secondary page is a detail pushed on top of one of them, so leaving the affordance visible
  * both offers a way to jump away from the detail and shrinks the page for no reason. Keyed on the
  * navigation layer rather than on any route name, so a new detail page is covered automatically.
+ *
+ * [route] may be null while the back stack has not produced an entry yet, which happens on the very
+ * first frame of a cold start: [NavController.currentBackStackEntryAsState] collects with a null
+ * seed. Treating that as "not top level" would hide the bar and then reveal it a frame later, so
+ * the caller substitutes the graph's start destination instead of passing null through.
  */
 internal fun showsPrimaryNavigation(
     route: String?,

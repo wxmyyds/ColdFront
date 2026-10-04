@@ -254,6 +254,9 @@ private object Routes {
     const val ABOUT = "about"
 }
 
+/** Kept in one place so the NavHost and the not-yet-resolved route can never disagree. */
+private const val NavHostStartDestination = Routes.HOME
+
 @OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
@@ -323,7 +326,13 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val useRail = maxWidth >= 600.dp
         // The bar and the rail are primary navigation, so they belong only to a top-level page.
-        val showPrimaryNavigation = showsPrimaryNavigation(currentRoute, topLevelRouteSet)
+        // A null route means the back stack has not emitted yet, which is the first frame of a cold
+        // start. The graph's start destination is a top-level page, so resolve to it instead of
+        // hiding the bar for a frame and revealing it afterwards.
+        val showPrimaryNavigation = showsPrimaryNavigation(
+            currentRoute ?: NavHostStartDestination,
+            topLevelRouteSet,
+        )
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             contentWindowInsets = WindowInsets(left = 0.dp, top = 0.dp, right = 0.dp, bottom = 0.dp),
@@ -472,7 +481,7 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                     }
                     NavHost(
                         navController = nav,
-                        startDestination = Routes.HOME,
+                        startDestination = NavHostStartDestination,
                         enterTransition = {
                             val initialRoute = initialState.destination.route
                             val targetRoute = targetState.destination.route
