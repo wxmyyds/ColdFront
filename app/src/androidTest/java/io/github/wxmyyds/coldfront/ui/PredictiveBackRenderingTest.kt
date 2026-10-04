@@ -190,7 +190,7 @@ class PredictiveBackRenderingTest {
             // Well inside the page it is still the page itself, so it is clipped, not tinted.
             assertTrue(
                 "page interior must stay opaque at progress $progress",
-                pixels[(inset + radius * 2).toInt(), pixels.height / 2].red > 0.9f,
+                pixels[(inset + (radius * 2).toInt()).coerceAtMost(pixels.width - 1), pixels.height / 2].red > 0.9f,
             )
         }
         // Releasing restores the rectangular page rather than leaving a rounded shell behind.

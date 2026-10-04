@@ -97,17 +97,22 @@ class NavigationMotionKindTest {
         // The page must leave towards the physical right, by its whole width, in one track. The
         // parent must contribute no transition of its own: it is uncovered, not animated.
         val travel = TargetBasedAnimation(
-            detailPopTravelSpec(), IntOffset.VectorConverter, IntOffset.Zero, IntOffset(DETAIL_POP_WIDTH, 0),
+            detailPopTravelSpec(),
+            IntOffset.VectorConverter,
+            IntOffset.Zero,
+            IntOffset(DETAIL_POP_WIDTH, 0),
         )
-        assertEquals(DETAIL_POP_DURATION_MS * 1_000_000L, travel.durationNanos)
-        assertEquals(0f, travel.getValueFromNanos(0).x, 0f)
-        assertEquals(DETAIL_POP_WIDTH.toFloat(), travel.getValueFromNanos(300_000_000).x, 0f)
+        val end = travel.durationNanos
+        assertEquals(DETAIL_POP_DURATION_MS * 1_000_000L, end)
+        val width = DETAIL_POP_WIDTH.toFloat()
+        assertEquals(0f, travel.getValueFromNanos(0L).x, 0f)
+        assertEquals(width, travel.getValueFromNanos(end).x, 0.5f)
         // Never overshoots and never travels backwards, so a released gesture settles instead of
         // snapping. The page must also stay strictly inside its own track: no vertical drift.
         var last = 0f
         for (millis in 0..300) {
             val value = travel.getValueFromNanos(millis * 1_000_000L)
-            assertTrue("travel out of range at ${millis}ms: ${value.x}", value.x in 0f..DETAIL_POP_WIDTH.toFloat())
+            assertTrue("travel out of range at ${millis}ms: ${value.x}", value.x in 0f..width)
             assertEquals("vertical drift at ${millis}ms", 0f, value.y, 0f)
             assertTrue("travel moved backwards at ${millis}ms", value.x >= last)
             last = value.x
