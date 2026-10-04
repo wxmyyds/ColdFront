@@ -12,7 +12,7 @@ import androidx.navigation.compose.NavHost
 import io.github.wxmyyds.coldfront.ui.component.AppMotion
 import io.github.wxmyyds.coldfront.ui.component.NavigationMotionKind
 import io.github.wxmyyds.coldfront.ui.component.isSecondaryDestination
-import io.github.wxmyyds.coldfront.ui.component.predictiveBackEnter
+import io.github.wxmyyds.coldfront.ui.component.predictiveBackParentEnter
 import io.github.wxmyyds.coldfront.ui.component.predictiveBackExit
 import io.github.wxmyyds.coldfront.ui.component.shouldUsePredictivePop
 
@@ -55,14 +55,14 @@ internal fun AppNavHost(
                 routeDistance = 1,
             )
         },
-        popEnterTransition = { predictiveBackEnter() },
+        popEnterTransition = { predictiveBackParentEnter() },
         popExitTransition = { predictiveBackExit() },
         predictivePopEnterTransition = { _ ->
             if (shouldUsePredictivePop(
                     predictiveBack, initialState.destination.route, targetState.destination.route,
                     topLevelRoutes,
                 )
-            ) predictiveBackEnter() else EnterTransition.None
+            ) predictiveBackParentEnter() else EnterTransition.None
         },
         predictivePopExitTransition = { _ ->
             if (shouldUsePredictivePop(

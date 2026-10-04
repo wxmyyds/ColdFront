@@ -39,6 +39,17 @@ internal fun navigationMotionKind(
     else -> NavigationMotionKind.TopLevel
 }
 
+/**
+ * Horizontal offset of a page within the transition viewport, in pixels.
+ *
+ * [entering] is the page that is arriving; [forward] distinguishes a push from its reversal, so an
+ * interrupted navigation resolves to the same offsets it would have had without the interruption.
+ *
+ * A pushed detail enters from the trailing edge at full width and settles centred, which is what
+ * makes a push read as a page arriving rather than a page appearing. Its *exit* is centred instead
+ * ([NavigationMotionKind.PopDetail]), because a pop leaves under the finger via
+ * [predictiveBackExit] and a cancelled push must not leave the page off-centre.
+ */
 internal fun navigationOffset(
     kind: NavigationMotionKind,
     entering: Boolean,
@@ -50,10 +61,41 @@ internal fun navigationOffset(
     } else {
         if (forward) -width else width
     }
-    // Every detail navigation uses centred layers, including an interrupted push.
-    NavigationMotionKind.PushDetail -> 0
+    NavigationMotionKind.PushDetail -> if (entering) {
+        if (forward) width else -width
+    } else {
+        // The parent, exiting as a detail arrives, steps aside by a fifth of the width.
+        parentParallaxOffset(covered = true, width = width)
+    }
     NavigationMotionKind.PopDetail -> 0
 }
+
+/**
+ * How far a covered top-level page shifts aside, as a fraction of the viewport width.
+ *
+ * The parent does not move to make room; it steps back a fifth of the width, so a detail never
+ * fully uncovers it and the two layers stay stacked rather than swapping places. This is the same
+ * parallax the reference MIUI-style navigation uses.
+ */
+internal const val PARENT_PARALLAX_FRACTION = 0.2f
+
+/**
+ * Parallax offset of the covered page, in pixels: negative while entering a detail, positive while
+ * leaving one, so the parent returns to exactly where it started.
+ *
+ * A fifth of the width rather than the full width: at full width the parent would slide entirely
+ * off-screen, which reads as two unrelated pages swapping rather than one covering the other.
+ */
+internal fun parentParallaxOffset(covered: Boolean, width: Int): Int =
+    (if (covered) -width * PARENT_PARALLAX_FRACTION else 0f).toInt()
+
+/**
+ * Parallax progress of the covered page, matching [parentParallaxOffset] as a pure curve.
+ *
+ * 0f is the parent fully lit and in place, 1f is fully stepped back. Driven by the same gesture
+ * progress as the leaving page so one finger moves both.
+ */
+internal fun parentParallaxFraction(progress: Float): Float = progress.coerceIn(0f, 1f)
 
 internal fun isSecondaryDestination(route: String?, topLevelRoutes: Set<String>): Boolean =
     route != null && route !in topLevelRoutes
@@ -123,6 +165,16 @@ internal fun topLevelPageDuration(routeDistance: Int): Int = TOP_LEVEL_PAGE_DURA
 internal const val DETAIL_POP_DURATION_MS = 200
 
 /**
+ * Duration of a detail page sliding in over the top-level page.
+ *
+ * Longer than [DETAIL_POP_DURATION_MS] because a push moves much further: the arriving page
+ * crosses its whole width while the parent steps back a fifth of the viewport, whereas a release
+ * only finishes the motion the finger had already covered. 300ms matches the top-level page switch
+ * so the app has a single "page moves" duration.
+ */
+internal const val DETAIL_PUSH_DURATION_MS = 300
+
+/**
  * Opacity of the black scrim that dims the top-level page while a detail page covers it.
  *
  * The parent must read as *background*, which means darker than its own resting appearance rather
@@ -186,8 +238,9 @@ internal const val DETAIL_POP_WIDTH = 1000
  * slide follows the finger directly; there is no separate hand-written offset animation and no
  * fade, scale or size change competing with the translation.
  *
- * The parent's enter is [EnterTransition.None]: it never moves, it is simply uncovered as the page
- * above it travels away, which is what keeps the two layers visibly stacked instead of cross-fading.
+ * The parent's enter is [predictiveBackParentEnter]: it steps back to its resting offset by exactly
+ * [PARENT_PARALLAX_FRACTION] of the width, and because NavHost seeks that spec with the same
+ * progress, one finger moves both layers together.
  */internal fun predictiveBackExit(): ExitTransition = detailPopExit
 
 /**
@@ -201,8 +254,28 @@ private val detailPopExit: ExitTransition = slideOutHorizontally(
     targetOffsetX = { width -> (width * DETAIL_POP_TRAVEL).toInt() },
 )
 
-/** The parent holds still and is revealed by the page above leaving. */
-internal fun predictiveBackEnter(): EnterTransition = EnterTransition.None
+/**
+ * The parent steps back a fifth of the width as the page above it leaves, then returns to centre.
+ *
+ * Driven by the same gesture progress as the leaving page, so the two cannot drift apart. The offset
+ * is signed for the incoming direction: a page coming from the right uncovers the parent's leading
+ * side first, so the parent retreats the same way.
+ */
+internal fun predictiveBackParentEnter(): EnterTransition = slideInHorizontally(
+    animationSpec = tween(DETAIL_POP_DURATION_MS, easing = LinearEasing),
+    initialOffsetX = { width -> parentParallaxOffset(covered = true, width = width) },
+)
+
+/**
+ * The parent steps aside as a detail page arrives over it.
+ *
+ * The mirror of [predictiveBackParentEnter]: same fraction, same duration, opposite direction, so a
+ * push and the return that follows it describe one continuous motion.
+ */
+internal fun detailPushParentExit(): ExitTransition = slideOutHorizontally(
+    animationSpec = tween(DETAIL_PUSH_DURATION_MS, easing = FastOutSlowInEasing),
+    targetOffsetX = { width -> parentParallaxOffset(covered = true, width = width) },
+)
 
 /** Resting alpha for the detail page's push fade. */
 internal const val DETAIL_FADE_ALPHA = 0.94f
@@ -246,8 +319,8 @@ internal object AppMotion {
             NavigationMotionKind.PopDetail -> motionScheme.defaultSpatialSpec<IntOffset>()
         }
         return when (kind) {
-            // The leaving page translates under the finger; see predictiveBackExit.
-            NavigationMotionKind.PopDetail -> predictiveBackEnter()
+            // The parent steps back a fifth of the width as the page above leaves.
+            NavigationMotionKind.PopDetail -> predictiveBackParentEnter()
             // A push whose reverse is interrupted can have its exit boundary retained by Compose,
             // so the page that is about to be dismissed must not be off-centre to begin with.
             NavigationMotionKind.PushDetail -> slideInHorizontally(
@@ -287,6 +360,8 @@ internal object AppMotion {
         }
         return when (kind) {
             NavigationMotionKind.PopDetail -> predictiveBackExit()
+            // The parent steps aside as the detail arrives: this is the *exiting* page during a
+            // push, because AppNavHost keys the kind off the destination being entered.
             NavigationMotionKind.PushDetail -> slideOutHorizontally(
                 animationSpec = spatialSpec,
                 targetOffsetX = offset,

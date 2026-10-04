@@ -1,6 +1,5 @@
 package io.github.wxmyyds.coldfront.ui.component
 
-import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.TargetBasedAnimation
 import androidx.compose.animation.core.VectorConverter
@@ -132,16 +131,57 @@ class NavigationMotionKindTest {
     }
 
     @Test
-    fun theParentContributesNoEnterTransition() {
-        // A parent that faded or scaled in would cross-fade with the page leaving, which is the
-        // effect this is meant to replace.
-        assertSame(EnterTransition.None, predictiveBackEnter())
-        assertSame(predictiveBackEnter(), AppMotion.pageEnter(
+    fun theParentStepsBackAFifthAndReturnsWithoutFading() {
+        // The parent must move sideways only: no fade and no scale, or it would cross-fade with the
+        // page leaving instead of reading as a layer being uncovered.
+        assertSame(predictiveBackParentEnter(), AppMotion.pageEnter(
             NavigationMotionKind.PopDetail, false, TestMotionScheme, 1,
         ))
         assertSame(predictiveBackExit(), AppMotion.pageExit(
             NavigationMotionKind.PopDetail, false, TestMotionScheme, 1,
         ))
+    }
+
+    @Test
+    fun aPushedDetailArrivesFromTheTrailingEdgeAtFullWidth() {
+        // Without this the push has no motion at all: the page would simply appear, which is what
+        // made entering a detail look like nothing happened.
+        assertEquals("push enters from the right", 1000, navigationOffset(
+            NavigationMotionKind.PushDetail, entering = true, forward = true, width = 1000,
+        ))
+        assertEquals("a reversed push enters from the left", -1000, navigationOffset(
+            NavigationMotionKind.PushDetail, entering = true, forward = false, width = 1000,
+        ))
+    }
+
+    @Test
+    fun theCoveredParentStepsAsideByAFifthOfTheWidth() {
+        // A fifth, not the full width: at full width the parent would slide entirely off screen and
+        // the two pages would read as swapping places rather than one covering the other.
+        assertEquals(-200, navigationOffset(
+            NavigationMotionKind.PushDetail, entering = false, forward = true, width = 1000,
+        ))
+        assertEquals(-200, parentParallaxOffset(covered = true, width = 1000))
+        assertEquals("a revealed parent is exactly in place", 0, parentParallaxOffset(false, 1000))
+        assertEquals(0.2f, PARENT_PARALLAX_FRACTION)
+        // Mirrored: stepping left while entering is the same motion as stepping right while leaving,
+        // so a push and its return describe one continuous path.
+        assertEquals(
+            parentParallaxOffset(covered = true, width = 1000),
+            -parentParallaxOffset(covered = false, width = 1000),
+        )
+    }
+
+    @Test
+    fun theParallaxTracksGestureProgress() {
+        // Same reason the page's own travel is linear: NavHost seeks the parent with the same raw
+        // progress, so easing here would desync the two layers under one finger.
+        for (progress in listOf(0f, 0.25f, 0.5f, 0.75f, 1f)) {
+            assertEquals("parallax must equal gesture progress at $progress",
+                progress, parentParallaxFraction(progress), 1e-5f)
+        }
+        assertEquals(1f, parentParallaxFraction(1.4f), 1e-5f)
+        assertEquals(0f, parentParallaxFraction(-0.2f), 1e-5f)
     }
 
     @Test
