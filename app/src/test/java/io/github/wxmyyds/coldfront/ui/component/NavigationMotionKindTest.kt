@@ -1,5 +1,6 @@
 package io.github.wxmyyds.coldfront.ui.component
 
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.KeyframesSpec
 import androidx.compose.animation.core.tween
@@ -306,31 +307,35 @@ class NavigationMotionKindTest {
     }
 
     @Test
-    fun theExitScaleIsHeldUntilTheCrossfadeThreshold() {
+    fun theFadeSpecHoldsTheThresholdAndUsesTheSystemCurve() {
         val exit = predictiveBackExitSpec() as KeyframesSpec<Float>
-
-        // The official spec holds the leaving page at full opacity until 35% of the gesture, then
-        // fades it to nothing by the end. At that instant neither page is visible.
-        // Opaque from the start, still opaque at 35%, then down to the exit scale.
-        val atThreshold = exit.keyframes.first { it.fraction == PREDICTIVE_BACK_CROSSFADE_AT }
-        assertEquals(1f, atThreshold.valuePair.second, 0.001f)
-        assertEquals(PREDICTIVE_BACK_EXIT_SCALE, exit.keyframes.last().valuePair.second, 0.001f)
-        assertEquals(DETAIL_POP_DURATION_MS, exit.durationMillis)
-    }
-
-    @Test
-    fun theEnterScaleSettlesFromOversizedToFullSize() {
         val enter = predictiveBackEnterSpec() as KeyframesSpec<Float>
 
-        // The parent starts slightly larger and is still smaller than full at the crossfade point,
-        // settling to full size only once the leaving page has gone.
-        assertEquals(PREDICTIVE_BACK_ENTER_START_SCALE, enter.keyframes.first().valuePair.second, 0.001f)
+        // The fade is held at full opacity until 35% of the gesture and completed by the end, so at
+        // that instant neither page is visible, which is what the official spec describes.
+        val exitAtThreshold = exit.keyframes.first { it.fraction == PREDICTIVE_BACK_CROSSFADE_AT }
+        assertEquals(1f, exitAtThreshold.valuePair.second, 0.001f)
+        assertEquals(PREDICTIVE_BACK_EXIT_SCALE, exit.keyframes.last().valuePair.second, 0.001f)
+
+        // The parent starts oversized, is smaller at the same threshold, and reaches full size only
+        // once the leaving page has gone.
+        assertEquals(
+            PREDICTIVE_BACK_ENTER_START_SCALE,
+            enter.keyframes.first().valuePair.second,
+            0.001f,
+        )
         assertEquals(
             PREDICTIVE_BACK_EXIT_SCALE,
             enter.keyframes.first { it.fraction == PREDICTIVE_BACK_CROSSFADE_AT }.valuePair.second,
             0.001f,
         )
         assertEquals(1f, enter.keyframes.last().valuePair.second, 0.001f)
+
+        // Both run over the same duration so the pair stays in step, and both use the system
+        // PathInterpolator(.1, .1, 0, 1) rather than the raw gesture progress.
+        assertEquals(DETAIL_POP_DURATION_MS, exit.durationMillis)
+        assertEquals(DETAIL_POP_DURATION_MS, enter.durationMillis)
+        assertEquals(CubicBezierEasing(0.1f, 0.1f, 0f, 1f), PREDICTIVE_BACK_EASING)
     }
 
     @Test

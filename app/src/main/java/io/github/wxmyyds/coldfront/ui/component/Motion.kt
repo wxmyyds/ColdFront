@@ -13,8 +13,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
-import androidx.compose.animation.core.Keyframe
-import androidx.compose.animation.core.KeyframesSpec
+import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.scaleIn
@@ -150,28 +149,21 @@ internal const val PREDICTIVE_BACK_ENTER_START_SCALE = 1.1f
  * [PREDICTIVE_BACK_EASING], and both are expressed as seekable specs so the gesture can drive them
  * frame by frame.
  */
-internal fun predictiveBackExitSpec(): FiniteAnimationSpec<Float> = KeyframesSpec(
-    durationMillis = DETAIL_POP_DURATION_MS,
-    delay = 0,
-    easing = PREDICTIVE_BACK_EASING,
-    keyframes = listOf(
-        Keyframe(0f, 1f),
-        Keyframe(PREDICTIVE_BACK_CROSSFADE_AT, 1f),
-        Keyframe(1f, PREDICTIVE_BACK_EXIT_SCALE),
-    ),
-)
+internal fun predictiveBackExitSpec(): FiniteAnimationSpec<Float> = keyframes {
+    // durationMillis must be set before atFraction, so the fraction is resolved against it.
+    durationMillis = DETAIL_POP_DURATION_MS
+    1f atFraction 0f
+    1f atFraction PREDICTIVE_BACK_CROSSFADE_AT
+    PREDICTIVE_BACK_EXIT_SCALE atFraction 1f
+}
 
 /** Parent page: settle from [PREDICTIVE_BACK_ENTER_START_SCALE] down to full size, fading in. */
-internal fun predictiveBackEnterSpec(): FiniteAnimationSpec<Float> = KeyframesSpec(
-    durationMillis = DETAIL_POP_DURATION_MS,
-    delay = 0,
-    easing = PREDICTIVE_BACK_EASING,
-    keyframes = listOf(
-        Keyframe(0f, PREDICTIVE_BACK_ENTER_START_SCALE),
-        Keyframe(PREDICTIVE_BACK_CROSSFADE_AT, PREDICTIVE_BACK_EXIT_SCALE),
-        Keyframe(1f, 1f),
-    ),
-)
+internal fun predictiveBackEnterSpec(): FiniteAnimationSpec<Float> = keyframes {
+    durationMillis = DETAIL_POP_DURATION_MS
+    PREDICTIVE_BACK_ENTER_START_SCALE atFraction 0f
+    PREDICTIVE_BACK_EXIT_SCALE atFraction PREDICTIVE_BACK_CROSSFADE_AT
+    1f atFraction 1f
+}
 
 /** Resting alpha for the detail page's push fade; the pop direction deliberately does not fade. */
 internal const val DETAIL_FADE_ALPHA = 0.94f
@@ -272,7 +264,7 @@ internal object AppMotion {
      */
     fun predictiveBackExit(motionScheme: MotionScheme): ExitTransition =
         scaleOut(
-            animationSpec = predictiveBackExitSpec(),
+            animationSpec = tween(DETAIL_POP_DURATION_MS, easing = PREDICTIVE_BACK_EASING),
             targetScale = PREDICTIVE_BACK_EXIT_SCALE,
         ) + fadeOut(animationSpec = motionScheme.fastEffectsSpec<Float>())
 
@@ -284,7 +276,9 @@ internal object AppMotion {
      */
     fun predictiveBackEnter(motionScheme: MotionScheme): EnterTransition =
         scaleIn(
-            animationSpec = motionScheme.defaultSpatialSpec<Float>(),
+            // A tween, not the scheme spring: the gesture seeks this every frame and a spring would
+            // overshoot the settle, making the parent pulse instead of resting at full size.
+            animationSpec = tween(DETAIL_POP_DURATION_MS, easing = PREDICTIVE_BACK_EASING),
             initialScale = PREDICTIVE_BACK_ENTER_START_SCALE,
         ) + fadeIn(
             animationSpec = predictiveBackEnterSpec(),
