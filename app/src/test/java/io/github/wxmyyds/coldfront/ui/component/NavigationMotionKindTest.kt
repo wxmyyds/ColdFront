@@ -105,17 +105,17 @@ class NavigationMotionKindTest {
         val end = travel.durationNanos
         assertEquals(DETAIL_POP_DURATION_MS * 1_000_000L, end)
         val width = DETAIL_POP_WIDTH.toFloat()
-        assertEquals(0f, travel.getValueFromNanos(0L).x, 0f)
-        assertEquals(width, travel.getValueFromNanos(end).x, 0.5f)
+        assertEquals(0f, travel.getValueFromNanos(0L).x.toFloat(), 0f)
+        assertEquals(width, travel.getValueFromNanos(end).x.toFloat(), 0.5f)
         // Never overshoots and never travels backwards, so a released gesture settles instead of
         // snapping. The page must also stay strictly inside its own track: no vertical drift.
         var last = 0f
         for (millis in 0..300) {
             val value = travel.getValueFromNanos(millis * 1_000_000L)
-            assertTrue("travel out of range at ${millis}ms: ${value.x}", value.x in 0f..width)
-            assertEquals("vertical drift at ${millis}ms", 0f, value.y, 0f)
+            assertTrue("travel out of range at ${millis}ms: ${value.x}", value.x in 0..DETAIL_POP_WIDTH)
+            assertEquals("vertical drift at ${millis}ms", 0, value.y)
             assertTrue("travel moved backwards at ${millis}ms", value.x >= last)
-            last = value.x
+            last = value.x.toFloat()
         }
     }
 

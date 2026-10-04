@@ -182,15 +182,16 @@ class PredictiveBackRenderingTest {
             val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
             // The corner is cut relative to the page's own position, which has moved right.
             val left = detailOriginX(detail)
-            val inset = left + (radius * progress).toInt()
+            val inset = (left + radius * progress).toInt()
             assertTrue(
                 "corner must be cut at progress $progress (x=$inset)",
                 pixels[inset, inset].green > 0.5f,
             )
             // Well inside the page it is still the page itself, so it is clipped, not tinted.
+            val inside = (inset + (radius * 2).toInt()).coerceAtMost(pixels.width - 1)
             assertTrue(
                 "page interior must stay opaque at progress $progress",
-                pixels[(inset + (radius * 2).toInt()).coerceAtMost(pixels.width - 1), pixels.height / 2].red > 0.9f,
+                pixels[inside, pixels.height / 2].red > 0.9f,
             )
         }
         // Releasing restores the rectangular page rather than leaving a rounded shell behind.
