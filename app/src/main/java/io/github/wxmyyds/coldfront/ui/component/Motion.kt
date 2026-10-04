@@ -101,19 +101,27 @@ internal fun showsPrimaryNavigation(
 ): Boolean = isTopLevelDestination(route, topLevelRoutes)
 
 /**
- * Whether both ends of a NavHost transition are real NavHost content, so the NavHost may animate
- * the pair on its own.
+ * Whether the NavHost may run a transition's enter motion.
  *
- * A transition with a top-level placeholder at either end must be suppressed: the placeholder is
- * not what the user sees, and animating it would add a motion the pager's own offset already
- * provides. Suppressing it is what makes a returning detail page the only thing that moves.
+ * An entering top-level destination is a placeholder being revealed by the pager's own layout, so
+ * the NavHost must add nothing on top of it. Two detail pages, or a detail being pushed onto a
+ * top-level page, still animate.
  */
-internal fun isNavHostTransitionPair(
-    initialRoute: String?,
-    targetRoute: String?,
-    topLevelRoutes: Set<String>,
-): Boolean = isRenderedByNavHost(initialRoute, topLevelRoutes) &&
+internal fun shouldAnimateNavHostEnter(targetRoute: String?, topLevelRoutes: Set<String>): Boolean =
     isRenderedByNavHost(targetRoute, topLevelRoutes)
+
+/**
+ * Whether the NavHost may run a transition's exit motion.
+ *
+ * Keyed on the route that is *leaving*, not on both ends of the pair. A detail pop is
+ * [about -> settings], where only [about] is real NavHost content and [settings] is a placeholder
+ * the pager already has on screen. Requiring both ends would suppress the pop exit, which is the
+ * only motion the user should see, and the whole return would collapse into an instant jump with
+ * no predictive gesture. So the leaving page alone decides: it moves, and the placeholder it
+ * uncovers stays exactly where it is.
+ */
+internal fun shouldAnimatePopExit(initialRoute: String?, topLevelRoutes: Set<String>): Boolean =
+    isRenderedByNavHost(initialRoute, topLevelRoutes)
 
 internal fun topLevelRouteDistance(
     initialRoute: String?,

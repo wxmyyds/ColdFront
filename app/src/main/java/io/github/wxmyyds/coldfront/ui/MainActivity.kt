@@ -87,8 +87,8 @@ import io.github.wxmyyds.coldfront.ui.component.NavigationMotionKind
 import io.github.wxmyyds.coldfront.ui.component.isForwardTopLevelTransition
 import io.github.wxmyyds.coldfront.ui.component.isSecondaryDestination
 import io.github.wxmyyds.coldfront.ui.component.navigationMotionKind
-import io.github.wxmyyds.coldfront.ui.component.isNavHostTransitionPair
-import io.github.wxmyyds.coldfront.ui.component.isRenderedByNavHost
+import io.github.wxmyyds.coldfront.ui.component.shouldAnimateNavHostEnter
+import io.github.wxmyyds.coldfront.ui.component.shouldAnimatePopExit
 import io.github.wxmyyds.coldfront.ui.component.showsPrimaryNavigation
 import io.github.wxmyyds.coldfront.ui.component.shouldUsePredictivePop
 import io.github.wxmyyds.coldfront.ui.component.topLevelRouteDistance
@@ -490,7 +490,7 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                                 initialIsSecondary = isSecondaryDestination(initialRoute, topLevelRouteSet),
                                 targetIsSecondary = isSecondaryDestination(targetRoute, topLevelRouteSet),
                             )
-                            if (!isRenderedByNavHost(targetRoute, topLevelRouteSet)) EnterTransition.None
+                            if (!shouldAnimateNavHostEnter(targetRoute, topLevelRouteSet)) EnterTransition.None
                             else AppMotion.pageEnter(
                                 kind = kind,
                                 forward = isForwardTopLevelTransition(initialRoute, targetRoute, topLevelRoutes),
@@ -506,7 +506,7 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                                 initialIsSecondary = isSecondaryDestination(initialRoute, topLevelRouteSet),
                                 targetIsSecondary = isSecondaryDestination(targetRoute, topLevelRouteSet),
                             )
-                            if (!isNavHostTransitionPair(initialRoute, targetRoute, topLevelRouteSet)) {
+                            if (!shouldAnimatePopExit(initialRoute, topLevelRouteSet)) {
                                 ExitTransition.None
                             }
                             else AppMotion.pageExit(
@@ -527,7 +527,7 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                             // Returning from a detail page reveals a top-level placeholder. The
                             // parent is the pager's own page and must stay put, so a transition
                             // here would slide the revealed page back in from the right.
-                            if (!isNavHostTransitionPair(initialRoute, targetRoute, topLevelRouteSet)) {
+                            if (!shouldAnimateNavHostEnter(targetRoute, topLevelRouteSet)) {
                                 EnterTransition.None
                             }
                             else AppMotion.pageEnter(
@@ -545,7 +545,7 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                                 initialIsSecondary = isSecondaryDestination(initialRoute, topLevelRouteSet),
                                 targetIsSecondary = isSecondaryDestination(targetRoute, topLevelRouteSet),
                             )
-                            if (!isNavHostTransitionPair(initialRoute, targetRoute, topLevelRouteSet)) {
+                            if (!shouldAnimatePopExit(initialRoute, topLevelRouteSet)) {
                                 ExitTransition.None
                             }
                             else AppMotion.pageExit(

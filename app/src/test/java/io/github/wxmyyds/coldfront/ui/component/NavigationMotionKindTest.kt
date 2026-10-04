@@ -178,30 +178,32 @@ class NavigationMotionKindTest {
     }
 
     @Test
-    fun returningFromAboutToSettingsAnimatesOnlyTheDetailPage() {
+    fun returningFromAboutToSettingsKeepsThePredictiveExit() {
         val roots = setOf("home", "devices", "rgb", "settings")
 
-        // The NavHost must not animate this pair, because one end is the top-level placeholder.
-        // A motion-kind test would wrongly pass it: the pair resolves to PopDetail even though
-        // its parent is a placeholder, which is exactly how the second animation slipped through.
-        assertFalse(
-            isNavHostTransitionPair(
-                initialRoute = "about",
-                targetRoute = "settings",
-                topLevelRoutes = roots,
-            ),
-        )
+        // The leaving detail page must still be animated. Its parent is a placeholder, but the
+        // exit is the only motion the user should see: suppressing it would collapse the whole
+        // return into an instant jump with no gesture-driven movement.
+        assertTrue(shouldAnimatePopExit(initialRoute = "about", topLevelRoutes = roots))
+
+        // A top-level page leaving for another top-level page is the pager's business alone.
+        assertFalse(shouldAnimatePopExit(initialRoute = "settings", topLevelRoutes = roots))
+        assertFalse(shouldAnimatePopExit(initialRoute = "home", topLevelRoutes = roots))
+    }
+
+    @Test
+    fun returningFromAboutToSettingsDoesNotAnimateTheRevealedParent() {
+        val roots = setOf("home", "devices", "rgb", "settings")
+
+        // The parent that gets revealed is a placeholder, so the NavHost adds no enter motion and
+        // the pager's own page simply stays where it already is.
+        assertFalse(shouldAnimateNavHostEnter(targetRoute = "settings", topLevelRoutes = roots))
+        assertFalse(shouldAnimateNavHostEnter(targetRoute = "home", topLevelRoutes = roots))
 
         // Two detail pages still animate between each other.
-        assertTrue(
-            isNavHostTransitionPair(
-                initialRoute = "about",
-                targetRoute = "scan",
-                topLevelRoutes = roots,
-            ),
-        )
+        assertTrue(shouldAnimateNavHostEnter(targetRoute = "scan", topLevelRoutes = roots))
 
-        // The leaving detail page is what moves, and the revealed parent does not move at all.
+        // The leaving detail page moves; the revealed parent does not move at all.
         assertEquals(
             200,
             navigationOffset(NavigationMotionKind.PopDetail, entering = false, forward = false, width = 1000),
@@ -216,7 +218,7 @@ class NavigationMotionKindTest {
     fun aDetailPopResolvesToPopDetailEvenThoughItsParentIsAPlaceholder() {
         val roots = setOf("home", "devices", "rgb", "settings")
 
-        // Documents why the guard cannot be keyed on motion kind: About -> Settings is a
+        // Documents why the guards cannot be keyed on motion kind: About -> Settings is a
         // PopDetail, so a kind-based check would let the placeholder through and reintroduce the
         // second animation.
         assertEquals(
@@ -234,13 +236,8 @@ class NavigationMotionKindTest {
         val roots = setOf("home", "devices", "rgb", "settings")
 
         // Tab switches are entirely the pager's business; the NavHost adds nothing on top.
-        assertFalse(
-            isNavHostTransitionPair(
-                initialRoute = "home",
-                targetRoute = "settings",
-                topLevelRoutes = roots,
-            ),
-        )
+        assertFalse(shouldAnimatePopExit(initialRoute = "home", topLevelRoutes = roots))
+        assertFalse(shouldAnimateNavHostEnter(targetRoute = "settings", topLevelRoutes = roots))
     }
 
     @Test
