@@ -112,13 +112,30 @@ class PredictiveBackRenderingTest {
     }
 
     @Test
-    fun reversingAnUnfinishedPushDoesNotRetainItsHorizontalExit() {
+    fun reversingAnUnfinishedPushContinuesFromWhereThePageIs() {
         setup()
+        // Grabbed 48ms into a 300ms push, so the page is still short of centre and sits to the right.
         openDetail(settleMillis = 48)
         gesture(BackEventCompat.EDGE_LEFT)
-        progress(0.55f, BackEventCompat.EDGE_LEFT)
+        val width = viewport.size.width
+        // The page must continue from where it actually is rather than snapping to centre: a jump
+        // back would be a visible teleport at the moment the finger takes over. So travel is
+        // measured as a *rate* - each step of progress moves it a full width's worth - and the
+        // starting offset is whatever the interrupted push left behind.
+        val start = renderedTravelX()
+        assertTrue("an interrupted push should leave the page off centre", start > 0)
+        progress(0.25f, BackEventCompat.EDGE_LEFT)
+        val quarter = renderedTravelX()
+        progress(0.75f, BackEventCompat.EDGE_LEFT)
+        val threeQuarters = renderedTravelX()
+        assertEquals(
+            "the page must advance one full width per unit of progress",
+            width.toFloat(),
+            (threeQuarters - quarter).toFloat() / 0.5f,
+            4f,
+        )
+        assertTrue("travel must move forward", threeQuarters > quarter)
         assertStationary(parent)
-        assertTravel("page must track the finger at 0.55f", (0.55f * viewport.size.width).toInt())
         commitAndCheck()
     }
 
