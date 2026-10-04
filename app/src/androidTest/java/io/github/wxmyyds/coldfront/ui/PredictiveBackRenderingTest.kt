@@ -247,6 +247,18 @@ class PredictiveBackRenderingTest {
             )
             last = brightness
         }
+        // The bar's own footprint must be dimmed too. The parent is laid out with chrome padding
+        // reserved at the bottom, and a scrim applied inside that padding would leave this strip at
+        // full brightness for the whole gesture - the parent would look half-dimmed.
+        progress(0.9f, BackEventCompat.EDGE_LEFT)
+        val barStrip = (pixels.height - chromeHeightPx() / 2).coerceIn(0, pixels.height - 1)
+        val exposed = (renderedTravelX() / 2).coerceIn(0, pixels.width - 1)
+        val barStripBrightness = (pixels[exposed, barStrip].green * 255f).toInt()
+        assertTrue(
+            "the bar's footprint must be dimmed too (brightness=$barStripBrightness)",
+            barStripBrightness < 250,
+        )
+
         // Committing returns to the top-level page with no scrim at all, so it must be fully lit.
         commitAndCheck()
         assertEquals(
@@ -272,6 +284,13 @@ class PredictiveBackRenderingTest {
         return (pixels[x, pixels.height / 2].green * 255f).toInt()
     }
 
+    /** Height of the bottom bar strip in pixels, as laid out by the chrome. */
+    private fun chromeHeightPx(): Int {
+        val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
+        return (80 * rule.activity.resources.displayMetrics.density).toInt()
+            .coerceAtMost(pixels.height / 3)
+    }
+
     private fun setup() {
         rule.setContent {
             CompositionLocalProvider(
@@ -295,19 +314,22 @@ class PredictiveBackRenderingTest {
                     ) { chromePadding ->
                         AppNavHost(nav, "root", setOf("root"), predictiveBack = true) {
                             composable("root") {
+                                // Mirrors production: the scrim wraps the chrome padding, so it
+                                // covers the bar's footprint and not just the page content.
                                 ParentScrimSurface(isCovered = !active) {
                                     Box(Modifier.fillMaxSize().background(Color.Green)
                                         .onGloballyPositioned { parent = it }) {
-                                        PrimaryPageStrip(
-                                            pageCount = 4,
-                                            selectedPage = selected.intValue,
-                                            isActive = active,
-                                            onSelectPage = { selected.intValue = it },
-                                            modifier = Modifier.padding(chromePadding),
-                                        ) { index ->
-                                            Box(Modifier.fillMaxSize()
-                                                .background(if (index == selected.intValue) Color.Green else Color.Magenta)
-                                                .onGloballyPositioned { if (index == selected.intValue) selectedTab = it })
+                                        Box(Modifier.padding(chromePadding)) {
+                                            PrimaryPageStrip(
+                                                pageCount = 4,
+                                                selectedPage = selected.intValue,
+                                                isActive = active,
+                                                onSelectPage = { selected.intValue = it },
+                                            ) { index ->
+                                                Box(Modifier.fillMaxSize()
+                                                    .background(if (index == selected.intValue) Color.Green else Color.Magenta)
+                                                    .onGloballyPositioned { if (index == selected.intValue) selectedTab = it })
+                                            }
                                         }
                                     }
                                 }

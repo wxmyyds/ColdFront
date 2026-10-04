@@ -364,10 +364,14 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                         .semantics { isTraversalGroup = true },
                 ) {
                     composable(Routes.MAIN) {
-                        // Reserve chrome in the parent itself, even while a detail is on top.
-                        // The NavHost viewport never resizes when the bar/rail is placed on commit.
-                        Box(Modifier.fillMaxSize().padding(primaryPadding).consumeWindowInsets(primaryPadding)) {
-                            ParentScrimSurface(isCovered = showPrimaryNavigation.not()) {
+                        // The scrim wraps the padding rather than sitting inside it, so it covers the
+                        // strip the bar occupies as well as the page's own content. Dimming only the
+                        // padded content left the bar's footprint bright, which is visible for the
+                        // whole gesture and made the parent look half-dimmed.
+                        ParentScrimSurface(isCovered = showPrimaryNavigation.not()) {
+                            // Reserve chrome in the parent itself, even while a detail is on top.
+                            // The NavHost viewport never resizes when the bar/rail is placed on commit.
+                            Box(Modifier.fillMaxSize().padding(primaryPadding).consumeWindowInsets(primaryPadding)) {
                                 TopLevelPager(
                                     vm = vm,
                                     settings = settings,
