@@ -244,7 +244,6 @@ class PredictiveBackRenderingTest {
         // revealed strip has grown - not that the whole bar is already visible.
         gesture(BackEventCompat.EDGE_LEFT)
         progress(0.5f, BackEventCompat.EDGE_LEFT)
-        dumpDiag()
         val half = revealedBarWidth()
         progress(0.85f, BackEventCompat.EDGE_LEFT)
         val most = revealedBarWidth()
@@ -256,30 +255,13 @@ class PredictiveBackRenderingTest {
         assertTrue("the bar must be back on the top-level page", barIsOnScreen())
     }
 
-    private fun dumpDiag() {
-        val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
-        val sb = StringBuilder("vp=${pixels.width}x${pixels.height}\n")
-        for (y in pixels.height - 1 downTo pixels.height - 460 step 14) {
-            sb.append(String.format("%4d ", y))
-            for (x in 0 until pixels.width step 24) sb.append(letter(pixels[x, y]))
-            sb.append('\n')
-        }
-        throw AssertionError(sb.toString())
-    }
-
-    private fun letter(p: Color): Char = when {
-        p.red > 0.6f && p.green > 0.6f && p.blue < 0.4f -> 'R'
-        p.green > 0.6f && p.red < 0.4f && p.blue < 0.4f -> 'G'
-        p.blue > 0.6f && p.green > 0.6f && p.red < 0.4f -> 'C'
-        p.red < 0.4f && p.green < 0.4f && p.blue < 0.4f -> 'K'
-        p.red > 0.6f && p.green > 0.6f && p.blue > 0.6f -> 'W'
-        else -> '.'
-    }
-
     /** How much of the bar's colour is on screen, used to check it is uncovered progressively. */
     private fun revealedBarWidth(): Int {
         val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
-        val row = (pixels.height - 40).coerceIn(0, pixels.height - 1)
+        // Sampled inside the bar's own vertical span. A row near the very bottom of the window can
+        // fall under the leaving page still covering it, which reads as "nothing revealed" and made
+        // this assertion fail for the wrong reason.
+        val row = (pixels.height * 91 / 100).coerceIn(0, pixels.height - 1)
         var count = 0
         for (x in 0 until pixels.width) {
             val pixel = pixels[x, row]
