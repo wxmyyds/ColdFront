@@ -32,6 +32,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import io.github.wxmyyds.coldfront.ui.component.PARENT_PARALLAX_FRACTION
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -53,8 +54,6 @@ class PredictiveBackRenderingTest {
     private lateinit var parent: LayoutCoordinates
     private lateinit var detail: LayoutCoordinates
     private lateinit var selectedTab: LayoutCoordinates
-    /** Where the top-level destination was laid out, so later frames can be compared against it. */
-    private var parentRest: Offset? = null
     private val selected = mutableIntStateOf(3)
     private val rail = mutableStateOf(false)
     private val rtl = mutableStateOf(false)
@@ -68,10 +67,9 @@ class PredictiveBackRenderingTest {
         val width = viewport.size.width.toFloat()
         for (progress in listOf(0.15f, 0.35f, 0.5f, 0.85f)) {
             progress(progress, BackEventCompat.EDGE_LEFT)
-            // The parent is revealed, never moved: its centre must stay exactly put at every
-            // progress value, and it must still fill the whole viewport.
-            assertStationary(parent)
-            assertEquals(1f, horizontalScale(parent), 0.002f)
+            // The parent is revealed, stepping back a fifth of the width as the page above leaves,
+            // and must never scale or move vertically.
+            assertSteppedBack(progress)
             // The page tracks the finger: travel is linear in progress, so at 0.5 it has moved
             // exactly half its width and still covers half the screen.
             assertTravel("page must track the finger at $progress", (progress * width).toInt())
@@ -153,7 +151,7 @@ class PredictiveBackRenderingTest {
         frames(32)
         gesture(BackEventCompat.EDGE_RIGHT)
         progress(0.6f, BackEventCompat.EDGE_RIGHT)
-        assertStationary(parent)
+        assertSteppedBack(0.6f)
         assertTravel("page must track the finger at 0.6f", (0.6f * viewport.size.width).toInt())
         commitAndCheck()
     }
@@ -182,7 +180,7 @@ class PredictiveBackRenderingTest {
         openDetail()
         gesture(BackEventCompat.EDGE_LEFT)
         progress(0.7f, BackEventCompat.EDGE_LEFT)
-        assertStationary(parent)
+        assertSteppedBack(0.7f)
         assertTravel("page must track the finger at 0.7f", (0.7f * viewport.size.width).toInt())
         commitAndCheck()
     }
@@ -196,8 +194,8 @@ class PredictiveBackRenderingTest {
         gesture(BackEventCompat.EDGE_RIGHT)
         progress(0.7f, BackEventCompat.EDGE_RIGHT)
         // The page always leaves towards the physical right, whatever the layout direction or the
-        // edge the swipe started from; the parent stays centred underneath it.
-        assertStationary(parent)
+        // edge the swipe started from; the parent steps back the same amount underneath it.
+        assertSteppedBack(0.7f)
         assertTravel("page must track the finger at 0.7f", (0.7f * viewport.size.width).toInt())
         commitAndCheck()
     }
@@ -548,18 +546,27 @@ class PredictiveBackRenderingTest {
             coordinates.localToRoot(Offset.Zero).x) / coordinates.size.width
 
     /**
-     * The destination has not moved since it was laid out.
+     * The top-level page is exactly a fifth of the viewport further left than when it was uncovered.
      *
-     * Compared against a position recorded when the destination first appeared rather than against
-     * the viewport centre: the top-level page now contains a bar, so its content area is legitimately
-     * offset from the window centre, and asserting centring would be asserting the absence of the
-     * bar. What matters is that returning from a detail does not move the page underneath.
+     * It used to be required not to move at all, but a page covered by a detail now steps back so the
+     * two stay stacked. Asserted against the measured formula rather than a recorded baseline: the
+     * shift is a deliberate part of the motion, and a baseline captured at an arbitrary progress
+     * would only assert that the shift does not change between two arbitrary moments.
      */
+    private fun assertSteppedBack(progress: Float) {
+        assertTrue("destination must still be attached", parent.isAttached)
+        val restCentre = centre(viewport).x
+        val expected = restCentre - PARENT_PARALLAX_FRACTION * viewport.size.width * (1f - progress)
+        assertEquals("parent must step back a fifth of the width", expected, centre(parent).x, 1.5f)
+        assertEquals("the parent must not move vertically", centre(viewport).y, centre(parent).y, 1f)
+        assertEquals("the parent must not scale", 1f, horizontalScale(parent), 0.002f)
+    }
+
+    /** The top-level page is exactly back in place, as after the return completes. */
     private fun assertStationary(coordinates: LayoutCoordinates) {
         assertTrue("destination must still be attached", coordinates.isAttached)
-        val settled = parentRest ?: centre(coordinates).also { parentRest = it }
-        assertEquals("horizontal centre moved", settled.x, centre(coordinates).x, 1f)
-        assertEquals("vertical centre moved", settled.y, centre(coordinates).y, 1f)
+        assertEquals("horizontal centre moved", centre(viewport).x, centre(coordinates).x, 1.5f)
+        assertEquals("vertical centre moved", centre(viewport).y, centre(coordinates).y, 1f)
     }
 
     /** A destination that must be centred in the viewport, such as a detail page. */
