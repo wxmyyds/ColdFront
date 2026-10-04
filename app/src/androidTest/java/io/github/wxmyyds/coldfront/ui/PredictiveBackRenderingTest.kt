@@ -251,9 +251,10 @@ class PredictiveBackRenderingTest {
         // reserved at the bottom, and a scrim applied inside that padding would leave this strip at
         // full brightness for the whole gesture - the parent would look half-dimmed.
         progress(0.9f, BackEventCompat.EDGE_LEFT)
-        val barStrip = (pixels.height - chromeHeightPx() / 2).coerceIn(0, pixels.height - 1)
-        val exposed = (renderedTravelX() / 2).coerceIn(0, pixels.width - 1)
-        val barStripBrightness = (pixels[exposed, barStrip].green * 255f).toInt()
+        val barPixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
+        val barStrip = (barPixels.height - chromeHeightPx() / 2).coerceIn(0, barPixels.height - 1)
+        val exposed = (renderedTravelX() / 2).coerceIn(0, barPixels.width - 1)
+        val barStripBrightness = (barPixels[exposed, barStrip].green * 255f).toInt()
         assertTrue(
             "the bar's footprint must be dimmed too (brightness=$barStripBrightness)",
             barStripBrightness < 250,
