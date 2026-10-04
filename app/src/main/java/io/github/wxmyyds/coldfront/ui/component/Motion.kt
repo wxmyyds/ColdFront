@@ -67,6 +67,20 @@ internal fun isSecondaryDestination(route: String?, topLevelRoutes: Set<String>)
 internal fun isTopLevelDestination(route: String?, topLevelRoutes: Set<String>): Boolean =
     route != null && route in topLevelRoutes
 
+/**
+ * Whether the NavHost should animate this destination pair at all.
+ *
+ * Top-level destinations are rendered by the pager beside the NavHost, and their NavHost entries
+ * are empty placeholders that exist only to hold back stack state. Animating a placeholder stacks a
+ * second motion on top of the pager's own offset: returning from a detail page would slide the
+ * revealed placeholder back in from the right while the pager's page was already underneath, so the
+ * transition appeared to be two animations layered on one another. Only detail pages, which really
+ * are drawn by the NavHost, get a transition.
+ */
+internal fun shouldAnimateNavHostTransition(
+    kind: NavigationMotionKind,
+): Boolean = kind != NavigationMotionKind.TopLevel
+
 internal fun topLevelRouteDistance(
     initialRoute: String?,
     targetRoute: String?,

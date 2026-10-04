@@ -105,6 +105,58 @@ class NavigationMotionKindTest {
     }
 
     @Test
+    fun topLevelPlaceholdersAreNeverAnimatedByTheNavHost() {
+        // Top-level pages are drawn by the pager; their NavHost entries are empty placeholders.
+        // Animating them stacks a second motion on the pager offset, so the parent appears to
+        // slide back in from the right while it is already revealed underneath.
+        assertFalse(shouldAnimateNavHostTransition(NavigationMotionKind.TopLevel))
+
+        // Detail pages are genuinely drawn by the NavHost and keep their transition.
+        assertTrue(shouldAnimateNavHostTransition(NavigationMotionKind.PushDetail))
+        assertTrue(shouldAnimateNavHostTransition(NavigationMotionKind.PopDetail))
+    }
+
+    @Test
+    fun returningFromAboutToSettingsAnimatesOnlyTheDetailPage() {
+        val roots = setOf("home", "devices", "rgb", "settings")
+
+        // ABOUT -> SETTINGS is a detail pop, so the NavHost animates the leaving detail page...
+        val kind = navigationMotionKind(
+            isPop = true,
+            initialIsSecondary = isSecondaryDestination("about", roots),
+            targetIsSecondary = isSecondaryDestination("settings", roots),
+        )
+        assertEquals(NavigationMotionKind.PopDetail, kind)
+        assertTrue(shouldAnimateNavHostTransition(kind))
+
+        // ...and the revealed top-level page stays put, which is what makes the parent read as
+        // revealed rather than entering.
+        assertEquals(
+            0,
+            navigationOffset(NavigationMotionKind.PopDetail, entering = true, forward = false, width = 1000),
+        )
+        assertEquals(
+            200,
+            navigationOffset(NavigationMotionKind.PopDetail, entering = false, forward = false, width = 1000),
+        )
+    }
+
+    @Test
+    fun switchingBetweenTopLevelTabsIsNotAnimatedTwice() {
+        val roots = setOf("home", "devices", "rgb", "settings")
+
+        // Tab switches resolve to TopLevel on both sides, so the NavHost adds no motion on top of
+        // the pager's own page offset.
+        val kind = navigationMotionKind(
+            isPop = false,
+            initialIsSecondary = isSecondaryDestination("home", roots),
+            targetIsSecondary = isSecondaryDestination("settings", roots),
+        )
+        assertEquals(NavigationMotionKind.TopLevel, kind)
+        assertFalse(shouldAnimateNavHostTransition(kind))
+    }
+
+    @Test
     fun transitionsWithinSameLayerUseTopLevelMotion() {
         assertEquals(
             NavigationMotionKind.TopLevel,

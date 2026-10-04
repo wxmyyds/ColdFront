@@ -87,6 +87,7 @@ import io.github.wxmyyds.coldfront.ui.component.NavigationMotionKind
 import io.github.wxmyyds.coldfront.ui.component.isForwardTopLevelTransition
 import io.github.wxmyyds.coldfront.ui.component.isSecondaryDestination
 import io.github.wxmyyds.coldfront.ui.component.navigationMotionKind
+import io.github.wxmyyds.coldfront.ui.component.shouldAnimateNavHostTransition
 import io.github.wxmyyds.coldfront.ui.component.shouldUsePredictivePop
 import io.github.wxmyyds.coldfront.ui.component.topLevelRouteDistance
 import io.github.wxmyyds.coldfront.ui.component.topLevelDragReversed
@@ -470,7 +471,11 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                                 initialIsSecondary = isSecondaryDestination(initialRoute, topLevelRouteSet),
                                 targetIsSecondary = isSecondaryDestination(targetRoute, topLevelRouteSet),
                             )
-                            AppMotion.pageEnter(
+                            // Top-level destinations are drawn by the pager outside the NavHost;
+                            // their NavHost entries are empty placeholders. Animating a placeholder
+                            // stacks a second motion on the pager's own offset, so leave it alone.
+                            if (!shouldAnimateNavHostTransition(kind)) EnterTransition.None
+                            else AppMotion.pageEnter(
                                 kind = kind,
                                 forward = isForwardTopLevelTransition(initialRoute, targetRoute, topLevelRoutes),
                                 motionScheme = motionScheme,
@@ -485,7 +490,8 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                                 initialIsSecondary = isSecondaryDestination(initialRoute, topLevelRouteSet),
                                 targetIsSecondary = isSecondaryDestination(targetRoute, topLevelRouteSet),
                             )
-                            AppMotion.pageExit(
+                            if (!shouldAnimateNavHostTransition(kind)) ExitTransition.None
+                            else AppMotion.pageExit(
                                 kind = kind,
                                 forward = isForwardTopLevelTransition(initialRoute, targetRoute, topLevelRoutes),
                                 motionScheme = motionScheme,
@@ -500,7 +506,11 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                                 initialIsSecondary = isSecondaryDestination(initialRoute, topLevelRouteSet),
                                 targetIsSecondary = isSecondaryDestination(targetRoute, topLevelRouteSet),
                             )
-                            AppMotion.pageEnter(
+                            // Returning from a detail page reveals a top-level placeholder. The
+                            // parent is the pager's own page and must stay put, so a transition
+                            // here would slide the revealed page back in from the right.
+                            if (!shouldAnimateNavHostTransition(kind)) EnterTransition.None
+                            else AppMotion.pageEnter(
                                 kind = kind,
                                 forward = isForwardTopLevelTransition(initialRoute, targetRoute, topLevelRoutes),
                                 motionScheme = motionScheme,
@@ -515,7 +525,8 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                                 initialIsSecondary = isSecondaryDestination(initialRoute, topLevelRouteSet),
                                 targetIsSecondary = isSecondaryDestination(targetRoute, topLevelRouteSet),
                             )
-                            AppMotion.pageExit(
+                            if (!shouldAnimateNavHostTransition(kind)) ExitTransition.None
+                            else AppMotion.pageExit(
                                 kind = kind,
                                 forward = isForwardTopLevelTransition(initialRoute, targetRoute, topLevelRoutes),
                                 motionScheme = motionScheme,
