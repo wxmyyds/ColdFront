@@ -1,5 +1,6 @@
 package io.github.wxmyyds.coldfront.ui.component
 
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.TargetBasedAnimation
 import androidx.compose.animation.core.VectorConverter
@@ -131,9 +132,10 @@ class NavigationMotionKindTest {
     }
 
     @Test
-    fun theParentStepsBackAFifthAndReturnsWithoutFading() {
-        // The parent must move sideways only: no fade and no scale, or it would cross-fade with the
-        // page leaving instead of reading as a layer being uncovered.
+    fun theParentHoldsStillDuringAReturn() {
+        // No fade, no scale and no offset: the parent is opaque and is the *entering* page here, so
+        // moving it at all covers the opaque page leaving above it. Verified by rendering.
+        assertSame(EnterTransition.None, predictiveBackParentEnter())
         assertSame(predictiveBackParentEnter(), AppMotion.pageEnter(
             NavigationMotionKind.PopDetail, false, TestMotionScheme, 1,
         ))
@@ -175,8 +177,8 @@ class NavigationMotionKindTest {
         val covered = parentParallaxOffset(covered = true, width = width)
         assertEquals("the parent must return to exactly where it began", resting, 0)
         assertEquals("a fifth of the width", -200, covered)
-        // Both the push's exit and the pop's enter start from the same covered offset, which is what
-        // makes the two describe one continuous motion rather than a jump.
+        // The push's parent exit starts from the covered offset, which is what makes the push and
+        // its return describe one continuous motion rather than a jump.
         assertEquals(covered, navigationOffset(
             NavigationMotionKind.PushDetail, entering = false, forward = true, width = width,
         ))

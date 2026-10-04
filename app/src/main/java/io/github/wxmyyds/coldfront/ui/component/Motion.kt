@@ -238,9 +238,11 @@ internal const val DETAIL_POP_WIDTH = 1000
  * slide follows the finger directly; there is no separate hand-written offset animation and no
  * fade, scale or size change competing with the translation.
  *
- * The parent's enter is [predictiveBackParentEnter]: it steps back to its resting offset by exactly
- * [PARENT_PARALLAX_FRACTION] of the width, and because NavHost seeks that spec with the same
- * progress, one finger moves both layers together.
+ * The parent's enter is [EnterTransition.None]: it holds still and is simply uncovered. Giving it
+ * an entering offset here was tried and reverted - a moving, opaque parent entering underneath an
+ * opaque leaving page hid the leaving page outright, so the detail vanished from the screen
+ * mid-gesture. The parent's parallax therefore lives only on the push path, where the parent is the
+ * *exiting* page; on a return it is already at its resting offset.
  */internal fun predictiveBackExit(): ExitTransition = detailPopExit
 
 /**
@@ -261,28 +263,7 @@ private val detailPopExit: ExitTransition = slideOutHorizontally(
  * is signed for the incoming direction: a page coming from the right uncovers the parent's leading
  * side first, so the parent retreats the same way.
  */
-internal fun predictiveBackParentEnter(): EnterTransition = parentReturnEnter
-
-/**
- * One shared instance, for the same reason as [detailPopExit]: `slideInHorizontally` allocates per
- * call, so a fresh object each time would let the gesture and the committed pop drift apart and
- * would make that guarantee untestable.
- */
-private val parentReturnEnter: EnterTransition = slideInHorizontally(
-    animationSpec = tween(DETAIL_POP_DURATION_MS, easing = LinearEasing),
-    initialOffsetX = { width -> parentParallaxOffset(covered = true, width = width) },
-)
-
-/**
- * The parent steps aside as a detail page arrives over it.
- *
- * The mirror of [predictiveBackParentEnter]: same fraction, same duration, opposite direction, so a
- * push and the return that follows it describe one continuous motion.
- */
-internal fun detailPushParentExit(): ExitTransition = slideOutHorizontally(
-    animationSpec = tween(DETAIL_PUSH_DURATION_MS, easing = FastOutSlowInEasing),
-    targetOffsetX = { width -> parentParallaxOffset(covered = true, width = width) },
-)
+internal fun predictiveBackParentEnter(): EnterTransition = EnterTransition.None
 
 /** Resting alpha for the detail page's push fade. */
 internal const val DETAIL_FADE_ALPHA = 0.94f
