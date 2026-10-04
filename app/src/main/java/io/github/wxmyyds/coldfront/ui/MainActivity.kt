@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Row
@@ -240,7 +241,13 @@ private fun MainPage(
     onOpenAbout: () -> Unit,
 ) {
     val contentInsets = WindowInsets.navigationBars
-    Box(Modifier.fillMaxSize().padding(contentInsets).consumeWindowInsets(contentInsets)) {
+    // windowInsetsPadding, not padding(insets): WindowInsets is not a PaddingValues, and converting
+    // it first would bake the values in at composition rather than per-layout pass.
+    Box(
+        Modifier.fillMaxSize()
+            .windowInsetsPadding(contentInsets)
+            .consumeWindowInsets(contentInsets),
+    ) {
         TopLevelPager(
             vm = vm,
             settings = settings,
