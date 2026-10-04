@@ -2,7 +2,6 @@ package io.github.wxmyyds.coldfront.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -66,15 +65,16 @@ internal fun ChromeDimming(backProgress: State<Float?>, modifier: Modifier = Mod
  * of what is being revealed. Only MAIN consumes [PaddingValues]; detail destinations and the NavHost
  * always keep the same bounds and transform centre.
  *
- * @param chromeDimming drawn over the bar or rail. The chrome is a sibling of the NavHost, so it
- * cannot inherit the top-level page's scrim and has to be dimmed separately to match.
+ * @param chromeDimming drawn over the bar or rail, given [Modifier.matchParentSize] so it can
+ * cover exactly the bar without affecting the bar's own measurement. The chrome is a sibling of the
+ * NavHost, so it cannot inherit the top-level page's scrim and has to be dimmed separately to match.
  */
 @Composable
 internal fun NavigationChromeLayout(
     useRail: Boolean,
     showNavigation: Boolean,
     modifier: Modifier = Modifier,
-    chromeDimming: @Composable BoxScope.() -> Unit = {},
+    chromeDimming: @Composable (Modifier) -> Unit = {},
     navigation: @Composable () -> Unit,
     content: @Composable (PaddingValues) -> Unit,
 ) {
@@ -82,7 +82,9 @@ internal fun NavigationChromeLayout(
         val chrome = subcompose(NavigationSlot.Chrome) {
             Box {
                 navigation()
-                chromeDimming()
+                // matchParentSize comes from this BoxScope, so the scrim overlays the bar's own
+                // bounds; the bar keeps the size it would have had on its own.
+                chromeDimming(matchParentSize())
             }
         }.map {
             it.measure(

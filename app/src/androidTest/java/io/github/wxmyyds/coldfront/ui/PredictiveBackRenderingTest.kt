@@ -324,7 +324,7 @@ class PredictiveBackRenderingTest {
                     NavigationChromeLayout(
                         useRail = rail.value,
                         showNavigation = chromeVisible.value,
-                        chromeDimming = { ChromeDimming(backProgress, matchParentSize()) },
+                        chromeDimming = { bounds -> ChromeDimming(backProgress, bounds) },
                         modifier = Modifier.fillMaxSize().background(Color.Blue).testTag("viewport")
                             .onGloballyPositioned { viewport = it },
                         navigation = {
