@@ -395,9 +395,10 @@ class PredictiveBackRenderingTest {
     @Composable
     private fun RootPage(isActive: Boolean) {
         // `parent` is the page area only. That is deliberate: it fills the space the bar leaves, so
-        // its centre is the centre of the *content*, not of the destination. The assertions about a
-        // stationary viewport are made against `viewport` itself, which is unaffected by the bar.
-        Box(Modifier.fillMaxSize()) {
+        // its centre is the centre of the *content*, not of the destination. That is why the
+        // assertions below compare it against where it was first laid out instead of against the
+        // viewport centre, which would just be re-asserting the absence of the bar.
+        Box(Modifier.fillMaxSize().onGloballyPositioned { parent = it }) {
             PrimaryPageStrip(
                 pageCount = 4,
                 selectedPage = selected.intValue,
