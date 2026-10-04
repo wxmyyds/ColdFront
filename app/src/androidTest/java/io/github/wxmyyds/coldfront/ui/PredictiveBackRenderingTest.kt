@@ -292,7 +292,7 @@ class PredictiveBackRenderingTest {
             for (x in 0 until pixels.width step 8) {
                 val pixel = pixels[x, y]
                 if (pixel.blue > 0.5f && pixel.red < 0.3f && pixel.green > 0.3f) {
-                    val brightness = (pixel.red.toInt() + pixel.green + pixel.blue.toInt()) / 3
+                    val brightness = (pixel.red.toInt() + pixel.green.toInt() + pixel.blue.toInt()) / 3
                     if (dimmest < 0 || brightness < dimmest) dimmest = brightness
                 }
             }
