@@ -2,17 +2,13 @@ package io.github.wxmyyds.coldfront.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.shape.AbsoluteRoundedCornerShape
+import androidx.compose.foundation.shape.CornerSize
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Outline
-import androidx.compose.ui.graphics.Rect
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 
 /** Corner radius reached by the leaving page at full gesture progress. */
@@ -29,9 +25,9 @@ internal val DetailDismissCornerRadius = 28.dp
  * rest keeps its ordinary full-bleed rectangular shape and this changes nothing until the user
  * actually starts dragging.
  *
- * Only the leading (left) corners are rounded: the trailing edge travels off-screen, so rounding
- * it would be invisible, and a rounded trailing edge is what makes a page look like it shrank
- * rather than moved.
+ * Only the leading corners are rounded: the trailing edge travels off-screen, so rounding it would
+ * be invisible, and a rounded trailing edge is what makes a page look like it shrank rather than
+ * moved.
  */
 @Composable
 internal fun DetailDismissSurface(
@@ -45,35 +41,20 @@ internal fun DetailDismissSurface(
             .fillMaxSize()
             .graphicsLayer {
                 // Read the State, not a by-delegate local, so a drag does not recompose the page.
-                val current = progress.floatValue
-                shape = if (current > 0f) {
-                    LeadingCornersShape(DetailDismissCornerRadius.toPx() * current)
+                val radius = DetailDismissCornerRadius.toPx() * progress.value
+                // AbsoluteRoundedCornerShape resolves start/end against the ambient layout
+                // direction, so the corner stays on the leading edge in RTL too.
+                shape = if (radius > 0f) {
+                    AbsoluteRoundedCornerShape(
+                        topStart = CornerSize(radius),
+                        bottomStart = CornerSize(radius),
+                    )
                 } else {
                     RectangleShape
                 }
-                clip = current > 0f
+                clip = radius > 0f
             }
     ) {
         content()
-    }
-}
-
-/** A shape that rounds only the two corners on the leading edge, in the given layout direction. */
-private class LeadingCornersShape(private val radius: Float) : Shape {
-    override fun createOutline(
-        size: Size,
-        layoutDirection: LayoutDirection,
-        density: Density,
-    ): Outline {
-        val leading = CornerRadius(radius, radius)
-        val trailing = CornerRadius.Zero
-        val roundsLeft = layoutDirection == LayoutDirection.Ltr
-        return Outline.Rounded(
-            rect = Rect(0f, 0f, size.width, size.height),
-            topLeft = if (roundsLeft) leading else trailing,
-            topRight = if (roundsLeft) trailing else leading,
-            bottomRight = if (roundsLeft) trailing else leading,
-            bottomLeft = if (roundsLeft) leading else trailing,
-        )
     }
 }

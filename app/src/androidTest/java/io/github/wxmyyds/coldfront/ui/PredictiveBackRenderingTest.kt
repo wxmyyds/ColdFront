@@ -174,40 +174,39 @@ class PredictiveBackRenderingTest {
         setup()
         openDetail()
         val radius = 28.dp.value * rule.activity.resources.displayMetrics.density
-        // At rest the page is a plain rectangle: no corner is cut, and the pixel at the very
-        // top-left corner belongs to the page.
-        assertCornerPixel(0, 0, isPage = true, radius = radius)
+        // At rest the page is a plain rectangle: its own top-left pixel belongs to the page.
+        assertCornerPixel(2, 2, isPage = true, label = "at rest")
         gesture(BackEventCompat.EDGE_LEFT)
         for (progress in listOf(0.25f, 0.5f, 0.75f)) {
             progress(progress, BackEventCompat.EDGE_LEFT)
             val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
-            val inset = (radius * progress).toInt()
-            // Just inside the leading corners the page is gone; the parent shows through.
+            // The corner is cut relative to the page's own position, which has moved right.
+            val left = detailOriginX(detail)
+            val inset = left + (radius * progress).toInt()
             assertTrue(
-                "corner must be cut at progress $progress",
+                "corner must be cut at progress $progress (x=$inset)",
                 pixels[inset, inset].green > 0.5f,
             )
-            // Well inside the page it is still red, so the surface is only clipped, not tinted.
+            // Well inside the page it is still the page itself, so it is clipped, not tinted.
             assertTrue(
                 "page interior must stay opaque at progress $progress",
-                pixels[(inset + radius).toInt(), pixels.height / 2].red > 0.9f,
+                pixels[(inset + radius * 2).toInt(), pixels.height / 2].red > 0.9f,
             )
         }
         // Releasing restores the rectangular page rather than leaving a rounded shell behind.
         rule.runOnUiThread { dispatcher.dispatchOnBackCancelled() }
         frames(600)
         rule.runOnIdle { assertFalse(parent.isAttached) }
-        assertCornerPixel(0, 0, isPage = true, radius = radius)
+        assertCornerPixel(2, 2, isPage = true, label = "after cancel")
     }
 
-    private fun assertCornerPixel(x: Int, y: Int, isPage: Boolean, radius: Float) {
+    private fun assertCornerPixel(x: Int, y: Int, isPage: Boolean, label: String) {
         val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
         val pixel = pixels[x, y]
-        val isPagePixel = pixel.red > 0.9f
         assertEquals(
-            "corner pixel ($x,$y) should be ${if (isPage) "page" else "parent"}",
+            "corner pixel ($x,$y) should be ${if (isPage) "page" else "parent"} $label",
             isPage,
-            isPagePixel,
+            pixel.red > 0.9f,
         )
     }
 

@@ -128,14 +128,18 @@ internal const val DETAIL_POP_TRAVEL = 1f
 internal val DETAIL_POP_SETTLE_EASING = FastOutSlowInEasing
 
 /**
- * Spec for the leaving page's horizontal travel, as a fraction of its own width.
+ * Spec for the leaving page's travel, as a horizontal offset in pixels.
  *
  * Exposed separately from [predictiveBackExit] so the curve can be sampled directly: an
  * [androidx.compose.animation.ExitTransition] carries its spec inside and exposes no way to read
  * it back, which is why a previous version of this test could only compare objects by identity.
+ * [DETAIL_POP_WIDTH] is the page width the spec is evaluated against when sampling.
  */
-internal fun detailPopTravelSpec(): FiniteAnimationSpec<Float> =
+internal fun detailPopTravelSpec(): FiniteAnimationSpec<IntOffset> =
     tween(DETAIL_POP_DURATION_MS, easing = DETAIL_POP_SETTLE_EASING)
+
+/** Page width the travel spec is sampled against, in pixels. */
+internal const val DETAIL_POP_WIDTH = 1000
 
 /**
  * The leaving page slides out under the finger while the parent is revealed beside it.

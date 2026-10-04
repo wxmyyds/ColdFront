@@ -6,6 +6,7 @@ import androidx.compose.animation.core.TargetBasedAnimation
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.tween
 import androidx.compose.material3.MotionScheme
+import androidx.compose.ui.unit.IntOffset
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
@@ -95,18 +96,21 @@ class NavigationMotionKindTest {
     fun theLeavingPageTravelsTheFullWidthAndTheParentStaysPut() {
         // The page must leave towards the physical right, by its whole width, in one track. The
         // parent must contribute no transition of its own: it is uncovered, not animated.
-        val travel = animation(detailPopTravelSpec(), 0f, 1f)
+        val travel = TargetBasedAnimation(
+            detailPopTravelSpec(), IntOffset.VectorConverter, IntOffset.Zero, IntOffset(DETAIL_POP_WIDTH, 0),
+        )
         assertEquals(DETAIL_POP_DURATION_MS * 1_000_000L, travel.durationNanos)
-        assertEquals(0f, travel.getValueFromNanos(0), 0f)
-        assertEquals(1f, travel.getValueFromNanos(300_000_000), 0f)
+        assertEquals(0f, travel.getValueFromNanos(0).x, 0f)
+        assertEquals(DETAIL_POP_WIDTH.toFloat(), travel.getValueFromNanos(300_000_000).x, 0f)
         // Never overshoots and never travels backwards, so a released gesture settles instead of
-        // snapping. Progress is clamped before it reaches here, so this stays within one width.
+        // snapping. The page must also stay strictly inside its own track: no vertical drift.
         var last = 0f
         for (millis in 0..300) {
             val value = travel.getValueFromNanos(millis * 1_000_000L)
-            assertTrue("travel out of range at ${millis}ms: $value", value in 0f..1f)
-            assertTrue("travel moved backwards at ${millis}ms", value >= last)
-            last = value
+            assertTrue("travel out of range at ${millis}ms: ${value.x}", value.x in 0f..DETAIL_POP_WIDTH.toFloat())
+            assertEquals("vertical drift at ${millis}ms", 0f, value.y, 0f)
+            assertTrue("travel moved backwards at ${millis}ms", value.x >= last)
+            last = value.x
         }
     }
 
@@ -122,7 +126,4 @@ class NavigationMotionKindTest {
             NavigationMotionKind.PopDetail, false, TestMotionScheme, 1,
         ))
     }
-
-    private fun animation(spec: FiniteAnimationSpec<Float>, from: Float, to: Float) =
-        TargetBasedAnimation(spec, Float.VectorConverter, from, to)
 }

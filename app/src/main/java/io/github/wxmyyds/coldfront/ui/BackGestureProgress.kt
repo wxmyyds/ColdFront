@@ -39,10 +39,12 @@ import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
  */
 @Composable
 internal fun rememberBackGestureProgress(isDismissible: Boolean): State<Float> {
-    val dispatcher = LocalNavigationEventDispatcherOwner.current.navigationEventDispatcher
+    val owner = checkNotNull(LocalNavigationEventDispatcherOwner.current) {
+        "No NavigationEventDispatcher was provided via LocalNavigationEventDispatcherOwner"
+    }
     // Read through the State, not through a delegated local: only the derived state below should
     // observe progress, so a drag must not recompose this composable on every frame.
-    val transitionState = dispatcher.transitionState.collectAsState()
+    val transitionState = owner.navigationEventDispatcher.transitionState.collectAsState()
 
     return remember(isDismissible) {
         derivedStateOf {

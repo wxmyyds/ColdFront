@@ -12,6 +12,8 @@ import androidx.navigation.compose.NavHost
 import io.github.wxmyyds.coldfront.ui.component.AppMotion
 import io.github.wxmyyds.coldfront.ui.component.NavigationMotionKind
 import io.github.wxmyyds.coldfront.ui.component.isSecondaryDestination
+import io.github.wxmyyds.coldfront.ui.component.predictiveBackEnter
+import io.github.wxmyyds.coldfront.ui.component.predictiveBackExit
 import io.github.wxmyyds.coldfront.ui.component.shouldUsePredictivePop
 
 /** One transition owner for real destinations. Tab travel belongs exclusively to PrimaryPageStrip. */
@@ -53,21 +55,21 @@ internal fun AppNavHost(
                 routeDistance = 1,
             )
         },
-        popEnterTransition = { AppMotion.predictiveBackEnter() },
-        popExitTransition = { AppMotion.predictiveBackExit() },
+        popEnterTransition = { predictiveBackEnter() },
+        popExitTransition = { predictiveBackExit() },
         predictivePopEnterTransition = { _ ->
             if (shouldUsePredictivePop(
                     predictiveBack, initialState.destination.route, targetState.destination.route,
                     topLevelRoutes,
                 )
-            ) AppMotion.predictiveBackEnter() else EnterTransition.None
+            ) predictiveBackEnter() else EnterTransition.None
         },
         predictivePopExitTransition = { _ ->
             if (shouldUsePredictivePop(
                     predictiveBack, initialState.destination.route, targetState.destination.route,
                     topLevelRoutes,
                 )
-            ) AppMotion.predictiveBackExit() else ExitTransition.None
+            ) predictiveBackExit() else ExitTransition.None
         },
         builder = builder,
     )
