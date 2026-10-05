@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import io.github.wxmyyds.coldfront.ui.component.PARENT_PARALLAX_FRACTION
 import kotlin.math.abs
+import kotlin.math.max
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -137,6 +138,36 @@ class PredictiveBackRenderingTest {
             nearEnd > viewport.size.width / 2,
         )
         commitAndCheck()
+    }
+
+    @Test
+    fun commitSlidesTheLeavingPageFullyOutBeforeDetaching() {
+        // The release must finish the page's outward slide before the NavHost detaches it. NavHost's
+        // predictive-back keep-alive is seeked by the drag progress, so after release it only holds
+        // the page for CEILING x (1 - progress). If that window is shorter than the settle, the page
+        // is cut off part-way - the regression the user saw as "release does not slide out" - even
+        // though the drag tracked the finger perfectly.
+        setup()
+        openDetail()
+        gesture(BackEventCompat.EDGE_LEFT)
+        progress(0.5f, BackEventCompat.EDGE_LEFT)
+        rule.runOnUiThread { dispatcher.onBackPressed() }
+        // The leaving page's leading edge must travel to (essentially) the window edge before the
+        // NavHost detaches it. If the keep-alive cuts it off, the greatest measured travel stays
+        // well short of the full width and the page vanishes mid-slide.
+        var detached = false
+        var maxTravel = 0
+        for (i in 0 until 80) {
+            frames(16)
+            rule.runOnIdle { detached = !detail.isAttached }
+            maxTravel = max(maxTravel, renderedTravelX())
+            if (detached) break
+        }
+        val width = viewport.size.width
+        assertTrue(
+            "the page must slide fully out before detaching (maxTravel=$maxTravel, width=$width)",
+            detached && maxTravel > width * 0.95f,
+        )
     }
 
     @Test
