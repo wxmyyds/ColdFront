@@ -41,6 +41,21 @@ internal const val SQUIRCLE_CONTROL = 0.643f
 internal const val SQUIRCLE_EXTENSION = 1.1f
 
 /**
+ * The squircle corner's tile size in pixels: the nominal radius widened by the continuous-corner
+ * factor, capped at half the smaller side so a tiny page cannot over-round. Kept as a pure function
+ * so the geometry can be sampled in a JVM test.
+ */
+internal fun squircleCornerTile(radiusPx: Float, minSidePx: Float): Float =
+    max(0f, radiusPx * SQUIRCLE_EXTENSION).coerceAtMost(minSidePx * 0.5f)
+
+/**
+ * The cubic-Bézier control handle for a squircle corner, from the corner's tile size. The handle is
+ * `tile * (1 - control)`, so `0.643` is the lock-step value Miuix uses. Kept as a pure function so
+ * the geometry can be sampled in a JVM test.
+ */
+internal fun squircleControlHandle(tilePx: Float): Float = tilePx * (1f - SQUIRCLE_CONTROL)
+
+/**
  * A [Shape] that rounds only the leading (physical left) corners of the leaving page with a
  * squircle curve, and leaves the trailing corners square.
  *
@@ -60,12 +75,12 @@ internal class SquircleLeadingShape(private val radius: Float) : Shape {
         val height = size.height
         // The corner tile extends the radius by the squircle factor, capped at half the smaller
         // side so a tiny page cannot over-round.
-        val tile = max(0f, radius * SQUIRCLE_EXTENSION).coerceAtMost(min(width, height) * 0.5f)
+        val tile = squircleCornerTile(radius, min(width, height))
         val path = Path()
         if (tile <= 0f) {
             path.addRect(Rect(0f, 0f, width, height))
         } else {
-            val handle = tile * (1f - SQUIRCLE_CONTROL)
+            val handle = squircleControlHandle(tile)
             // Walk the rectangle clockwise, replacing the two leading (left) corners with a
             // squircle cubic-Bézier and keeping the two trailing (right) corners square.
             path.moveTo(tile, 0f)
