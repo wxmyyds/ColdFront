@@ -71,7 +71,7 @@ class PredictiveBackRenderingTest {
         val width = viewport.size.width.toFloat()
         for (progress in listOf(0.15f, 0.35f, 0.5f, 0.85f)) {
             progress(progress, BackEventCompat.EDGE_LEFT)
-            // The parent is revealed, stepping back a fifth of the width as the page above leaves,
+            // The parent is revealed, stepping back a quarter of the width as the page above leaves,
             // and must never scale or move vertically.
             assertSteppedBack(progress)
             // The page tracks the finger: travel is linear in progress, so at 0.5 it has moved
@@ -166,7 +166,7 @@ class PredictiveBackRenderingTest {
         progress(0.65f, BackEventCompat.EDGE_LEFT)
         rule.runOnIdle {
             // Bottom chrome only affects Y. The selected tab must be centred within the *parent*,
-            // not within the viewport: the parent is stepped back by a fifth of the width while the
+            // not within the viewport: the parent is stepped back by a quarter of the width while the
             // detail above it is leaving, and the tab moves with its page. What must not happen is
             // the tab still travelling from another pager page, or sitting half-clipped at the
             // pager's edge - both of which shift it within the parent itself.
@@ -214,18 +214,20 @@ class PredictiveBackRenderingTest {
             progress(progress, BackEventCompat.EDGE_LEFT)
             val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
             val travel = renderedTravelX()
-            val corner = (radius * progress).toInt()
-            // Sample the very top row: a rounded corner's leftmost extent sits one full radius in
+            // The squircle corner extends the radius by the continuous-corner factor, so the
+            // page's leftmost extent along the very top row is one *tile* in, not one radius.
+            val tile = (radius * progress * SQUIRCLE_EXTENSION).toInt()
+            // Sample the very top row: a rounded corner's leftmost extent sits one full tile in
             // from the page's leading edge, whereas mid-height it sits at the edge itself. Using
             // one pixel diagonally would land deep inside the page and prove nothing.
             assertTrue(
-                "corner must be cut at progress $progress (travel=$travel, r=$corner)",
-                corner > 0 && pixels[travel + 1, 0].green > 0.5f,
+                "corner must be cut at progress $progress (travel=$travel, tile=$tile)",
+                tile > 0 && pixels[travel + 1, 0].green > 0.5f,
             )
-            // One radius in, along the top edge, the page is present again.
+            // One tile in, along the top edge, the page is present again.
             assertTrue(
-                "page must be present one radius in at progress $progress",
-                pixels[(travel + corner + 2).coerceAtMost(pixels.width - 1), 0].red > 0.9f,
+                "page must be present one tile in at progress $progress",
+                pixels[(travel + tile + 2).coerceAtMost(pixels.width - 1), 0].red > 0.9f,
             )
             // Mid-height the page is not clipped at all.
             assertTrue(
@@ -570,7 +572,7 @@ class PredictiveBackRenderingTest {
             coordinates.localToRoot(Offset.Zero).x) / coordinates.size.width
 
     /**
-     * The top-level page is exactly a fifth of the viewport further left than when it was uncovered.
+     * The top-level page is exactly a quarter of the viewport further left than when it was uncovered.
      *
      * It used to be required not to move at all, but a page covered by a detail now steps back so the
      * two stay stacked. Asserted against the measured formula rather than a recorded baseline: the
@@ -583,7 +585,7 @@ class PredictiveBackRenderingTest {
         // rest centre is not the window's. The shift measured from there, not from the centre.
         val restCentre = parentRestX ?: centre(parent).x
         val expected = restCentre - PARENT_PARALLAX_FRACTION * viewport.size.width * (1f - progress)
-        assertEquals("parent must step back a fifth of the width", expected, centre(parent).x, 1.5f)
+        assertEquals("parent must step back a quarter of the width", expected, centre(parent).x, 1.5f)
         // Vertical is compared against where the page content actually sits, not the window centre:
         // the page fills the space the bottom bar leaves, so its vertical centre is legitimately
         // above the window's. Only a *change* in it would be a bug.

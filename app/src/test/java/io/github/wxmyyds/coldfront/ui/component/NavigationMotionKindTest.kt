@@ -157,14 +157,14 @@ class NavigationMotionKindTest {
     }
 
     @Test
-    fun theCoveredParentStepsAsideByAFifthOfTheWidth() {
-        // A fifth, not the full width: at full width the parent would slide entirely off screen and
+    fun theCoveredParentStepsAsideByAQuarterOfTheWidth() {
+        // A quarter, not the full width: at full width the parent would slide entirely off screen and
         // the two pages would read as swapping places rather than one covering the other. The
         // offset is a pure function of whether the parent is covered - it is applied as a graphics
         // layer, not through NavHost, so navigationOffset must not move the parent at all.
-        assertEquals(-200, parentParallaxOffset(covered = true, width = 1000))
+        assertEquals(-250, parentParallaxOffset(covered = true, width = 1000))
         assertEquals("a revealed parent is exactly in place", 0, parentParallaxOffset(false, 1000))
-        assertEquals(0.2f, PARENT_PARALLAX_FRACTION)
+        assertEquals(0.25f, PARENT_PARALLAX_FRACTION)
         // The parent's step-back is ParentScrimSurface's job via its graphics layer; the NavHost
         // transition must leave it in place so an interrupted push cannot slide it over the page
         // being dragged.
@@ -175,14 +175,14 @@ class NavigationMotionKindTest {
 
     @Test
     fun aPushAndItsReturnLeaveTheParentWhereTheyFoundIt() {
-        // The push steps the parent left by a fifth; the return must bring it back to exactly the
+        // The push steps the parent left by a quarter; the return must bring it back to exactly the
         // offset it started from, so repeated push/pop cycles cannot accumulate a drift. Because the
         // offset is a pure function of whether the parent is covered (not of any accumulated state),
         // the covered and resting offsets are exact opposites, and this holds regardless of how many
         // times the page has been pushed and popped.
         val width = 1000
         assertEquals("the parent must return to exactly where it began", 0, parentParallaxOffset(false, width))
-        assertEquals("a fifth of the width", -200, parentParallaxOffset(true, width))
+        assertEquals("a quarter of the width", -250, parentParallaxOffset(true, width))
         // The NavHost transition leaves the parent unmoved; the step-back is owned by the surface
         // that draws the parent. So a push and its return cannot leave a stale transition offset
         // behind, which is the drift this guards against.
@@ -216,5 +216,30 @@ class NavigationMotionKindTest {
         // Out-of-range gesture values must not be able to invert or overshoot the effect.
         assertEquals(0f, parentScrimAlphaForProgress(1.4f), 1e-5f)
         assertEquals(PARENT_SCRIM_ALPHA, parentScrimAlphaForProgress(-0.3f), 1e-5f)
+    }
+
+    @Test
+    fun thePageFadesInStepWithTheScrimButNeverToOpaqueOrGone() {
+        // The page's own pixels fade a tenth (Miuix covered-layer alpha falloff), stacking with the
+        // black scrim. It must track the gesture linearly, never drop below its floor, and always
+        // return to fully opaque when the page is uncovered.
+        var last = -1f
+        for (progress in listOf(0f, 0.15f, 0.35f, 0.5f, 0.75f, 1f)) {
+            val alpha = parentPageAlphaForProgress(progress)
+            assertTrue("page must brighten as the page above it leaves", alpha >= last - 1e-6f)
+            assertEquals(
+                "page fade must match the progress at $progress",
+                1f - PARENT_FADE_FRACTION * (1f - progress),
+                alpha,
+                1e-5f,
+            )
+            last = alpha
+        }
+        // A covered page at rest is faded a tenth; a fully returned one is fully opaque.
+        assertEquals(1f - PARENT_FADE_FRACTION, parentPageAlphaForProgress(0f), 1e-5f)
+        assertEquals(1f, parentPageAlphaForProgress(1f), 1e-5f)
+        // Out-of-range values must not fade it below the floor or above opaque.
+        assertEquals(1f - PARENT_FADE_FRACTION, parentPageAlphaForProgress(-0.3f), 1e-5f)
+        assertEquals(1f, parentPageAlphaForProgress(1.4f), 1e-5f)
     }
 }

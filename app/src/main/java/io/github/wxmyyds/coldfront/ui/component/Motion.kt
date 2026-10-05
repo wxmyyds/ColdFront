@@ -76,17 +76,18 @@ internal fun navigationOffset(
 /**
  * How far a covered top-level page shifts aside, as a fraction of the viewport width.
  *
- * The parent does not move to make room; it steps back a fifth of the width, so a detail never
- * fully uncovers it and the two layers stay stacked rather than swapping places. This is the same
- * parallax the reference MIUI-style navigation uses.
+ * A quarter of the width, matching the Miuix reference (`MiuixDefault` parallaxes a covered page
+ * `* 0.25f` toward the leading edge). At the full width the parent would slide entirely off-screen
+ * and the two layers would read as swapping places; a quarter keeps them stacked. This is also the
+ * fraction the parent's geometry is checked against in the rendering tests.
  */
-internal const val PARENT_PARALLAX_FRACTION = 0.2f
+internal const val PARENT_PARALLAX_FRACTION = 0.25f
 
 /**
  * Parallax offset of the covered page, in pixels: negative while entering a detail, positive while
  * leaving one, so the parent returns to exactly where it started.
  *
- * A fifth of the width rather than the full width: at full width the parent would slide entirely
+ * A quarter of the width rather than the full width: at full width the parent would slide entirely
  * off-screen, which reads as two unrelated pages swapping rather than one covering the other.
  */
 internal fun parentParallaxOffset(covered: Boolean, width: Int): Int =
@@ -163,23 +164,31 @@ internal const val DETAIL_POP_DURATION_MS = 200
  * Duration of a detail page sliding in over the top-level page.
  *
  * Longer than [DETAIL_POP_DURATION_MS] because a push moves much further: the arriving page
- * crosses its whole width while the parent steps back a fifth of the viewport, whereas a release
+ * crosses its whole width while the parent steps back a quarter of the viewport, whereas a release
  * only finishes the motion the finger had already covered. 300ms matches the top-level page switch
  * so the app has a single "page moves" duration.
  */
 internal const val DETAIL_PUSH_DURATION_MS = 300
 
 /**
- * Opacity of the black scrim that dims the top-level page while a detail page covers it.
+ * Opacity of the fullscreen black scrim that dims the top-level page while a detail page covers it.
  *
- * The parent must read as *background*, which means darker than its own resting appearance rather
- * than merely faded: fading it would let whatever is behind the NavHost show through and would
- * look lighter, not dimmer. A scrim colour is used so this darkens correctly in both themes.
+ * `0.5f` is the Miuix `NavDisplayEffects.dimAmount` default: how dark a covered page can get. The
+ * scrim is drawn as a solid black layer over the parent (never as a fade of the page's own pixels)
+ * because fading would let what is behind the NavHost show through and read *lighter*; black
+ * darkens in both themes and gives the covered page its backdrop look.
  */
-internal const val PARENT_SCRIM_ALPHA = 0.32f
+internal const val PARENT_SCRIM_ALPHA = 0.5f
 
-/** How long the parent takes to dim as a detail page arrives over it. */
-internal const val PARENT_SCRIM_DURATION_MS = 300
+/**
+ * How strongly a top-level page's *own pixels* fade while a detail page covers it.
+ *
+ * `0.1f` is the Miuix covered-layer alpha falloff (`alpha = 1 - 0.1 * coverProgress`): in addition
+ * to the black scrim, the covered page itself fades by up to a tenth so the backdrop reads as
+ * extending outward rather than as a hard patch. The two effects stack; both are driven by the same
+ * gesture progress so one finger dims and fades the parent and slides the page above it together.
+ */
+internal const val PARENT_FADE_FRACTION = 0.1f
 
 /**
  * How strongly a top-level page - its content *and* its navigation bar - is dimmed right now.
@@ -190,6 +199,16 @@ internal const val PARENT_SCRIM_DURATION_MS = 300
  */
 internal fun parentScrimAlphaForProgress(progress: Float): Float =
     PARENT_SCRIM_ALPHA * (1f - progress.coerceIn(0f, 1f))
+
+/**
+ * How opaque a covered page's own pixels are, as a function of gesture progress.
+ *
+ * `1f` at full brightness (the page is uncovered), `1 - [PARENT_FADE_FRACTION]` when fully covered.
+ * Linear in progress so the page fades in step with the scrim and the page above it. Kept as a pure
+ * function so the curve can be sampled in a JVM test.
+ */
+internal fun parentPageAlphaForProgress(progress: Float): Float =
+    1f - PARENT_FADE_FRACTION * (1f - progress.coerceIn(0f, 1f))
 
 /**
  * Travel of the leaving page as a function of gesture progress.
@@ -252,7 +271,7 @@ private val detailPopExit: ExitTransition = slideOutHorizontally(
 )
 
 /**
- * The parent steps back a fifth of the width as the page above it leaves, then returns to centre.
+ * The parent steps back a quarter of the width as the page above it leaves, then returns to centre.
  *
  * Driven by the same gesture progress as the leaving page, so the two cannot drift apart. The offset
  * is signed for the incoming direction: a page coming from the right uncovers the parent's leading
@@ -302,7 +321,7 @@ internal object AppMotion {
             NavigationMotionKind.PopDetail -> motionScheme.defaultSpatialSpec<IntOffset>()
         }
         return when (kind) {
-            // The parent steps back a fifth of the width as the page above leaves.
+            // The parent steps back a quarter of the width as the page above leaves.
             NavigationMotionKind.PopDetail -> predictiveBackParentEnter()
             // A push whose reverse is interrupted can have its exit boundary retained by Compose,
             // so the page that is about to be dismissed must not be off-centre to begin with.

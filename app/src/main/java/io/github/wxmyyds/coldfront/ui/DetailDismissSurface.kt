@@ -4,21 +4,82 @@ import android.os.Build
 import android.view.RoundedCorner
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.shape.AbsoluteRoundedCornerShape
-import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import kotlin.math.max
+import kotlin.math.min
 
 /** Floor for the leaving page's corner radius, used when the device does not report one. */
 internal val DetailDismissCornerRadius = 28.dp
+
+/**
+ * Cubic-Bézier handle ratio for a squircle rounded-corner path, matching the Miuix `squircle`
+ * geometry so a page slides in with the smooth, continuous corner the device draws rather than a
+ * plain circular arc. `0.643` is the lock-step value Miuix uses.
+ */
+internal const val SQUIRCLE_CONTROL = 0.643f
+
+/**
+ * Corner-tile size as a multiple of the corner radius. `1.1` (the Miuix default) makes the corner
+ * continuous rather than a circular arc; `1.0` would be the arc.
+ */
+internal const val SQUIRCLE_EXTENSION = 1.1f
+
+/**
+ * A [Shape] that rounds only the leading (physical left) corners of the leaving page with a
+ * squircle curve, and leaves the trailing corners square.
+ *
+ * The predictive-back page always travels out toward the physical right whatever the layout
+ * direction, so the exposed leading edge is always the physical left. Rounding only that side keeps
+ * the trailing edge square, which is the edge that travels off-screen and would otherwise read as a
+ * page shrinking. When the radius is zero the shape is a plain rectangle, so a page at rest is
+ * unchanged.
+ */
+internal class SquircleLeadingShape(private val radius: Float) : Shape {
+    override fun createOutline(
+        size: Size,
+        layoutDirection: LayoutDirection,
+        density: Density,
+    ): Outline {
+        val width = size.width
+        val height = size.height
+        // The corner tile extends the radius by the squircle factor, capped at half the smaller
+        // side so a tiny page cannot over-round.
+        val tile = max(0f, radius * SQUIRCLE_EXTENSION).coerceAtMost(min(width, height) * 0.5f)
+        val path = Path()
+        if (tile <= 0f) {
+            path.addRect(Rect(0f, 0f, width, height))
+        } else {
+            val handle = tile * (1f - SQUIRCLE_CONTROL)
+            // Walk the rectangle clockwise, replacing the two leading (left) corners with a
+            // squircle cubic-Bézier and keeping the two trailing (right) corners square.
+            path.moveTo(tile, 0f)
+            path.lineTo(width, 0f)
+            path.lineTo(width, height)
+            path.lineTo(tile, height)
+            path.cubicTo(handle, height, 0f, height - handle, 0f, height - tile)
+            path.lineTo(0f, tile)
+            path.cubicTo(0f, handle, handle, 0f, tile, 0f)
+            path.close()
+        }
+        return Outline.Generic(path)
+    }
+}
 
 /**
  * The screen's corner radius, so a full-bleed page slides in clipped to the device's actual
@@ -97,20 +158,10 @@ internal fun DetailDismissSurface(
             .graphicsLayer {
                 // Read the State, not a by-delegate local, so a drag does not recompose the page.
                 val radius = cornerRadius.toPx() * progress.value
-                // AbsoluteRoundedCornerShape takes its corners positionally as topLeft,
-                // topRight, bottomRight, bottomLeft, and resolves "start" against the ambient
-                // layout direction, so the corner stays on the leading edge in RTL too.
-                shape = if (radius > 0f) {
-                    val corner = CornerSize(radius)
-                    AbsoluteRoundedCornerShape(
-                        topLeft = corner,
-                        topRight = CornerSize(0f),
-                        bottomRight = CornerSize(0f),
-                        bottomLeft = corner,
-                    )
-                } else {
-                    RectangleShape
-                }
+                // The page always leaves toward the physical right, so the exposed leading edge is
+                // always the physical left. SquircleLeadingShape rounds those two corners with the
+                // device's smooth continuous-corner curve; the trailing edge stays square.
+                shape = if (radius > 0f) SquircleLeadingShape(radius) else RectangleShape
                 clip = radius > 0f
             }
     ) {
