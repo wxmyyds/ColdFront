@@ -3,13 +3,25 @@ package io.github.wxmyyds.coldfront.ui
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
 import androidx.navigationevent.NavigationEventTransitionState
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import io.github.wxmyyds.coldfront.ui.component.releaseSettleSpec
+
+/**
+ * How long the gesture progress has to be frozen before we treat the drag as over, even though the
+ * dispatcher is still reporting `InProgress`. While the finger is down and moving, the progress
+ * changes every frame, so it never stays frozen this long; once the finger lifts (or the flow gets
+ * stuck at the last value on a device that never completes it) the value stops changing and this
+ * window elapses, which is what lets the footer kick into the release settle.
+ */
+private const val RELEASE_STALE_NANOS = 72_000_000L
 
 /**
  * Live predictive-back gesture progress, for effects the transition API cannot express.
@@ -70,9 +82,16 @@ internal fun rememberRunningBackProgress(observeBackGesture: Boolean): State<Flo
  * the raw progress would snap at the moment of release - a rounded page going suddenly square, a
  * backdrop flashing dark - while the page was still visibly moving.
  *
- * So once the finger is up the value settles to [settleTo] on a critically-damped spring (the same
- * spring the page's own slide uses via [DetailDismissSurface]), so an effect driven this way stays
- * in step with the page it decorates instead of running on a second, unrelated clock.
+ * So once the finger is up the value settles to [settleTo] on the release curve (the same curve the
+ * page's own slide uses via [DetailDismissSurface]), so an effect driven this way stays in step with
+ * the page it decorates instead of running on a second, unrelated clock.
+ *
+ * The gesture is considered over when the dispatcher reports [NavigationEventTransitionState.Idle]
+ * (its normal behaviour), but to be robust to a device where the system gesture never completes that
+ * flow - leaving the progress frozen in `InProgress` - the drag is also treated as over once the
+ * progress has been frozen for [RELEASE_STALE_NANOS]. A lifted finger and a stuck flow both freeze
+ * the value, while an actively dragged finger keeps it changing every frame, so this does not cut a
+ * slow drag short.
  *
  * @param settleTo where to go once no gesture is running: `1f` when the page is on its way out,
  * `0f` when it is coming back or was never dismissed.
@@ -83,17 +102,37 @@ internal fun rememberGestureSettleProgress(
     settleTo: Float,
 ): State<Float> {
     val running = rememberRunningBackProgress(observeBackGesture)
+    // Whether the finger has lifted. True when the flow reports Idle (running.value == null) or when
+    // the progress is frozen long enough to be a released gesture even though the flow is still
+    // InProgress (the device case where transitionState never goes back to Idle).
+    val gestureOver = remember { mutableStateOf(running.value == null) }
+    LaunchedEffect(running) {
+        var lastValue = running.value
+        var lastChange = 0L
+        while (true) {
+            withFrameNanos { now ->
+                val v = running.value
+                when {
+                    v == null -> gestureOver.value = true
+                    v != lastValue -> {
+                        lastValue = v
+                        lastChange = now
+                        gestureOver.value = false
+                    }
+                    now - lastChange >= RELEASE_STALE_NANOS -> gestureOver.value = true
+                }
+            }
+        }
+    }
     return animateFloatAsState(
-        targetValue = running.value ?: settleTo,
+        // Once the finger is up the target is the settle point; while it is down it is the live
+        // finger progress.
+        targetValue = if (gestureOver.value) settleTo else running.value ?: settleTo,
         // While a gesture is running the target is already correct for this frame, so it must be
         // taken as-is - any easing would be applied on top of the finger's own position, which is
         // the same mistake a curved tween made of the page's own travel. Once the finger is up this
-        // is a real animation, so it settles on the release spring.
-        animationSpec = if (running.value != null) {
-            snap()
-        } else {
-            releaseSettleSpec()
-        },
+        // is a real animation, so it settles on the release curve.
+        animationSpec = if (gestureOver.value) releaseSettleSpec() else snap(),
         label = "backGestureSettleProgress",
     )
 }
