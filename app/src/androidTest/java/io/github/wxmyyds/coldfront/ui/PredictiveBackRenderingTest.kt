@@ -229,6 +229,19 @@ class PredictiveBackRenderingTest {
                 "page must be present one tile in at progress $progress",
                 pixels[(travel + tile + 2).coerceAtMost(pixels.width - 1), 0].red > 0.9f,
             )
+            // The squircle cuts *deeper* than a plain arc. An arc, at exactly one nominal radius
+            // in from the leading edge, has already reached its top edge and shows the page; only
+            // the squircle - whose tile is a tenth wider than the nominal radius - still has the
+            // parent showing there. This is what distinguishes a smooth continuous corner from a
+            // circular arc; at 0.25/0.5 the 0.1r margin is under the anti-aliased edge, so it is
+            // only asserted where it is comfortably resolvable.
+            if (progress >= 0.75f) {
+                val nominal = (radius * progress).toInt()
+                assertTrue(
+                    "squircle must still be cut at the nominal radius (progress=$progress)",
+                    pixels[(travel + nominal + 2).coerceAtMost(pixels.width - 1), 0].green > 0.5f,
+                )
+            }
             // Mid-height the page is not clipped at all.
             assertTrue(
                 "page must be unclipped mid-height at progress $progress",

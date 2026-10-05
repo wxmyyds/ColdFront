@@ -27,6 +27,16 @@ class NavigationMotionKindTest {
     private val tabs = listOf("home", "devices", "rgb", "settings")
 
     @Test
+    fun theCoverageValuesMatchTheMiuixReference() {
+        // These are the reference values chosen to match Miuix, not incidental tunables. Pin them
+        // literally so a drift back to the old values (1/5 parallax, 0.32 scrim, no page fade)
+        // fails the suite rather than silently reverting the look.
+        assertEquals("parent must step back a quarter of the width", 0.25f, PARENT_PARALLAX_FRACTION, 0f)
+        assertEquals("fullscreen black scrim darkness", 0.5f, PARENT_SCRIM_ALPHA, 0f)
+        assertEquals("page's own pixel fade", 0.1f, PARENT_FADE_FRACTION, 0f)
+    }
+
+    @Test
     fun navigationUsesLayersNotDetailNames() {
         for (detail in listOf("about", "scan", "future_detail")) {
             assertEquals(NavigationMotionKind.PushDetail, navigationMotionKind(false, false, true))
