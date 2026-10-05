@@ -33,6 +33,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import io.github.wxmyyds.coldfront.ui.component.PARENT_PARALLAX_FRACTION
+import kotlin.math.abs
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -489,25 +490,32 @@ class PredictiveBackRenderingTest {
         // PARENT_STEP_BACK_MS after the finger lifts, so the first frames legitimately show it
         // still mid-return. Its final resting place is asserted once the settle has elapsed below.
         rule.runOnUiThread { dispatcher.onBackPressed() }
-        // The pop exit is started by a disjoint NavHost coroutine, and when the push was
-        // interrupted its duration is not the fixed DETAIL_POP_DURATION_MS: the seek re-base
-        // leaves an initial-value animation NavHost must run out before it can detach. So poll
-        // rather than assume a frame count - a slow but correct settle must still pass, and a
-        // genuinely stuck page is what the final assertFalse catches.
-        var settled = false
+        // Two things finish at different rates and both must be done before the final assertions:
+        //   * the detail detaches: the pop exit is a disjoint NavHost coroutine, and when the push
+        //     was interrupted its duration is not the fixed DETAIL_POP_DURATION_MS - the seek
+        //     re-base leaves an initial-value animation NavHost must run out first;
+        //   * the parent returns to rest: over PARENT_STEP_BACK_MS.
+        // A settled push detaches almost immediately but the parent is still mid-return, so polling
+        // for detachment alone would break too early. Poll for *both*, and only then assert.
+        var detached = false
+        var parentAtRest = false
         for (i in 0 until 250) {
             frames(16)
-            rule.runOnIdle { settled = !detail.isAttached }
-            if (settled) break
+            rule.runOnIdle {
+                detached = !detail.isAttached
+                parentAtRest = abs(centre(parent).x - (parentRestX ?: 0f)) < 1f &&
+                    abs(centre(parent).y - (parentRestY ?: 0f)) < 1f
+            }
+            if (detached && parentAtRest) break
         }
         rule.runOnIdle {
             assertEquals("root", nav.currentDestination?.route)
-            assertStationary(parent)
-            assertEquals(1f, horizontalScale(parent), 0.002f)
             assertFalse(
                 "commit must remove the outgoing detail within the settle window",
                 detail.isAttached,
             )
+            assertStationary(parent)
+            assertEquals(1f, horizontalScale(parent), 0.002f)
         }
     }
 
