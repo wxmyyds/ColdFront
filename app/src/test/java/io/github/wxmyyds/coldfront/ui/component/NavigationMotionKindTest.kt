@@ -108,6 +108,10 @@ class NavigationMotionKindTest {
         assertEquals("Miuix settle duration", 500, RELEASE_SETTLE_MS)
         val easing = MiuixSettleEasing()
         assertEquals("settle starts at rest", 0f, easing.transform(0f), 0f)
+        // Brisk middle: by half the duration the settle has already covered most of the step. That is
+        // what distinguishes it from a linear or a slow-start tween (which would leave the page
+        // lingering at the leading edge and read as sluggish, not as Miuix's settle).
+        assertTrue("settle must be brisk in the middle", easing.transform(0.5f) > 0.6f)
         assertTrue("settle curve must stay within 0..1", easing.transform(0.5f) in 0f..1f)
         assertTrue("settle must reach the resting position", easing.transform(1f) > 0.99f)
         // The keep-alive window must comfortably exceed the settle, so NavHost never detaches the
