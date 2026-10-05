@@ -168,7 +168,7 @@ internal const val DETAIL_PUSH_DURATION_MS = 300
  * full step in roughly half a second, which is what makes a predictive-back release decelerate and
  * settle rather than snap over a short tween.
  */
-internal const val RELEASE_SETTLE_MS = 200
+internal const val RELEASE_SETTLE_MS = 500
 
 /**
  * Ceiling on how long the leaving page stays in the composition after a pop commits.
@@ -219,7 +219,7 @@ internal class MiuixSettleEasing(
  * linear and only the post-release settle uses this curve.
  */
 internal fun releaseSettleSpec(): FiniteAnimationSpec<Float> =
-    tween(RELEASE_SETTLE_MS, easing = LinearEasing)
+    tween(RELEASE_SETTLE_MS, easing = MiuixSettleEasing())
 
 /**
  * The leaving page exits without NavHost moving it: the spec is a fixed-duration keep-alive that
