@@ -144,13 +144,16 @@ class PredictiveBackRenderingTest {
     fun commitSlidesTheLeavingPageFullyOutBeforeDetaching() {
         // The release must finish the page's outward slide before the NavHost detaches it. NavHost's
         // predictive-back keep-alive is seeked by the drag progress, so after release it only holds
-        // the page for CEILING x (1 - progress). If that window is shorter than the settle, the page
-        // is cut off part-way - the regression the user saw as "release does not slide out" - even
-        // though the drag tracked the finger perfectly.
+        // the page for CEILING x (1 - progress). A *commit* only happens once the user has dragged
+        // well across the screen, so the release position is high - exactly where the keep-alive
+        // window is shortest and the settle gets truncated: the page is cut off part-way, which is
+        // the regression the user saw as "release does not slide out" even though the drag tracked
+        // the finger perfectly. At a low release position the remaining window is long enough, which
+        // is why an earlier version of this test at 0.5f did not catch it.
         setup()
         openDetail()
         gesture(BackEventCompat.EDGE_LEFT)
-        progress(0.5f, BackEventCompat.EDGE_LEFT)
+        progress(0.8f, BackEventCompat.EDGE_LEFT)
         rule.runOnUiThread { dispatcher.onBackPressed() }
         // The leaving page's leading edge must travel to (essentially) the window edge before the
         // NavHost detaches it. If the keep-alive cuts it off, the greatest measured travel stays
