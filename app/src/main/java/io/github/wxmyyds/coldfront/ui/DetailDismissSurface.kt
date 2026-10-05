@@ -14,7 +14,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Density
@@ -112,16 +111,18 @@ internal class SquircleLeadingShape(private val radius: Float) : Shape {
 @Composable
 internal fun rememberScreenCornerRadius(): Dp {
     val density = LocalDensity.current.density
-    val context = LocalContext.current
+    // Read the current rootWindowInsets on every composition rather than caching them in a
+    // remember key: WindowInsets are not a reactive State, so remembering the first frame's
+    // insets object would pin the radius to whatever the window reported at cold start and
+    // never refresh it on a rotation or an inset change. Re-reading each composition is
+    // cheap (a single system call) and lets a later recomposition pick up the new window.
     val insets = LocalView.current.rootWindowInsets
-    val radiusPx = remember(context, insets) {
-        val systemRadius = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            insets?.getRoundedCorner(RoundedCorner.POSITION_BOTTOM_LEFT)?.radius?.takeIf { it > 0 }
-        } else {
-            null
-        }
-        systemRadius ?: (DetailDismissCornerRadius.value * density).toInt()
+    val systemRadius = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        insets?.getRoundedCorner(RoundedCorner.POSITION_BOTTOM_LEFT)?.radius?.takeIf { it > 0 }
+    } else {
+        null
     }
+    val radiusPx = systemRadius ?: (DetailDismissCornerRadius.value * density).toInt()
     return (radiusPx / density).dp
 }
 

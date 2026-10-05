@@ -9,19 +9,26 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.withFrameNanos
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.navigationevent.NavigationEventTransitionState
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import io.github.wxmyyds.coldfront.ui.component.releaseSettleSpec
 
 /**
- * How long the gesture progress has to be frozen before we treat the drag as over, even though the
- * dispatcher is still reporting `InProgress`. While the finger is down and moving, the progress
- * changes every frame, so it never stays frozen this long; once the finger lifts (or the flow gets
- * stuck at the last value on a device that never completes it) the value stops changing and this
- * window elapses, which is what lets the footer kick into the release settle.
+ * How long the gesture progress has to stay frozen before we treat the drag as over, even though
+ * the dispatcher is still reporting `InProgress`. While the finger is down and moving, the progress
+ * changes frame to frame; once the finger lifts (or the flow gets stuck at the last value on a
+ * device that never completes it) the value stops changing and this window elapses, which is what
+ * lets the effects kick into the release settle.
+ *
+ * 200ms is deliberately generous: a drag that *pauses* mid-way (finger held still for a moment
+ * before continuing) must not be mistaken for a release, or the page would start settling under a
+ * still-down finger and then snap back when the drag resumes. The value changes on every movement
+ * frame, so only a genuinely stopped drag survives the whole window.
  */
-private const val RELEASE_STALE_NANOS = 72_000_000L
+private const val RELEASE_STALE_MS = 200L
 
 /**
  * Live predictive-back gesture progress, for effects the transition API cannot express.
@@ -89,7 +96,7 @@ internal fun rememberRunningBackProgress(observeBackGesture: Boolean): State<Flo
  * The gesture is considered over when the dispatcher reports [NavigationEventTransitionState.Idle]
  * (its normal behaviour), but to be robust to a device where the system gesture never completes that
  * flow - leaving the progress frozen in `InProgress` - the drag is also treated as over once the
- * progress has been frozen for [RELEASE_STALE_NANOS]. A lifted finger and a stuck flow both freeze
+ * progress has been frozen for [RELEASE_STALE_MS]. A lifted finger and a stuck flow both freeze
  * the value, while an actively dragged finger keeps it changing every frame, so this does not cut a
  * slow drag short.
  *
@@ -104,22 +111,42 @@ internal fun rememberGestureSettleProgress(
     val running = rememberRunningBackProgress(observeBackGesture)
     // Whether the finger has lifted. True when the flow reports Idle (running.value == null) or when
     // the progress is frozen long enough to be a released gesture even though the flow is still
-    // InProgress (the device case where transitionState never goes back to Idle).
-    val gestureOver = remember { mutableStateOf(running.value == null) }
+    // InProgress (the device case where transitionState never goes back to Idle). Keyed on the
+    // running state: when observeBackGesture flips (a push turning into a pop or vice versa) the
+    // flag must reset to the new role's initial state rather than carry the old role's value into
+    // the first frame of the new one.
+    val gestureOver = remember(running) { mutableStateOf(running.value == null) }
     LaunchedEffect(running) {
-        var lastValue = running.value
-        var lastChange = 0L
+        var lastValue: Float? = running.value
         while (true) {
-            withFrameNanos { now ->
-                val v = running.value
-                when {
-                    v == null -> gestureOver.value = true
-                    v != lastValue -> {
-                        lastValue = v
-                        lastChange = now
-                        gestureOver.value = false
+            val v = running.value
+            when {
+                v == null -> {
+                    // The flow reported Idle (or never started). Nothing to track until a new
+                    // gesture begins, so suspend instead of spinning forever on the frame clock.
+                    gestureOver.value = true
+                    snapshotFlow { running.value }.first { it != null }
+                    lastValue = running.value
+                }
+                v != lastValue -> {
+                    lastValue = v
+                    gestureOver.value = false
+                }
+                else -> {
+                    // Same progress as the last observed value: the drag has (at least
+                    // momentarily) stopped. Wait for the value to move again, the flow to go
+                    // Idle, or RELEASE_STALE_MS to elapse - whichever comes first. A moving
+                    // finger changes it every frame, so only a genuinely released drag survives
+                    // the whole window; a flow stuck in InProgress (the device case that never
+                    // reports Idle) trips the timeout instead. The coroutine is suspended for
+                    // the wait, not polling per frame.
+                    val moved = withTimeoutOrNull(RELEASE_STALE_MS) {
+                        snapshotFlow { running.value }.first { it != lastValue }
                     }
-                    now - lastChange >= RELEASE_STALE_NANOS -> gestureOver.value = true
+                    // A null here is either Idle (value went null) or the timeout; both mean
+                    // the gesture is over. A Float means the finger moved again, handled by the
+                    // next loop pass.
+                    if (moved == null) gestureOver.value = true
                 }
             }
         }

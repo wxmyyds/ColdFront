@@ -38,9 +38,10 @@ import io.github.wxmyyds.coldfront.ui.component.releaseSettleSpec
 internal fun ParentScrimSurface(
     isCovered: Boolean,
     modifier: Modifier = Modifier,
+    observeBackGesture: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    val progress = rememberRunningBackProgress(observeBackGesture = true)
+    val progress = rememberRunningBackProgress(observeBackGesture)
     // While a detail covers the page, the scrim is a pure function of the gesture; snap(), not a
     // tween, because easing it would slide the backdrop out of step with the page above it.
     // When nothing covers the page there is nothing to track, so the scrim animates itself out.
