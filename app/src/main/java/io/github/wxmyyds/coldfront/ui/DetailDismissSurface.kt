@@ -38,7 +38,7 @@ internal const val SQUIRCLE_CONTROL = 0.643f
  * Corner-tile size as a multiple of the corner radius. `1.1` (the Miuix default) makes the corner
  * continuous rather than a circular arc; `1.0` would be the arc.
  */
-internal const val SQUIRCLE_EXTENSION = 1.1f
+internal const val SQUIRCLE_EXTENSION = 1.0f
 
 /**
  * The squircle corner's tile size in pixels: the nominal radius widened by the continuous-corner
