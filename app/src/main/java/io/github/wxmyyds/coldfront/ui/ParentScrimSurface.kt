@@ -85,7 +85,7 @@ internal fun ParentScrimSurface(
         // layer alpha falloff. It is applied to the content only, not to the scrim, so the two
         // effects stack rather than the scrim being re-faded. Read here per-frame so the drag does
         // not recompose.
-        Box(Modifier.fillMaxSize().graphicsLayer { alpha = contentAlpha }) {
+        Box(Modifier.fillMaxSize().graphicsLayer { this.alpha = contentAlpha }) {
             content()
         }
         Box(
