@@ -64,10 +64,10 @@ internal fun navigationOffset(
     NavigationMotionKind.PushDetail -> if (entering) {
         if (forward) width else -width
     } else {
-        // Only ever the parent stepping aside under a push. Returning 0 here rather than the
-        // parallax is deliberate: NavHost consults this same exit when a push is interrupted, and
-        // moving the parent then slid it over the page being dragged, which made the detail
-        // disappear from the screen mid-gesture.
+        // The parent does not move through NavHost. Its step-back is applied by ParentScrimSurface
+        // as a graphics layer driven by the real gesture progress, so repeating push/pop cycles
+        // cannot drift and an interrupted push cannot slide the parent over the page being dragged
+        // (which made the detail vanish mid-gesture).
         0
     }
     NavigationMotionKind.PopDetail -> 0
@@ -91,14 +91,6 @@ internal const val PARENT_PARALLAX_FRACTION = 0.2f
  */
 internal fun parentParallaxOffset(covered: Boolean, width: Int): Int =
     (if (covered) -width * PARENT_PARALLAX_FRACTION else 0f).toInt()
-
-/**
- * Parallax progress of the covered page, matching [parentParallaxOffset] as a pure curve.
- *
- * 0f is the parent fully lit and in place, 1f is fully stepped back. Driven by the same gesture
- * progress as the leaving page so one finger moves both.
- */
-internal fun parentParallaxFraction(progress: Float): Float = progress.coerceIn(0f, 1f)
 
 internal fun isSecondaryDestination(route: String?, topLevelRoutes: Set<String>): Boolean =
     route != null && route !in topLevelRoutes

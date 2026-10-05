@@ -159,41 +159,36 @@ class NavigationMotionKindTest {
     @Test
     fun theCoveredParentStepsAsideByAFifthOfTheWidth() {
         // A fifth, not the full width: at full width the parent would slide entirely off screen and
-        // the two pages would read as swapping places rather than one covering the other.
-        assertEquals(-200, navigationOffset(
-            NavigationMotionKind.PushDetail, entering = false, forward = true, width = 1000,
-        ))
+        // the two pages would read as swapping places rather than one covering the other. The
+        // offset is a pure function of whether the parent is covered - it is applied as a graphics
+        // layer, not through NavHost, so navigationOffset must not move the parent at all.
         assertEquals(-200, parentParallaxOffset(covered = true, width = 1000))
         assertEquals("a revealed parent is exactly in place", 0, parentParallaxOffset(false, 1000))
         assertEquals(0.2f, PARENT_PARALLAX_FRACTION)
+        // The parent's step-back is ParentScrimSurface's job via its graphics layer; the NavHost
+        // transition must leave it in place so an interrupted push cannot slide it over the page
+        // being dragged.
+        assertEquals(0, navigationOffset(
+            NavigationMotionKind.PushDetail, entering = false, forward = true, width = 1000,
+        ))
     }
 
     @Test
     fun aPushAndItsReturnLeaveTheParentWhereTheyFoundIt() {
         // The push steps the parent left by a fifth; the return must bring it back to exactly the
-        // offset it started from, so repeated push/pop cycles cannot accumulate a drift.
+        // offset it started from, so repeated push/pop cycles cannot accumulate a drift. Because the
+        // offset is a pure function of whether the parent is covered (not of any accumulated state),
+        // the covered and resting offsets are exact opposites, and this holds regardless of how many
+        // times the page has been pushed and popped.
         val width = 1000
-        val resting = parentParallaxOffset(covered = false, width = width)
-        val covered = parentParallaxOffset(covered = true, width = width)
-        assertEquals("the parent must return to exactly where it began", resting, 0)
-        assertEquals("a fifth of the width", -200, covered)
-        // The push's parent exit starts from the covered offset, which is what makes the push and
-        // its return describe one continuous motion rather than a jump.
-        assertEquals(covered, navigationOffset(
+        assertEquals("the parent must return to exactly where it began", 0, parentParallaxOffset(false, width))
+        assertEquals("a fifth of the width", -200, parentParallaxOffset(true, width))
+        // The NavHost transition leaves the parent unmoved; the step-back is owned by the surface
+        // that draws the parent. So a push and its return cannot leave a stale transition offset
+        // behind, which is the drift this guards against.
+        assertEquals(0, navigationOffset(
             NavigationMotionKind.PushDetail, entering = false, forward = true, width = width,
         ))
-    }
-
-    @Test
-    fun theParallaxTracksGestureProgress() {
-        // Same reason the page's own travel is linear: NavHost seeks the parent with the same raw
-        // progress, so easing here would desync the two layers under one finger.
-        for (progress in listOf(0f, 0.25f, 0.5f, 0.75f, 1f)) {
-            assertEquals("parallax must equal gesture progress at $progress",
-                progress, parentParallaxFraction(progress), 1e-5f)
-        }
-        assertEquals(1f, parentParallaxFraction(1.4f), 1e-5f)
-        assertEquals(0f, parentParallaxFraction(-0.2f), 1e-5f)
     }
 
     @Test
