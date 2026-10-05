@@ -2,7 +2,6 @@ package io.github.wxmyyds.coldfront.ui
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,6 +13,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import io.github.wxmyyds.coldfront.ui.component.PARENT_PARALLAX_FRACTION
 import io.github.wxmyyds.coldfront.ui.component.parentPageAlphaForProgress
 import io.github.wxmyyds.coldfront.ui.component.parentScrimAlphaForProgress
+import io.github.wxmyyds.coldfront.ui.component.releaseSettleSpec
 
 /**
  * Dims and fades a top-level page while a detail page sits on top of it, so that it reads as
@@ -47,7 +47,7 @@ internal fun ParentScrimSurface(
     val target = if (isCovered) parentScrimAlphaForProgress(progress.value ?: 0f) else 0f
     val alpha by animateFloatAsState(
         targetValue = target,
-        animationSpec = if (isCovered) snap() else tween(PARENT_SCRIM_SETTLE_MS),
+        animationSpec = if (isCovered) snap() else releaseSettleSpec(),
         label = "parentScrimAlpha",
     )
     // The page's own opacity, driven by the same gesture so it fades in step with the scrim and the
@@ -56,7 +56,7 @@ internal fun ParentScrimSurface(
     val contentTarget = if (isCovered) parentPageAlphaForProgress(progress.value ?: 0f) else 1f
     val contentAlpha by animateFloatAsState(
         targetValue = contentTarget,
-        animationSpec = if (isCovered) snap() else tween(PARENT_SCRIM_SETTLE_MS),
+        animationSpec = if (isCovered) snap() else releaseSettleSpec(),
         label = "parentPageAlpha",
     )
     // How far this page has stepped back, 1f when a detail fully covers it.
@@ -73,7 +73,7 @@ internal fun ParentScrimSurface(
         targetValue = if (isCovered) 1f - (progress.value ?: 0f) else 0f,
         // While a gesture uncovers the page the value is already right for this frame; any easing
         // would be applied on top of the finger. On a push nothing is moving the page, so it eases.
-        animationSpec = if (progress.value != null) snap() else tween(PARENT_STEP_BACK_MS),
+        animationSpec = if (progress.value != null) snap() else releaseSettleSpec(),
         label = "parentStepBack",
     )
     Box(
@@ -95,9 +95,3 @@ internal fun ParentScrimSurface(
         )
     }
 }
-
-/** How long the scrim takes to appear or clear when no gesture is driving it. */
-private const val PARENT_SCRIM_SETTLE_MS = 200
-
-/** How long the parent takes to step back when a detail arrives, and to return. */
-private const val PARENT_STEP_BACK_MS = 300

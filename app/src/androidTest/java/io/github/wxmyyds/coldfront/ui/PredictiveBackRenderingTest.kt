@@ -38,7 +38,6 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import io.github.wxmyyds.coldfront.ui.component.DETAIL_POP_DURATION_MS
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -489,14 +488,14 @@ class PredictiveBackRenderingTest {
         val originalCentre = centre(viewport)
         // Per-frame: the NavHost must not resize or shift the viewport while the pop settles.
         // The parent is deliberately *not* asserted here: it animates back to rest over
-        // PARENT_STEP_BACK_MS after the finger lifts, so the first frames legitimately show it
+        // the release spring after the finger lifts, so the first frames legitimately show it
         // still mid-return. Its final resting place is asserted once the settle has elapsed below.
         rule.runOnUiThread { dispatcher.onBackPressed() }
         // Two things finish at different rates and both must be done before the final assertions:
         //   * the detail detaches: the pop exit is a disjoint NavHost coroutine, and when the push
-        //     was interrupted its duration is not the fixed DETAIL_POP_DURATION_MS - the seek
+        //     was interrupted its duration is not the fixed keep-alive window - the seek
         //     re-base leaves an initial-value animation NavHost must run out first;
-        //   * the parent returns to rest: over PARENT_STEP_BACK_MS.
+        //   * the parent returns to rest: over the release spring.
         // A settled push detaches almost immediately but the parent is still mid-return, so polling
         // for detachment alone would break too early. Poll for *both*, and only then assert.
         var detached = false

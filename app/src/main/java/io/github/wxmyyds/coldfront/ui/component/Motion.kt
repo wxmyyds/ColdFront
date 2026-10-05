@@ -11,6 +11,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
@@ -22,6 +23,11 @@ import androidx.compose.material3.MotionScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.IntOffset
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.exp
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 internal enum class NavigationMotionKind {
     TopLevel,
@@ -150,25 +156,98 @@ internal const val TOP_LEVEL_PAGE_DURATION_MS = 300
 internal fun topLevelPageDuration(routeDistance: Int): Int = TOP_LEVEL_PAGE_DURATION_MS
 
 /**
- * Duration of the settle that follows releasing the gesture.
- *
- * This is not the speed of the drag itself: while the finger is down, NavHost seeks the transition
- * with the raw gesture progress, so the page tracks the finger exactly and this value has no
- * effect on it. It governs only how long the page takes to reach its destination after release -
- * either completing the return or sliding back - and 200ms keeps that hand-off quick without
- * feeling abrupt, matching the system's predictive-back spring (stiffness 1600, damping 1.0).
- */
-internal const val DETAIL_POP_DURATION_MS = 200
-
-/**
  * Duration of a detail page sliding in over the top-level page.
  *
- * Longer than [DETAIL_POP_DURATION_MS] because a push moves much further: the arriving page
- * crosses its whole width while the parent steps back a quarter of the viewport, whereas a release
- * only finishes the motion the finger had already covered. 300ms matches the top-level page switch
- * so the app has a single "page moves" duration.
+ * 300ms matches the top-level page switch so the app has a single "page moves" duration.
  */
 internal const val DETAIL_PUSH_DURATION_MS = 300
+
+/**
+ * Duration of the release settle: how long the leaving page (and the dimmed parent behind it) takes
+ * to reach its resting position once the finger lifts. The Miuix/KernelSU navigation settles a
+ * full step in roughly half a second, which is what makes a predictive-back release decelerate and
+ * settle rather than snap over a short tween.
+ */
+internal const val RELEASE_SETTLE_MS = 500
+
+/**
+ * Ceiling on how long the leaving page stays in the composition after a pop commits.
+ *
+ * NavHost has to keep the leaving page around while [DetailDismissSurface]'s graphics layer
+ * slides it out, so the predictive-back exit transition is a fixed-duration keep-alive that does
+ * not move the page itself. Longer than the settle so the page is already fully off-screen before
+ * NavHost detaches it.
+ */
+internal const val RELEASE_SETTLE_CEILING_MS = 600
+
+/**
+ * The release settle curve: the underdamped-oscillator step response the Miuix/KernelSU navigation
+ * uses for a full step, baked into an [Easing] so a tween completes in exactly [RELEASE_SETTLE_MS]
+ * and reaches the resting position.
+ *
+ * Implemented from the damped-oscillator equation of motion (not from the Miuix/KernelSU source) and
+ * used only as a reference for the feel. `response` is the oscillation period in units of the played
+ * duration and `damping` the damping ratio; the shipped pair (`0.8` / `0.95`) gives the established
+ * miuix navigation pacing: a brisk middle and a long, gentle tail.
+ */
+internal class MiuixSettleEasing(
+    private val response: Float = 0.8f,
+    private val damping: Float = 0.95f,
+) : Easing {
+    // y(t) = 1 - e^(r t) * (cos(w t) + (dampingRatio * wN / wD) * sin(w t)), the classic step
+    // response of an underdamped oscillator, with t the played fraction. The decay `r` and the
+    // damped frequency `w` are derived from the natural frequency `wN`.
+    private val naturalFreq: Float = (2.0 * PI / response).toFloat()
+    private val decay: Float = -damping * naturalFreq
+    private val dampedFreq: Float = naturalFreq * sqrt(1f - damping * damping)
+
+    override fun transform(fraction: Float): Float {
+        val t = fraction.toDouble()
+        val envelope = exp(decay * t)
+        val phase = cos(dampedFreq * t) + (damping * naturalFreq / dampedFreq) * sin(dampedFreq * t)
+        return (1.0 - envelope * phase).toFloat().coerceIn(0f, 1f)
+    }
+}
+
+/**
+ * The release settle spec: a fixed-duration tween shaped by [MiuixSettleEasing].
+ *
+ * A tween (rather than a live spring) is used so the settle always completes in exactly
+ * [RELEASE_SETTLE_MS] and reaches the resting position, whatever the distance travelled or the
+ * release speed, and so a gesture-commit and a cancel describe the same finishing motion. The
+ * *drag* is unaffected: see the decoupling note on [DetailDismissSurface] - the finger axis stays
+ * linear and only the post-release settle uses this curve.
+ */
+internal fun releaseSettleSpec(): FiniteAnimationSpec<Float> =
+    tween(RELEASE_SETTLE_MS, easing = MiuixSettleEasing())
+
+/**
+ * The leaving page exits without NavHost moving it: the spec is a fixed-duration keep-alive that
+ * holds the page in place for [RELEASE_SETTLE_CEILING_MS] while its own graphics layer slides it
+ * out with [releaseSettleSpec].
+ *
+ * Sharing one instance keeps the predictive-back gesture and the back-button pop describing the
+ * same keep-alive, so the two cannot drift apart. Built once because `slideOutHorizontally`
+ * allocates per call.
+ */
+internal fun predictiveBackExit(): ExitTransition = detailPopKeepAlive
+
+private val detailPopKeepAlive: ExitTransition = slideOutHorizontally(
+    animationSpec = tween(RELEASE_SETTLE_CEILING_MS, easing = LinearEasing),
+    targetOffsetX = { 0 },
+)
+
+/**
+ * The parent steps back a quarter of the width as the page above it leaves, then returns to centre.
+ *
+ * Driven by the same gesture progress as the leaving page, so the two cannot drift apart. The offset
+ * is signed for the incoming direction: a page coming from the right uncovers the parent's leading
+ * side first, so the parent retreats the same way.
+ */
+internal fun predictiveBackParentEnter(): EnterTransition = EnterTransition.None
+
+/** Resting alpha for the detail page's push fade. */
+internal const val DETAIL_FADE_ALPHA = 0.94f
 
 /**
  * Opacity of the fullscreen black scrim that dims the top-level page while a detail page covers it.
@@ -209,78 +288,6 @@ internal fun parentScrimAlphaForProgress(progress: Float): Float =
  */
 internal fun parentPageAlphaForProgress(progress: Float): Float =
     1f - PARENT_FADE_FRACTION * (1f - progress.coerceIn(0f, 1f))
-
-/**
- * Travel of the leaving page as a function of gesture progress.
- *
- * The page must track the finger, so this is deliberately linear in progress with no easing: at
- * progress 0.5 the page has moved exactly half its width and still covers half the screen, with the
- * parent revealed beside it. The system predictive-back curve, CubicBezier(.1, .1, 0, 1), is wrong
- * for a translation - it reaches 68% of the travel by progress 0.25 and 90% by 0.5, which would put
- * the page almost entirely off screen halfway through the gesture, the opposite of the intended
- * reading. That curve still shapes the release animation below, where a settle is wanted.
- */
-internal const val DETAIL_POP_TRAVEL = 1f
-
-/**
- * Spec for the leaving page's travel, as a horizontal offset in pixels.
- *
- * The easing must be [LinearEasing]. NavHost drives this transition by seeking it with the raw
- * gesture progress, and a tween applies its easing to whatever fraction it is seeked to - so a
- * curved easing would be applied *on top of* the finger position, not to it. With
- * FastOutSlowInEasing the page reaches 83% of its travel by gesture progress 0.55, which is not
- * tracking the finger. LinearEasing makes the offset equal the finger's own progress exactly.
- *
- * The release is therefore linear too. That is what keeps a committed pop describing the same
- * motion the gesture ended on, so the hand-off at release stays invisible.
- *
- * Exposed separately from [predictiveBackExit] so the curve can be sampled directly: an
- * [androidx.compose.animation.ExitTransition] carries its spec inside and exposes no way to read
- * it back. [DETAIL_POP_WIDTH] is the page width the spec is evaluated against when sampling.
- */
-internal fun detailPopTravelSpec(): FiniteAnimationSpec<IntOffset> =
-    tween(DETAIL_POP_DURATION_MS, easing = LinearEasing)
-
-/** Page width the travel spec is sampled against, in pixels. */
-internal const val DETAIL_POP_WIDTH = 1000
-
-/**
- * The leaving page slides out under the finger while the parent is revealed beside it.
- *
- * Both halves come from here so the gesture and the committed pop describe one motion and the
- * hand-off at release is invisible. NavHost seeks this spec with the real gesture progress, so the
- * slide follows the finger directly; there is no separate hand-written offset animation and no
- * fade, scale or size change competing with the translation.
- *
- * The parent's enter is [EnterTransition.None]: it holds still and is simply uncovered. Giving it
- * an entering offset here was tried and reverted - a moving, opaque parent entering underneath an
- * opaque leaving page hid the leaving page outright, so the detail vanished from the screen
- * mid-gesture. The parent's parallax therefore lives only on the push path, where the parent is the
- * *exiting* page; on a return it is already at its resting offset.
- */internal fun predictiveBackExit(): ExitTransition = detailPopExit
-
-/**
- * One shared instance, so the gesture and the committed pop cannot drift apart: `NavHost` seeks
- * this exact object for the drag and then hands the release to the same transition. Built once
- * because `slideOutHorizontally` allocates per call, and two equal-looking instances would make
- * that guarantee untestable.
- */
-private val detailPopExit: ExitTransition = slideOutHorizontally(
-    animationSpec = detailPopTravelSpec(),
-    targetOffsetX = { width -> (width * DETAIL_POP_TRAVEL).toInt() },
-)
-
-/**
- * The parent steps back a quarter of the width as the page above it leaves, then returns to centre.
- *
- * Driven by the same gesture progress as the leaving page, so the two cannot drift apart. The offset
- * is signed for the incoming direction: a page coming from the right uncovers the parent's leading
- * side first, so the parent retreats the same way.
- */
-internal fun predictiveBackParentEnter(): EnterTransition = EnterTransition.None
-
-/** Resting alpha for the detail page's push fade. */
-internal const val DETAIL_FADE_ALPHA = 0.94f
 
 internal fun shouldUsePredictivePop(
     predictiveBackEnabled: Boolean,

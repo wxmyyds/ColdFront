@@ -2,11 +2,8 @@ package io.github.wxmyyds.coldfront.ui.component
 
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.core.FiniteAnimationSpec
-import androidx.compose.animation.core.TargetBasedAnimation
-import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.tween
 import androidx.compose.material3.MotionScheme
-import androidx.compose.ui.unit.IntOffset
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
@@ -91,7 +88,8 @@ class NavigationMotionKindTest {
                 assertEquals(0, navigationOffset(NavigationMotionKind.PopDetail, entering, forward, 1000))
             }
         }
-        assertEquals(1f, DETAIL_POP_TRAVEL, 0f)
+        // The parent never moves for a pop; the page above it moving away is what reveals it, and
+        // the release settle belongs to the page's own layer, never to a parent displacement.
     }
 
     @Test
@@ -103,42 +101,18 @@ class NavigationMotionKindTest {
     }
 
     @Test
-    fun theLeavingPageTravelsTheFullWidthAndTheParentStaysPut() {
-        // The page must leave towards the physical right, by its whole width, in one track. The
-        // parent must contribute no transition of its own: it is uncovered, not animated.
-        val travel = TargetBasedAnimation(
-            detailPopTravelSpec(),
-            IntOffset.VectorConverter,
-            IntOffset.Zero,
-            IntOffset(DETAIL_POP_WIDTH, 0),
-        )
-        val end = travel.durationNanos
-        assertEquals(DETAIL_POP_DURATION_MS * 1_000_000L, end)
-        val width = DETAIL_POP_WIDTH.toFloat()
-        assertEquals(0f, travel.getValueFromNanos(0L).x.toFloat(), 0f)
-        assertEquals(width, travel.getValueFromNanos(end).x.toFloat(), 0.5f)
-        // Never overshoots and never travels backwards, so a released gesture settles instead of
-        // snapping. The page must also stay strictly inside its own track: no vertical drift.
-        var last = 0f
-        for (millis in 0..300) {
-            val value = travel.getValueFromNanos(millis * 1_000_000L)
-            assertTrue("travel out of range at ${millis}ms: ${value.x}", value.x in 0..DETAIL_POP_WIDTH)
-            assertEquals("vertical drift at ${millis}ms", 0, value.y)
-            assertTrue("travel moved backwards at ${millis}ms", value.x >= last)
-            last = value.x.toFloat()
-        }
-        // Strictly linear: NavHost seeks this with the raw finger progress, so any easing here
-        // would be applied on top of the finger position instead of shaping it. Sampling a curved
-        // spec proved this by failing - the page reached 83% of its travel at progress 0.55.
-        for (progress in listOf(0.05f, 0.25f, 0.5f, 0.55f, 0.75f)) {
-            val nanos = (DETAIL_POP_DURATION_MS * 1_000_000L * progress).toLong()
-            assertEquals(
-                "travel must equal gesture progress at $progress",
-                width * progress,
-                travel.getValueFromNanos(nanos).x.toFloat(),
-                1.5f,
-            )
-        }
+    fun theReleaseSettlesOverTheMiuixCurve() {
+        // The release is a fixed-duration tween shaped by the Miuix/KernelSU settle curve (a brisk
+        // middle and a long, gentle tail), not a snappy linear tween, and it always reaches the
+        // resting position. Pinned so a reversion to a short linear settle fails the suite.
+        assertEquals("Miuix settle duration", 500, RELEASE_SETTLE_MS)
+        val easing = MiuixSettleEasing()
+        assertEquals("settle starts at rest", 0f, easing.transform(0f), 0f)
+        assertTrue("settle curve must stay within 0..1", easing.transform(0.5f) in 0f..1f)
+        assertTrue("settle must reach the resting position", easing.transform(1f) > 0.99f)
+        // The keep-alive window must comfortably exceed the settle, so NavHost never detaches the
+        // leaving page before its own slide has finished.
+        assertTrue("keep-alive must exceed the settle", RELEASE_SETTLE_CEILING_MS >= RELEASE_SETTLE_MS)
     }
 
     @Test

@@ -1,9 +1,7 @@
 package io.github.wxmyyds.coldfront.ui
 
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
-import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
@@ -11,7 +9,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
 import androidx.navigationevent.NavigationEventTransitionState
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
-import io.github.wxmyyds.coldfront.ui.component.DETAIL_POP_DURATION_MS
+import io.github.wxmyyds.coldfront.ui.component.releaseSettleSpec
 
 /**
  * Live predictive-back gesture progress, for effects the transition API cannot express.
@@ -67,14 +65,14 @@ internal fun rememberRunningBackProgress(observeBackGesture: Boolean): State<Flo
  * Gesture progress that keeps describing a page's position after the finger lifts.
  *
  * [androidx.navigationevent.NavigationEventDispatcher] resets its progress to `0f` the instant a
- * gesture completes or cancels, while NavHost is still animating the page to its destination for
- * [DETAIL_POP_DURATION_MS]. Anything driven straight off the raw progress would snap at the moment
- * of release - a rounded page going suddenly square, a backdrop flashing dark - while the page was
- * still visibly moving.
+ * gesture completes or cancels, while NavHost is still keeping the page around for
+ * [io.github.wxmyyds.coldfront.ui.component.RELEASE_SETTLE_CEILING_MS]. Anything driven straight off
+ * the raw progress would snap at the moment of release - a rounded page going suddenly square, a
+ * backdrop flashing dark - while the page was still visibly moving.
  *
- * So once the finger is up the value settles to [settleTo] over exactly the duration and easing
- * NavHost uses for the page itself. An effect driven this way stays in step with the page it
- * decorates instead of running on a second, unrelated clock.
+ * So once the finger is up the value settles to [settleTo] on a critically-damped spring (the same
+ * spring the page's own slide uses via [DetailDismissSurface]), so an effect driven this way stays
+ * in step with the page it decorates instead of running on a second, unrelated clock.
  *
  * @param settleTo where to go once no gesture is running: `1f` when the page is on its way out,
  * `0f` when it is coming back or was never dismissed.
@@ -90,11 +88,11 @@ internal fun rememberGestureSettleProgress(
         // While a gesture is running the target is already correct for this frame, so it must be
         // taken as-is - any easing would be applied on top of the finger's own position, which is
         // the same mistake a curved tween made of the page's own travel. Once the finger is up this
-        // is a real animation, so it must share NavHost's linear spec for the two to agree.
+        // is a real animation, so it settles on the release spring.
         animationSpec = if (running.value != null) {
             snap()
         } else {
-            tween(DETAIL_POP_DURATION_MS, easing = LinearEasing)
+            releaseSettleSpec()
         },
         label = "backGestureSettleProgress",
     )

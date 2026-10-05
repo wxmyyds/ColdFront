@@ -173,6 +173,13 @@ internal fun DetailDismissSurface(
             .graphicsLayer {
                 // Read the State, not a by-delegate local, so a drag does not recompose the page.
                 val radius = cornerRadius.toPx() * progress.value
+                // The page's own slide is a graphics layer, not a NavHost transition. NavHost keeps
+                // the page with a fixed-duration keep-alive exit and does not move it, so the drag
+                // axis stays linear (it seeks the raw finger progress) while this layer can hand the
+                // release to the settle spring. The page leaves toward the physical right, so its
+                // leading edge travels from 0 to one full width. During a push this progress is 0,
+                // so nothing shifts while the page is being entered.
+                translationX = progress.value * size.width
                 // The page always leaves toward the physical right, so the exposed leading edge is
                 // always the physical left. SquircleLeadingShape rounds those two corners with the
                 // device's smooth continuous-corner curve; the trailing edge stays square.
