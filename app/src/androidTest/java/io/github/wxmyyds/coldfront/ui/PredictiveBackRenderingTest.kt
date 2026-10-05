@@ -495,7 +495,7 @@ class PredictiveBackRenderingTest {
         // rather than assume a frame count - a slow but correct settle must still pass, and a
         // genuinely stuck page is what the final assertFalse catches.
         var settled = false
-        repeat(250) {
+        for (i in 0 until 250) {
             frames(16)
             rule.runOnIdle { settled = !detail.isAttached }
             if (settled) break
