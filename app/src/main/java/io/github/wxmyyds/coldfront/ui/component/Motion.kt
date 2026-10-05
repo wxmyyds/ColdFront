@@ -81,7 +81,7 @@ internal fun navigationOffset(
  * and the two layers would read as swapping places; a quarter keeps them stacked. This is also the
  * fraction the parent's geometry is checked against in the rendering tests.
  */
-internal const val PARENT_PARALLAX_FRACTION = 0.2f
+internal const val PARENT_PARALLAX_FRACTION = 0.25f
 
 /**
  * Parallax offset of the covered page, in pixels: negative while entering a detail, positive while
@@ -178,7 +178,7 @@ internal const val DETAIL_PUSH_DURATION_MS = 300
  * because fading would let what is behind the NavHost show through and read *lighter*; black
  * darkens in both themes and gives the covered page its backdrop look.
  */
-internal const val PARENT_SCRIM_ALPHA = 0.32f
+internal const val PARENT_SCRIM_ALPHA = 0.5f
 
 /**
  * How strongly a top-level page's *own pixels* fade while a detail page covers it.
@@ -188,7 +188,7 @@ internal const val PARENT_SCRIM_ALPHA = 0.32f
  * extending outward rather than as a hard patch. The two effects stack; both are driven by the same
  * gesture progress so one finger dims and fades the parent and slides the page above it together.
  */
-internal const val PARENT_FADE_FRACTION = 0f
+internal const val PARENT_FADE_FRACTION = 0.1f
 
 /**
  * How strongly a top-level page - its content *and* its navigation bar - is dimmed right now.
