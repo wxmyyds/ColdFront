@@ -12,7 +12,7 @@ class SquircleGeometryTest {
         // edge of the corner sits at radius * extension rather than at the radius. A plain circular
         // arc would use a tile exactly equal to the radius.
         assertEquals(110f, squircleCornerTile(radiusPx = 100f, minSidePx = 1000f), 1e-5f)
-        assertEquals(10f, squircleCornerTile(radiusPx = 10f, minSidePx = 1000f), 1e-5f)
+        assertEquals(11f, squircleCornerTile(radiusPx = 10f, minSidePx = 1000f), 1e-5f)
     }
 
     @Test
