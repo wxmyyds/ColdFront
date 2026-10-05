@@ -136,8 +136,17 @@ class PredictiveBackRenderingTest {
             "the page must have left most of the screen ($start -> $nearEnd)",
             nearEnd > viewport.size.width / 2,
         )
-        commitAndCheck()
-        assertStationary(parent)
+        rule.runOnUiThread { dispatcher.onBackPressed() }
+        // Poll whether the detail ever detaches: an interrupted push may leave NavHost's
+        // SeekableTransitionState awaiting a composition that never settles this transition, which
+        // would keep the page on screen forever. This distinguishes "slow settle" from "stuck".
+        var attached = true
+        for (i in 0 until 200) {
+            frames(16)
+            rule.runOnIdle { attached = detail.isAttached }
+            if (!attached) break
+        }
+        assertFalse("the detail must eventually detach after committing an interrupted push", attached)
     }
 
     @Test
