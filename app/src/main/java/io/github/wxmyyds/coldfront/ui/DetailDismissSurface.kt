@@ -179,6 +179,9 @@ internal fun DetailDismissSurface(
             .graphicsLayer {
                 // Read the State, not a by-delegate local, so a drag does not recompose the page.
                 val radius = cornerRadius.toPx() * progress.value
+                if (progress.value > 0.01f && progress.value < 0.99f) {
+                    android.util.Log.i("PBGDiag", "detail graphicsLayer progress=${progress.value}")
+                }
                 // The page's own slide is a graphics layer, not a NavHost transition. NavHost keeps
                 // the page with a fixed-duration keep-alive exit and does not move it, so the drag
                 // axis stays linear (it seeks the raw finger progress) while this layer can hand the
