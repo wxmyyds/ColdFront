@@ -70,8 +70,8 @@ RSSI:   -43 dBm
 - ~~显示 = raw − 6~~(官方 App 有此校准,实测 App 无偏移;以实测为准)
 
 ### 3.4 灯光(0x1013)
-- 查询:按努比亚官方 App 路径对 `0x1013` 执行 GATT `readCharacteristic`,以 `onCharacteristicRead` 返回值作为状态。
-- 灯效未回读到前,轮询按节流间隔(4s)持续重试 read;read 超时(2.5s)不隔离灯光通道,保证慢固件最终能读到。
+- 官方双路径(smali `f2/a$h`):LIGHT_R 读路径 `m()` = GATT `readCharacteristic(0x1013)`;LIGHT_W 路径 `n()` = 写 `[0x11]` 查询字节。ColdFront 两者都实现:可读则持续重试 read,未知灯效时另以 5s 节流写 `[0x11]` 触发 notify 回读。
+- 灯效未回读到前,轮询按节流间隔(4s)持续重试 read;read 超时(2.5s)不隔离灯光通道。
 - 官方数据处理器不剥读回数据的前缀,直接以 byte[0] 作为 mode;常亮/单色呼吸颜色来自 byte[1..3]。
 - 模式命令 4 字节 `[mode][R][G][B]`:
 

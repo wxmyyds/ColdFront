@@ -57,6 +57,8 @@ private const val DISCOVERY_TIMEOUT_MS = 10000L
 private const val INIT_TIMEOUT_MS = 30000L
 /** 灯效未读到前的 read 重试间隔:大于 READ_TIMEOUT_MS,避免慢设备每次 read 都被超时打断 */
 private const val LIGHT_READ_RETRY_MS = 4000L
+/** 官方 LIGHT_W 写 0x11 查询的最小间隔,避免每轮轮询都打扰设备 */
+private const val LIGHT_QUERY_INTERVAL_MS = 5000L
 
 data class ScanState(
     val scanning: Boolean = false,
@@ -98,6 +100,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         var requiredConfiguration = emptySet<UUID>()
         var lastTempUpdateMs = 0L
         var lastLightReadMs = 0L
+        var lastLightQueryMs = 0L
     }
 
     private enum class Control { FAN, COOLING, SMART, BOOST, PROTECTION, RGB }
@@ -609,6 +612,8 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         value: ByteArray,
         onStart: () -> Unit = {},
         fresh: () -> Boolean = { true },
+        poisonOnTimeout: Boolean = true,
+        quarantineOnTimeout: Boolean = true,
     ): Boolean {
         val g = s.gatt ?: return false
         if (!writable(ch)) return false
@@ -624,6 +629,8 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                 @Suppress("DEPRECATION")
                 g.writeCharacteristic(ch)
             },
+            poisonOnTimeout = poisonOnTimeout,
+            quarantineOnTimeout = quarantineOnTimeout,
         ).success
     }
 
@@ -734,7 +741,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             )
             if (lightPending && light != null && readable(light)) add(light)
         }
-        return pollTelemetry(
+        val polled = pollTelemetry(
             targets = targets,
             temperatureTargets = listOf(CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID, CoolerBleConstants.STATUS_UUID)
                 .mapNotNull { s.characteristics[it] },
@@ -760,6 +767,19 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             subscribe = { enableNotification(s, it, poisonOnTimeout = false) },
             onTemperatureRecovery = { s.lastTempUpdateMs = SystemClock.elapsedRealtime() - 4000 },
         )
+        // Official LIGHT_W path (smali f2/a$h.n): while the effect is still unknown and
+        // the light characteristic is writable, periodically write the 0x11 query byte so
+        // firmware that only reports its effect over notifications pushes the current
+        // state. Throttled, non-poisoning and non-quarantining like the read retry.
+        if (lightPending && light != null && writable(light)) {
+            val now = SystemClock.elapsedRealtime()
+            if (now - s.lastLightQueryMs >= LIGHT_QUERY_INTERVAL_MS) {
+                s.lastLightQueryMs = now
+                enqueueWrite(s, light, byteArrayOf(CoolerBleConstants.LIGHT_QUERY_COMMAND),
+                    poisonOnTimeout = false, quarantineOnTimeout = false)
+            }
+        }
+        return polled
     }
 
     private fun handleData(s: Session, uuid: UUID, value: ByteArray) {
