@@ -29,6 +29,7 @@ import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
 import io.github.wxmyyds.coldfront.domain.CoolerLiveState
 import io.github.wxmyyds.coldfront.domain.CoolerTelemetryReducer
 import io.github.wxmyyds.coldfront.domain.ConnectionState
+import io.github.wxmyyds.coldfront.domain.LightEffect
 import io.github.wxmyyds.coldfront.domain.RGBConfig
 import io.github.wxmyyds.coldfront.domain.RgbWriteState
 import io.github.wxmyyds.coldfront.domain.RgbWriteStatus
@@ -801,7 +802,12 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         // Official refreshLightModeView else-branch: a non-empty 0x1013 reply whose
         // effect byte is not a known mode (1/2/3/4/6) cannot be displayed, so the
         // official app pushes the default effect to bring the device to a known state.
-        if (uuid == CoolerBleConstants.LIGHT_CONTROL_UUID && update == null && value.isNotEmpty()) {
+        // A known mode whose colour bytes are missing is parsed as null by
+        // [RGBConfig.fromNotification] (so no colour is invented) but it is still a known
+        // mode: the official page displays it without a fallback, so neither do we.
+        if (uuid == CoolerBleConstants.LIGHT_CONTROL_UUID && update == null &&
+            value.isNotEmpty() && LightEffect.fromCode(value[0]) == null
+        ) {
             maybeSendDefaultLight(s)
         }
         val next = if (update != null) {
