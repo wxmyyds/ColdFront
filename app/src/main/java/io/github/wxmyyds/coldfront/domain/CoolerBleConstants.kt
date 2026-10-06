@@ -41,6 +41,9 @@ object CoolerBleConstants {
     /** RGB 灯光:[mode][R][G][B];1炫彩 2全彩呼吸 3单色呼吸 4常亮 5保留 6关 */
     val LIGHT_CONTROL_UUID: UUID = UUID.fromString("00001013-0000-1000-8000-00805f9b34fb")
 
+    /** 灯光查询字节:写 0x11 到 0x1013 后,设备经 notify 回读当前灯效(不可读固件的替代路径) */
+    const val LIGHT_QUERY_COMMAND: Byte = 0x11
+
     /** 背夹温度:通知。单字节有符号 °C;固件 8.4.7 为 [0x04, 温度] 多字节包 */
     val TEMPERATURE_NOTIFICATION_UUID: UUID = UUID.fromString("00001014-0000-1000-8000-00805f9b34fb")
 
