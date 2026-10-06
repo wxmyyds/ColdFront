@@ -57,6 +57,10 @@ private const val DISCOVERY_TIMEOUT_MS = 10000L
 private const val INIT_TIMEOUT_MS = 30000L
 /** 灯效未读到前的 read 重试间隔:大于 READ_TIMEOUT_MS,避免慢设备每次 read 都被超时打断 */
 private const val LIGHT_READ_RETRY_MS = 4000L
+/** 下发默认灯(官方未知模式兑底)的最小间隔,避免设备持续返回未知值时写入风暴 */
+private const val LIGHT_DEFAULT_MIN_INTERVAL_MS = 3000L
+/** 每次连接下发默认灯的次数上限 */
+private const val MAX_LIGHT_DEFAULT_ATTEMPTS = 3
 
 data class ScanState(
     val scanning: Boolean = false,
@@ -98,6 +102,8 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         var requiredConfiguration = emptySet<UUID>()
         var lastTempUpdateMs = 0L
         var lastLightReadMs = 0L
+        var lastLightDefaultMs = 0L
+        var lightDefaultAttempts = 0
     }
 
     private enum class Control { FAN, COOLING, SMART, BOOST, PROTECTION, RGB }
@@ -632,6 +638,8 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         value: ByteArray,
         onStart: () -> Unit = {},
         fresh: () -> Boolean = { true },
+        poisonOnTimeout: Boolean = true,
+        quarantineOnTimeout: Boolean = true,
     ): Boolean {
         val g = s.gatt ?: return false
         if (!writable(ch)) return false
@@ -647,7 +655,31 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                 @Suppress("DEPRECATION")
                 g.writeCharacteristic(ch)
             },
+            poisonOnTimeout = poisonOnTimeout,
+            quarantineOnTimeout = quarantineOnTimeout,
         ).success
+    }
+
+    /**
+     * 对齐官方灯光兑底:设备回报的灯效字节无法解析(非 1/2/3/4/6)且数组非空时,下发官方默认灯
+     * (`n0.a()`)。节流并限制每次连接的次数,且写入不 poison/不 quarantine 灯光通道。
+     */
+    private fun maybeSendDefaultLight(s: Session) {
+        if (!ready(s)) return
+        val ch = s.characteristics[CoolerBleConstants.LIGHT_CONTROL_UUID] ?: return
+        if (!writable(ch)) return
+        if (s.lightDefaultAttempts >= MAX_LIGHT_DEFAULT_ATTEMPTS) return
+        val now = SystemClock.elapsedRealtime()
+        if (now - s.lastLightDefaultMs < LIGHT_DEFAULT_MIN_INTERVAL_MS) return
+        s.lastLightDefaultMs = now
+        s.lightDefaultAttempts++
+        _lightDiagnostic.update { it.copy(defaultSent = it.defaultSent + 1) }
+        Log.d(TAG, "LIGHT unknown mode, sending default effect (official fallback)")
+        scope.launch {
+            if (!owns(s)) return@launch
+            enqueueWrite(s, ch, CoolerBleConstants.defaultLightCommand(),
+                poisonOnTimeout = false, quarantineOnTimeout = false)
+        }
     }
 
     /** Missing read property is a deliberate skip, not a failed read. Data commits only in matching callbacks.
@@ -805,6 +837,10 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                     history = (it.history + "$source ${value.toHex()}").takeLast(6),
                 )
             }
+            // Official refreshLightModeView else-branch: a non-empty 0x1013 reply whose
+            // effect byte is not a known mode (1/2/3/4/6) cannot be displayed, so the
+            // official app pushes the default effect to bring the device to a known state.
+            if (update == null && value.isNotEmpty()) maybeSendDefaultLight(s)
         }
         val next = if (update != null) {
             // Valid reports are authoritative even when they repeat the current value.

@@ -35,6 +35,8 @@ data class LightDiagnostic(
     val lastReplyParsed: Boolean? = null,
     /** 最近若干次回包,形如 "read 11 00 00 00"(旧→新) */
     val history: List<String> = emptyList(),
+    /** 已下发默认灯(官方未知模式兑底)的次数 */
+    val defaultSent: Int = 0,
 ) {
     /** properties 的可读文本,例如 "READ|WRITE|NOTIFY";无已知位时回退为原始十六进制 */
     val propertiesText: String

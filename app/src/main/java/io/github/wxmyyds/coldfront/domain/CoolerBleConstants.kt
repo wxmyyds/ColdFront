@@ -48,6 +48,12 @@ object CoolerBleConstants {
      */
     val MAIN_SERVICE_UUID: UUID = UUID.fromString("d52082ad-e805-9f97-9d4e-1c682d9c9ce6")
 
+    /**
+     * 官方默认灯效字节(n0.a() = [0x01,0x00,0x00,0x00],炫彩)。官方 refreshLightModeView 在读到
+     * 非 1/2/3/4/6 的未知灯效字节且数组非空时,会下发该命令把设备纠正到已知状态。
+     */
+    fun defaultLightCommand(): ByteArray = byteArrayOf(0x01, 0x00, 0x00, 0x00)
+
     /** 背夹温度:通知。单字节有符号 °C;固件 8.4.7 为 [0x04, 温度] 多字节包 */
     val TEMPERATURE_NOTIFICATION_UUID: UUID = UUID.fromString("00001014-0000-1000-8000-00805f9b34fb")
 

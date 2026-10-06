@@ -574,6 +574,7 @@ private fun SyncingCard(strings: io.github.wxmyyds.coldfront.ui.i18n.AppStrings,
                     append(" last=").append(diag.readResult ?: "-").append('\n')
                     append("replies=").append(diag.replies)
                     append(" parsed=").append(diag.lastReplyParsed?.toString() ?: "-").append('\n')
+                    append("defaultSent=").append(diag.defaultSent).append('\n')
                     append("hist:")
                     for (h in diag.history) append('\n').append(h)
                 },
