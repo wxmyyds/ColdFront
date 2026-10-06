@@ -70,7 +70,9 @@ RSSI:   -43 dBm
 - ~~显示 = raw − 6~~(官方 App 有此校准,实测 App 无偏移;以实测为准)
 
 ### 3.4 灯光(0x1013)
-- 官方双路径(smali `f2/a$h`):LIGHT_R 读路径 `m()` = GATT `readCharacteristic(0x1013)`;LIGHT_W 路径 `n()` = 写 `[0x11]` 查询字节。ColdFront 两者都实现:可读则持续重试 read,未知灯效时另以 5s 节流写 `[0x11]` 触发 notify 回读。
+- 官方 8 Pro **只有读路径**:`Jacket8ProViewModel.Z0()`(queryLight) → `Jacket3ManagerV2.i()` → `Jacket8ProProcessor.i()`(注册 LIGHT_R) → 任务队列 → `f2/a.t()` → `f2/a$h.m()` = GATT `readCharacteristic(0x1013)`;连接后(onConnected)自动触发一次。
+- `f2/a$h.n()`(写 `[0x11]`)对应的 LIGHT_W(`Jacket8ProProcessor.o()`)在 8 Pro **无任何调用者**(全仓只有 jacket3 的 Presenter 调 `Jacket3ManagerV2.o()`)。ColdFront **不写 `[0x11]`**:实测写入后 `read` 回读 `11 00 00 00`(写入值回声),会污染灯效。
+- 特征绑定优先官方主服务 `d52082ad-e805-9f97-9d4e-1c682d9c9ce6`(官方 `onCharacteristicRead`/`onCharacteristicChanged` 只处理该服务);其它服务可能暴露同 UUID 但语义不同的特征。
 - 灯效未回读到前,轮询按节流间隔(4s)持续重试 read;read 超时(2.5s)不隔离灯光通道。
 - 官方数据处理器不剥读回数据的前缀,直接以 byte[0] 作为 mode;常亮/单色呼吸颜色来自 byte[1..3]。
 - 模式命令 4 字节 `[mode][R][G][B]`:

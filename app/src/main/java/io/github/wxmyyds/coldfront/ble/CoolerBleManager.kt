@@ -57,8 +57,6 @@ private const val DISCOVERY_TIMEOUT_MS = 10000L
 private const val INIT_TIMEOUT_MS = 30000L
 /** 灯效未读到前的 read 重试间隔:大于 READ_TIMEOUT_MS,避免慢设备每次 read 都被超时打断 */
 private const val LIGHT_READ_RETRY_MS = 4000L
-/** 官方 LIGHT_W 写 0x11 查询的最小间隔,避免每轮轮询都打扰设备 */
-private const val LIGHT_QUERY_INTERVAL_MS = 5000L
 
 data class ScanState(
     val scanning: Boolean = false,
@@ -100,7 +98,6 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         var requiredConfiguration = emptySet<UUID>()
         var lastTempUpdateMs = 0L
         var lastLightReadMs = 0L
-        var lastLightQueryMs = 0L
     }
 
     private enum class Control { FAN, COOLING, SMART, BOOST, PROTECTION, RGB }
@@ -460,7 +457,14 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                 return@dispatch
             }
             try {
-                for (service in g.services) for (ch in service.characteristics) {
+                // Official 8 Pro binds its characteristics from the main service
+                // (d52082ad-...) and only processes reads/notifications from it. Another
+                // service may expose a same-UUID characteristic that is not the cooler's
+                // register, so visit the main service first and keep that instance.
+                val orderedServices = g.services.sortedBy {
+                    if (it.uuid == CoolerBleConstants.MAIN_SERVICE_UUID) 0 else 1
+                }
+                for (service in orderedServices) for (ch in service.characteristics) {
                     s.characteristics.putIfAbsent(ch.uuid, ch)
                 }
                 if (s.characteristics[CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID] == null &&
@@ -478,6 +482,12 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                 _lightDiagnostic.value = LightDiagnostic(
                     present = lightCh != null,
                     properties = lightCh?.properties ?: 0,
+                    serviceUuid = g.services.firstOrNull { svc -> svc.characteristics.any { it === lightCh } }
+                        ?.uuid?.toString(),
+                    candidates = g.services.flatMap { svc ->
+                        svc.characteristics.filter { it.uuid == CoolerBleConstants.LIGHT_CONTROL_UUID }
+                            .map { "svc=${svc.uuid} props=${it.properties}" }
+                    },
                 )
                 s.requiredConfiguration = configurationUuids
                     .filter { s.characteristics[it]?.let(::readable) == true }
@@ -622,8 +632,6 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         value: ByteArray,
         onStart: () -> Unit = {},
         fresh: () -> Boolean = { true },
-        poisonOnTimeout: Boolean = true,
-        quarantineOnTimeout: Boolean = true,
     ): Boolean {
         val g = s.gatt ?: return false
         if (!writable(ch)) return false
@@ -639,8 +647,6 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                 @Suppress("DEPRECATION")
                 g.writeCharacteristic(ch)
             },
-            poisonOnTimeout = poisonOnTimeout,
-            quarantineOnTimeout = quarantineOnTimeout,
         ).success
     }
 
@@ -778,19 +784,6 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             subscribe = { enableNotification(s, it, poisonOnTimeout = false) },
             onTemperatureRecovery = { s.lastTempUpdateMs = SystemClock.elapsedRealtime() - 4000 },
         )
-        // Official LIGHT_W path (smali f2/a$h.n): while the effect is still unknown and
-        // the light characteristic is writable, periodically write the 0x11 query byte so
-        // firmware that only reports its effect over notifications pushes the current
-        // state. Throttled, non-poisoning and non-quarantining like the read retry.
-        if (lightPending && light != null && writable(light)) {
-            val now = SystemClock.elapsedRealtime()
-            if (now - s.lastLightQueryMs >= LIGHT_QUERY_INTERVAL_MS) {
-                s.lastLightQueryMs = now
-                val ok = enqueueWrite(s, light, byteArrayOf(CoolerBleConstants.LIGHT_QUERY_COMMAND),
-                    poisonOnTimeout = false, quarantineOnTimeout = false)
-                _lightDiagnostic.update { it.copy(queries = it.queries + 1, queryResult = if (ok) "ok" else "failed") }
-            }
-        }
         return polled
     }
 
@@ -809,6 +802,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                     lastReplySource = source,
                     lastReplyHex = value.toHex(),
                     lastReplyParsed = update != null,
+                    history = (it.history + "$source ${value.toHex()}").takeLast(6),
                 )
             }
         }

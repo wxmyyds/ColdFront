@@ -567,15 +567,15 @@ private fun SyncingCard(strings: io.github.wxmyyds.coldfront.ui.i18n.AppStrings,
                     append("LIGHT 0x1013 diag\n")
                     append("present=").append(diag.present)
                     append(" props=").append(diag.propertiesText).append('\n')
+                    append("svc=").append(diag.serviceUuid ?: "-").append('\n')
+                    append("cands=").append(diag.candidates.size).append('\n')
                     append("notifySubscribed=").append(diag.notifySubscribed).append('\n')
                     append("reads=").append(diag.reads)
                     append(" last=").append(diag.readResult ?: "-").append('\n')
-                    append("queries=").append(diag.queries)
-                    append(" last=").append(diag.queryResult ?: "-").append('\n')
                     append("replies=").append(diag.replies)
-                    append(" src=").append(diag.lastReplySource ?: "-")
                     append(" parsed=").append(diag.lastReplyParsed?.toString() ?: "-").append('\n')
-                    append("bytes=").append(diag.lastReplyHex ?: "-")
+                    append("hist:")
+                    for (h in diag.history) append('\n').append(h)
                 },
                 style = MaterialTheme.typography.bodySmall,
                 fontFamily = FontFamily.Monospace,

@@ -15,16 +15,16 @@ data class LightDiagnostic(
     val present: Boolean = false,
     /** 0x1013 的 GATT properties 原始位 */
     val properties: Int = 0,
+    /** 绑定的 0x1013 所属服务 UUID */
+    val serviceUuid: String? = null,
+    /** 所有 0x1013 候选("svc=... props=...");多于一条说明设备暴露了重复特征 */
+    val candidates: List<String> = emptyList(),
     /** notify(CCCD) 是否订阅成功 */
     val notifySubscribed: Boolean = false,
     /** 已发起的 read 次数 */
     val reads: Int = 0,
     /** 最近一次 read 的结果:"ok" / "timeout" */
     val readResult: String? = null,
-    /** 已发起写 0x11 查询的次数 */
-    val queries: Int = 0,
-    /** 最近一次写查询的结果:"ok" / "failed" */
-    val queryResult: String? = null,
     /** 收到的 0x1013 回包(read 或 notify)次数 */
     val replies: Int = 0,
     /** 最近一次回包来源:"read" / "notify" */
@@ -33,6 +33,8 @@ data class LightDiagnostic(
     val lastReplyHex: String? = null,
     /** 最近一次回包是否被解析为有效灯效 */
     val lastReplyParsed: Boolean? = null,
+    /** 最近若干次回包,形如 "read 11 00 00 00"(旧→新) */
+    val history: List<String> = emptyList(),
 ) {
     /** properties 的可读文本,例如 "READ|WRITE|NOTIFY";无已知位时回退为原始十六进制 */
     val propertiesText: String
