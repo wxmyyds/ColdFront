@@ -159,6 +159,31 @@ class ServiceStateTest {
     }
 
     @Test
+    fun `degraded connected notification offers recovery in either language`() {
+        for (locale in listOf(Locale.ENGLISH, Locale.CHINA)) {
+            val strings = stringsFor(locale)
+            val degraded = connected.copy(smartOn = true, telemetryDegraded = true)
+            val notification = serviceNotification(degraded, strings, activationFailed = false)
+            assertEquals(strings.telemetryDegradedTitle, notification.text)
+            assertTrue(notification.showReconnect)
+            assertFalse(serviceNotification(degraded.copy(telemetryDegraded = false), strings, false).showReconnect)
+            assertEquals(strings.serviceControlFailed, serviceNotification(degraded, strings, true).text)
+        }
+    }
+
+    @Test
+    fun `explicit reconnect replaces quarantined GATT instead of only resending smart mode`() {
+        assertFalse(serviceNeedsConnection(profile, connected))
+        assertTrue(serviceNeedsConnection(profile, connected.copy(telemetryDegraded = true)))
+        assertFalse(serviceNeedsConnection(profile, connected.copy(connection = ConnectionState.CONNECTING)))
+        assertFalse(serviceNeedsConnection(profile, connected.copy(connection = ConnectionState.DISCOVERING)))
+        assertTrue(serviceNeedsConnection(profile, connected.copy(connection = ConnectionState.DISCONNECTED)))
+        assertTrue(serviceNeedsConnection(profile, connected.copy(connection = ConnectionState.FAILED)))
+        assertTrue(serviceNeedsConnection(profile, connected.copy(deviceAddress = "11:22:33:44:55:66")))
+        assertTrue(serviceNeedsConnection(profile, connected.copy(deviceType = CoolerDeviceType.JACKET_5)))
+    }
+
+    @Test
     fun `notification state retains connection and manual feedback`() {
         val strings = stringsFor(Locale.ENGLISH)
         assertEquals(strings.serviceManual, serviceNotification(connected, strings, false).text)

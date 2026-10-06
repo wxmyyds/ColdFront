@@ -13,6 +13,7 @@ import io.github.wxmyyds.coldfront.data.ProfileRepository
 import io.github.wxmyyds.coldfront.data.SettingsRepository
 import io.github.wxmyyds.coldfront.domain.CoolerDevice
 import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
+import io.github.wxmyyds.coldfront.domain.CoolerLiveState
 import io.github.wxmyyds.coldfront.domain.CoolerProfile
 import io.github.wxmyyds.coldfront.domain.RGBConfig
 import java.io.IOException
@@ -115,6 +116,10 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
     fun connectRaw(entry: BleScanDiagnostic, type: CoolerDeviceType) = ble.connectRaw(entry, type)
     fun connect(device: CoolerDevice) = ble.connect(device)
     fun connectProfile(profile: CoolerProfile) = ble.connectByAddress(profile.macAddress, profile.deviceType)
+    fun reconnectTelemetry(requested: CoolerLiveState) {
+        val target = telemetryReconnectTarget(requested, liveState.value) ?: return
+        ble.connectByAddress(target.address, target.type)
+    }
     fun setFanSpeed(percent: Int) = ble.setFanSpeed(percent)
     fun setCooling(on: Boolean) = ble.setCooling(on)
     fun setSmart(on: Boolean) {

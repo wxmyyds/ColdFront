@@ -112,6 +112,8 @@ data class CoolerLiveState(
     val connection: ConnectionState = ConnectionState.DISCONNECTED,
     val temperatureC: Float? = null,
     val fanPercent: Int = 0,
+    /** Preserve the device byte: percentage rounding must not change the displayed gear. */
+    val fanRaw: Int? = null,
     /** Pending slider target; distinct from the last acknowledged/device-reported speed. */
     val pendingFanPercent: Int? = null,
     val fanMode: FanMode = FanMode.OFF,
@@ -134,10 +136,25 @@ data class CoolerLiveState(
     val overcoldOn: Boolean = false,
     /** Distinguish reconnects even when lifecycle collection skips intermediate states. */
     val connectionSessionId: Long = 0L,
+    val capabilities: CoolerCapabilities = CoolerCapabilities(),
+    /** A telemetry lane was quarantined. Only a new connection can restore that lane safely. */
+    val telemetryDegraded: Boolean = false,
 ) {
     val isConnected: Boolean get() = connection == ConnectionState.CONNECTED
     val temperatureText: String get() = temperatureC?.let { "%.1f°C".format(it) } ?: "--"
 
-    /** 智能温控或散热关时不可手动调档 */
-    val manualLevelEnabled: Boolean get() = isConnected && coolingOn && !smartOn
+    /** A missing switch is not an OFF report: legacy fan-only devices remain controllable. */
+    val coolingAllowsControl: Boolean get() = !capabilities.hasCoolingSwitch || coolingOn
+
+    val manualLevelEnabled: Boolean
+        get() = isConnected && capabilities.fanControl && coolingAllowsControl && !smartOn
+
+    /** Pending intent wins until acknowledged; otherwise use the unrounded device byte. */
+    val fanGear: Int?
+        get() {
+            val type = deviceType?.takeIf { it.generation == 8 } ?: return null
+            val raw = pendingFanPercent?.let { CoolerBleConstants.percentageToRaw(it, type) }
+                ?: fanRaw ?: CoolerBleConstants.percentageToRaw(fanPercent, type)
+            return CoolerBleConstants.rawToGear8Pro(raw)
+        }
 }
