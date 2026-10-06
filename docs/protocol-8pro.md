@@ -36,7 +36,7 @@ RSSI:   -43 dBm
 
 | 特征值 | 语义(实测) | 属性 |
 |---|---|---|
-| `00001011-...` | **散热总开关:写 0x02 开 / 0x03 关;通知 2=开 3=关。不写 ON 风扇不转!** | R/W/Notify |
+| `00001011-...` | **散热总开关(官方 HALL):写 0x02 开 / 0x03 关;通知 2=开 3=关。不写 ON 风扇不转!官方连接时只 `queryHall` 读回,不写** | R/W/Notify |
 | `00001012-...` | **风扇调速:单字节 raw(8 Pro 40–80 共 8 档)** | R/W |
 | `00001013-...` | **灯光状态/控制:[mode][R][G][B]**;官方 `queryLight` 通过 GATT 主动读取,不写查询字节 | R/W/Notify |
 | `00001014-...` | **背夹温度:单字节有符号 °C;固件 8.4.7 为 [0x04, 温度] 包。无 -6 偏移** | Notify |
@@ -102,6 +102,26 @@ RSSI:   -43 dBm
 2. `discoverServices` → `buildServiceAndCharacter`:逐个 getCharacteristic(0x1011…0x101f)
 3. 订阅特征支持的通知,并按配置项主动读取
 4. `onCharacteristicRead`/`onCharacteristicChanged` → 数据处理器按服务和特征分发 → ViewModel LiveData → Activity 观察并刷新 UI
+
+### 4.1 官方连接时**不写**散热总开关(0x1011)
+
+`Jacket3ManagerV2.onConnected` 依次只发**查询**(全部为读),没有一处写 0x1011:
+- L938 `"onConnected do queryLight"` → `i()`(LIGHT_R)
+- L1086-1092 `"onConnected hall do query Hall"` → `n()`(HALL_R)
+- L905 overClocking、L923 fan、L1053 temperature 同为 query
+
+HALL/W(0x1011)的写入入口 `Jacket3ManagerV2.e()/j()/l()`,其调用点**只有 UI 层**:
+- `e()`: `ui2/jacket3/Jacket3PresenterImlV2.smali:952`
+- `j()`/`l()`: `Jacket3PresenterImlV2.smali:1135` / `:386,:1181`,以及 `Jacket8ProManagerV2.smali:1401` / `:1423`(`invoke-super`,源头仍是 8 Pro 的 ViewModel/Activity UI)
+
+**官方 ON/OFF 字节**与 ColdFront 常量一致:
+- `Jacket8ProManagerV2.j()`(L1385)取 `f2/a$g.m()` → 字段 `h` = `[0x03]`(OFF)
+- `Jacket8ProManagerV2.l()`(L1407)取 `f2/a$g.n()` → 字段 `g` = `[0x02]`(ON)
+- `Jacket8ProViewModel.B1()` 日志 `"writeHallOff"` → `j()`;`D1()` 日志 `"writeHallOn"` → `l()`
+
+**官方唯一额外路径(防御性)**:`Jacket8ProActivityV3.l6()`(L8767)观察 `y0`(LiveData `H`,由 `Jacket8ProViewModel.onHallRead` 取 `value[0]` 写入,L5601;初值 `Integer.MIN_VALUE`):`y0==2`→UI 开、`y0==3`→UI 关、**`y0==0` → `D1()`(writeHallOn,下发 0x02)**(L8879)。
+
+**ColdFront 现状与结论**:与官方连接流程一致——连接时**只回读 0x1011**(在 `configurationUuids` 内),不主动写 ON;`main` 旧版的"每次连接写 0x02"无官方对应,已移除。官方 `y0==0 → writeHallOn` 这条兜底**未实现**(无证据表明真实设备会回报 `byte0==0`,且它会实际改变设备状态),仅记录于此。
 
 ## 5. 与旧协议(1–6 代)的差异
 
