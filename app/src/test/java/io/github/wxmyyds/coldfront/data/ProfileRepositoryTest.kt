@@ -138,6 +138,21 @@ class ProfileRepositoryTest {
     }
 
     @Test
+    fun `dedupe retargets a startup default pointing at the removed duplicate`() = runTest {
+        val oldest = profile(id = "old", createdAt = 1L)
+        val active = profile(id = "active", address = "aa:bb:cc:dd:ee:ff", createdAt = 2L)
+        val store = TestPreferencesStore(profilePreferences(
+            oldest, active, active = active.id, default = oldest.id,
+        ))
+        val repository = ProfileRepository(store)
+        val saved = repository.recordConnection(connected())!!
+
+        assertEquals(active.id, saved.id)
+        assertEquals(saved.id, store.snapshot[defaultKey])
+        assertEquals(saved, repository.loadDefaultProfile())
+    }
+
+    @Test
     fun `dedupe keeps oldest same MAC when active profile is another device`() = runTest {
         val newer = profile(id = "newer", createdAt = 9L)
         val oldest = profile(id = "oldest", address = " Aa:Bb:Cc:Dd:Ee:Ff ", createdAt = 1L)
@@ -221,6 +236,45 @@ class ProfileRepositoryTest {
     }
 
     @Test
+    fun `startup default is stored read and cleared without touching active or service`() = runTest {
+        val original = profile()
+        val other = profile(id = "other", address = OTHER_MAC)
+        val store = TestPreferencesStore(profilePreferences(
+            original, other, active = original.id, service = original.id,
+        ))
+        val repository = ProfileRepository(store)
+        assertNull(repository.loadDefaultProfile())
+        assertNull(repository.defaultProfile.first())
+
+        repository.setDefaultProfile(other.id)
+        assertEquals(other, repository.loadDefaultProfile())
+        assertEquals(other, repository.defaultProfile.first())
+        assertEquals(other.id, store.snapshot[defaultKey])
+        assertEquals(original, repository.loadActiveProfile())
+        assertEquals(original, repository.loadServiceProfile())
+
+        repository.setDefaultProfile(null)
+        assertNull(store.snapshot[defaultKey])
+        assertNull(repository.loadDefaultProfile())
+        assertEquals(original, repository.loadActiveProfile())
+        assertEquals(original, repository.loadServiceProfile())
+    }
+
+    @Test
+    fun `missing default target rejects with IOException and does not alter intent`() = runTest {
+        val original = profile()
+        val store = TestPreferencesStore(profilePreferences(original, default = original.id))
+        val repository = ProfileRepository(store)
+        expectFailure<IOException> { repository.setDefaultProfile("missing") }
+        assertTrue(store.commits.isEmpty())
+        assertEquals(original, repository.loadDefaultProfile())
+
+        val stale = ProfileRepository(TestPreferencesStore(profilePreferences(default = "deleted")))
+        assertNull(stale.loadDefaultProfile())
+        assertNull(stale.defaultProfile.first())
+    }
+
+    @Test
     fun `delete atomically clears active and service references and emits null service`() = runTest {
         val original = profile()
         val other = profile(id = "other", address = OTHER_MAC)
@@ -258,6 +312,43 @@ class ProfileRepositoryTest {
         assertEquals(retained, repository.loadActiveProfile())
         assertEquals(retained, repository.loadServiceProfile())
         assertEquals(listOf(retained), repository.profiles.first())
+    }
+
+    @Test
+    fun `delete clears a startup default pointing at the removed profile`() = runTest {
+        val original = profile()
+        val other = profile(id = "other", address = OTHER_MAC)
+        val store = TestPreferencesStore(profilePreferences(
+            original, other, active = original.id, service = other.id, default = original.id,
+        ))
+        val repository = ProfileRepository(store)
+        val observed = mutableListOf<CoolerProfile?>()
+        val collection = launch(start = CoroutineStart.UNDISPATCHED) {
+            repository.defaultProfile.take(2).toList(observed)
+        }
+        repository.delete(original.id)
+        collection.join()
+
+        assertEquals(listOf(original, null), observed)
+        assertEquals(1, store.commits.size)
+        val committed = store.commits.single()
+        assertNull(committed[defaultKey])
+        assertNull(committed[activeKey])
+        assertEquals(other.id, committed[serviceKey])
+        assertNull(repository.loadDefaultProfile())
+        expectFailure<IOException> { repository.setDefaultProfile(original.id) }
+    }
+
+    @Test
+    fun `deleting unrelated profile does not clear a startup default`() = runTest {
+        val retained = profile()
+        val other = profile(id = "other", address = OTHER_MAC)
+        val store = TestPreferencesStore(profilePreferences(
+            retained, other, default = retained.id,
+        ))
+        val repository = ProfileRepository(store)
+        repository.delete(other.id)
+        assertEquals(retained, repository.loadDefaultProfile())
     }
 
     @Test

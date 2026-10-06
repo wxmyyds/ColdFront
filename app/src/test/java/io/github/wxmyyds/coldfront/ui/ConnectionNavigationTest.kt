@@ -1,7 +1,9 @@
 package io.github.wxmyyds.coldfront.ui
 
 import io.github.wxmyyds.coldfront.domain.ConnectionState
+import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
 import io.github.wxmyyds.coldfront.domain.CoolerLiveState
+import io.github.wxmyyds.coldfront.domain.CoolerProfile
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flowOf
@@ -10,6 +12,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -48,6 +51,20 @@ class ConnectionNavigationTest {
         assertNotEquals(discovering, ready)
         assertFalse(shouldLeaveScanOnConnection(discovering, isScanDestination = true))
         assertEquals(ready, connectionNavigationKey(connected.copy(temperatureC = 27f, fanPercent = 70)))
+    }
+
+    @Test
+    fun `app start dials the startup default only when no session is running`() {
+        val saved = CoolerProfile(
+            id = "saved",
+            name = "My cooler",
+            deviceType = CoolerDeviceType.JACKET_8_PRO,
+            macAddress = "AA:BB:CC:DD:EE:FF",
+        )
+        assertEquals(saved, startupConnectTarget(saved, hasRunningSession = false))
+        // The service or a manual connection already owns a session: app start must not dial.
+        assertNull(startupConnectTarget(saved, hasRunningSession = true))
+        assertNull(startupConnectTarget(null, hasRunningSession = false))
     }
 
     private data class Observation(val state: CoolerLiveState, val isScan: Boolean)

@@ -12,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoMode
+import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
@@ -21,9 +22,11 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.wxmyyds.coldfront.data.AppSettings
 import io.github.wxmyyds.coldfront.ui.component.AnimatedRowIcon
 import io.github.wxmyyds.coldfront.ui.component.RowIcon
@@ -38,7 +41,7 @@ import io.github.wxmyyds.coldfront.ui.theme.PaletteStyles
 /**
  * 设置页(MD3E 分段选项列表):
  * - 外观组 = 动态取色开关行 + 「主题模式」下拉行；
- * - 通用设置与关于入口分别成组。
+ * - 通用设置、连接默认设备与关于入口分别成组。
  * 三档主题、三档语言都收成一行 + 下拉菜单：选项本身没有需要常驻展示的信息，
  * 铺成多行只是把页面拉长。
  */
@@ -46,6 +49,11 @@ import io.github.wxmyyds.coldfront.ui.theme.PaletteStyles
 @Composable
 fun SettingsScreen(vm: CoolerViewModel, settings: AppSettings, onAbout: () -> Unit) {
     val strings = LocalStrings.current
+    val profiles by vm.profiles.collectAsStateWithLifecycle()
+    val defaultDevice by vm.defaultDevice.collectAsStateWithLifecycle()
+    val defaultDeviceLoaded by vm.defaultDeviceLoaded.collectAsStateWithLifecycle()
+    val defaultDeviceOptions = listOf<String?>(null) + profiles.map { it.id }
+    val defaultDeviceId = defaultDevice?.id
     val dynamicColor = settings.dynamicColor
     val darkMode = settings.darkMode
     val appLanguage = settings.appLanguage
@@ -140,6 +148,26 @@ fun SettingsScreen(vm: CoolerViewModel, settings: AppSettings, onAbout: () -> Un
                         checked = predictiveBack,
                         onCheckedChange = vm::setPredictiveBack,
                         leadingContent = { RowIcon(Icons.Filled.AutoMode) },
+                    )
+                }
+            }
+
+            SegmentedGroup(title = strings.settingsConnection) {
+                // 档案文档读完前不渲染：未加载的值不能冒充「不自动连接」。
+                item(key = "defaultDevice", visible = defaultDeviceLoaded) {
+                    SegmentedDropdownRow(
+                        title = strings.settingsDefaultDevice,
+                        summary = strings.settingsDefaultDeviceDesc,
+                        options = defaultDeviceOptions,
+                        selected = defaultDeviceId,
+                        onSelect = vm::setDefaultDevice,
+                        // 档案被删除时选中值本身已是 null，因此不会出现指向已删设备的文案。
+                        optionLabel = { id ->
+                            id?.let { profileId ->
+                                profiles.firstOrNull { it.id == profileId }?.displayName
+                            } ?: strings.settingsDefaultDeviceOff
+                        },
+                        leadingContent = { RowIcon(Icons.Filled.Bluetooth) },
                     )
                 }
             }

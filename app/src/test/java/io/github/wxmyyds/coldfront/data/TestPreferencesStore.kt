@@ -33,6 +33,7 @@ internal class TestPreferencesStore(initial: Preferences = emptyPreferences()) :
 internal val profilesKey = stringPreferencesKey("profiles_json")
 internal val activeKey = stringPreferencesKey("active_profile_id")
 internal val serviceKey = stringPreferencesKey("service_profile_id")
+internal val defaultKey = stringPreferencesKey("default_profile_id")
 internal const val TEST_MAC = "AA:BB:CC:DD:EE:FF"
 internal const val OTHER_MAC = "11:22:33:44:55:66"
 
@@ -53,11 +54,13 @@ internal fun profilePreferences(
     vararg profiles: CoolerProfile,
     active: String? = null,
     service: String? = null,
+    default: String? = null,
 ): Preferences = mutablePreferencesOf(
     profilesKey to ProfileJson.Document(profiles.map(ProfileJson::newEntry)).toJson(),
 ).apply {
     if (active != null) this[activeKey] = active
     if (service != null) this[serviceKey] = service
+    if (default != null) this[defaultKey] = default
 }.toPreferences()
 
 internal suspend inline fun <reified T : Throwable> expectFailure(action: suspend () -> Unit): T {

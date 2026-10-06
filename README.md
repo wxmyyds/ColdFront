@@ -11,6 +11,7 @@
 - **RGB 灯效**：炫彩 / 全彩呼吸 / 单色呼吸 / 常亮 / 关闭，RGB 调色
 - **实时监控**：散热器温度通知、转速回读、信号强度；遥测读取超时隔离后提示数据可能过期，可从首页或服务通知重新连接恢复
 - **多设备档案**：成功连接后保存，按 MAC 去重；重连更新最近使用记录
+- **默认连接设备**：在设置页为已保存设备指定「默认连接」，应用启动时自动直连该设备（已有会话时不抢占，失败不重试）
 - **快捷设置磁贴**：一键开关自动模式
 - **双语**：中文 / English（100% Kotlin 字符串表，无 strings.xml）
 - **主题**：默认紫灰配色，支持浅色/深色与三种调色板；Android 12+ 可选壁纸动态强调色，页面/顶栏/底栏/选项背景保持固定
@@ -39,7 +40,7 @@
 - **MD3E**：`MaterialExpressiveTheme` + `MotionScheme.expressive()` 弹簧动效 + Expressive 形状阶梯
   - 依赖 `androidx.compose.material3:material3:1.5.0-alpha29`（经 `compose-bom-alpha:2026.09.01` 托管）
 - **架构**：domain / ble / data / service / ui 分层，`StateFlow` 驱动 UI；Service 共享 BLE 管理器
-- **DataStore** 持久化（设备档案、外观设置、明确启用的后台服务目标）
+- **DataStore** 持久化（设备档案、外观设置、启动默认设备、明确启用的后台服务目标）
 - Android 12 以下走旧 BLE 权限/旧 GATT 回调重载，兼容 API 24–37
 
 ## BLE 协议（逆向）

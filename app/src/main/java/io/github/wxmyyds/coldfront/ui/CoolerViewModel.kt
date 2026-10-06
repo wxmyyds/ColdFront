@@ -58,6 +58,12 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
     val profiles = profileRepo.profiles
         .onEach { _profilesLoaded.value = true }
         .uiState(emptyList())
+    // null is a real value here ("no startup default"), so readiness is reported separately.
+    private val _defaultDeviceLoaded = MutableStateFlow(false)
+    val defaultDeviceLoaded: StateFlow<Boolean> = _defaultDeviceLoaded.asStateFlow()
+    val defaultDevice: StateFlow<CoolerProfile?> = profileRepo.defaultProfile
+        .onEach { _defaultDeviceLoaded.value = true }
+        .uiState<CoolerProfile?>(null)
     private val backgroundResume = BackgroundResume(
         lifecycle = ProcessLifecycleOwner.get().lifecycle,
         scope = viewModelScope,
@@ -70,6 +76,19 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         backgroundResume.attach()
+        viewModelScope.launch {
+            // App start dials the configured default device once. A default can only be chosen
+            // after a successful connection, so permissions and the adapter were already usable
+            // then; a missing one here is reported like any other failed attempt, without retries.
+            val profile = try {
+                profileRepo.loadDefaultProfile()
+            } catch (e: IOException) {
+                reportStorageError(e)
+                return@launch
+            }
+            val target = startupConnectTarget(profile, ble.hasRunningSession()) ?: return@launch
+            ble.connectByAddress(target.macAddress, target.deviceType)
+        }
         viewModelScope.launch {
             liveState.filter { it.isConnected }
                 .distinctUntilChangedBy { it.connectionSessionId }
@@ -105,6 +124,7 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
     fun setPalette(palette: String) = saveSetting { settingsRepo.setPalette(palette) }
     fun setPredictiveBack(enabled: Boolean) = saveSetting { settingsRepo.setPredictiveBack(enabled) }
     fun setAppLanguage(language: String) = saveSetting { settingsRepo.setAppLanguage(language) }
+    fun setDefaultDevice(profileId: String?) = saveSetting { profileRepo.setDefaultProfile(profileId) }
 
     fun refreshBluetoothState() {
         _bluetoothEnabled.value = ble.isBluetoothEnabled

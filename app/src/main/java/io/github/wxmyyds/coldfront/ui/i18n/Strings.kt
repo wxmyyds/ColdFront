@@ -74,6 +74,10 @@ interface AppStrings {
     val settingsInterface: String
     val settingsPredictiveBack: String
     val settingsPredictiveBackDesc: String
+    val settingsConnection: String
+    val settingsDefaultDevice: String
+    val settingsDefaultDeviceDesc: String
+    val settingsDefaultDeviceOff: String
     val settingsFollowSystem: String
     val settingsDarkModeLight: String
     val settingsDarkModeDark: String
@@ -229,6 +233,10 @@ object ZhStrings : AppStrings {
     override val settingsInterface = "界面"
     override val settingsPredictiveBack = "预测性返回"
     override val settingsPredictiveBackDesc = "启用导航页面的系统返回过渡"
+    override val settingsConnection = "连接"
+    override val settingsDefaultDevice = "默认连接的设备"
+    override val settingsDefaultDeviceDesc = "应用启动时自动连接该设备"
+    override val settingsDefaultDeviceOff = "关闭"
     override val settingsFollowSystem = "跟随系统"
     override val settingsDarkModeLight = "浅色"
     override val settingsDarkModeDark = "深色"
@@ -377,6 +385,10 @@ object EnStrings : AppStrings {
     override val settingsInterface = "Interface"
     override val settingsPredictiveBack = "Predictive back"
     override val settingsPredictiveBackDesc = "Enable system back transitions for app navigation"
+    override val settingsConnection = "Connection"
+    override val settingsDefaultDevice = "Default device"
+    override val settingsDefaultDeviceDesc = "Connects automatically when the app starts"
+    override val settingsDefaultDeviceOff = "Off"
     override val settingsFollowSystem = "Follow system"
     override val settingsDarkModeLight = "Light"
     override val settingsDarkModeDark = "Dark"

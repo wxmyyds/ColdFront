@@ -29,6 +29,11 @@ class ProfileRepository internal constructor(private val dataStore: DataStore<Pr
         referencedProfile(prefs, KEY_SERVICE)
     }.distinctUntilChanged()
 
+    /** Startup default only: the most recently connected profile never becomes an implicit target. */
+    val defaultProfile: Flow<CoolerProfile?> = dataStore.data.map { prefs ->
+        referencedProfile(prefs, KEY_DEFAULT)
+    }.distinctUntilChanged()
+
     /**
      * Call once per successful connection session, regardless of normal/raw/saved connection path.
      * Invalid or not-yet-connected states do not access storage. Existing user settings survive;
@@ -73,6 +78,10 @@ class ProfileRepository internal constructor(private val dataStore: DataStore<Pr
             if (serviceId != null && matches.any { it.profile?.id == serviceId }) {
                 prefs[KEY_SERVICE] = profile.id
             }
+            val defaultId = prefs[KEY_DEFAULT]
+            if (defaultId != null && matches.any { it.profile?.id == defaultId }) {
+                prefs[KEY_DEFAULT] = profile.id
+            }
             recorded = profile
         }
         return recorded
@@ -86,6 +95,7 @@ class ProfileRepository internal constructor(private val dataStore: DataStore<Pr
             ).toJson()
             if (prefs[KEY_ACTIVE] == id) prefs.remove(KEY_ACTIVE)
             if (prefs[KEY_SERVICE] == id) prefs.remove(KEY_SERVICE)
+            if (prefs[KEY_DEFAULT] == id) prefs.remove(KEY_DEFAULT)
         }
     }
 
@@ -94,6 +104,27 @@ class ProfileRepository internal constructor(private val dataStore: DataStore<Pr
 
     /** Missing, deleted or unsupported service targets are OFF, not an active-profile fallback. */
     suspend fun loadServiceProfile(): CoolerProfile? = referencedProfile(dataStore.data.first(), KEY_SERVICE)
+
+    /** Missing, deleted or unsupported startup targets are OFF, not a last-connected fallback. */
+    suspend fun loadDefaultProfile(): CoolerProfile? = referencedProfile(dataStore.data.first(), KEY_DEFAULT)
+
+    /**
+     * Validate and persist the startup default atomically. Disabling remains possible even if the
+     * profile JSON is corrupt: clearing this independent key never overwrites that document.
+     */
+    suspend fun setDefaultProfile(id: String?) {
+        dataStore.edit { prefs ->
+            if (id == null) {
+                prefs.remove(KEY_DEFAULT)
+            } else {
+                val profiles = ProfileJson.parse(prefs[KEY_PROFILES]).profiles
+                if (profiles.none { it.id == id }) {
+                    throw IOException("Default profile does not exist or is unsupported: $id")
+                }
+                prefs[KEY_DEFAULT] = id
+            }
+        }
+    }
 
     /**
      * Validate and persist desired service intent atomically. Disabling remains possible even if
@@ -123,5 +154,6 @@ class ProfileRepository internal constructor(private val dataStore: DataStore<Pr
         private val KEY_PROFILES = stringPreferencesKey("profiles_json")
         private val KEY_ACTIVE = stringPreferencesKey("active_profile_id")
         private val KEY_SERVICE = stringPreferencesKey("service_profile_id")
+        private val KEY_DEFAULT = stringPreferencesKey("default_profile_id")
     }
 }
