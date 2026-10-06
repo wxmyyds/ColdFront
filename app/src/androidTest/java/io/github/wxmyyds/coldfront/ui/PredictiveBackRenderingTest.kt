@@ -113,7 +113,8 @@ class PredictiveBackRenderingTest {
             )
         }
         rule.runOnUiThread { dispatcher.dispatchOnBackCancelled() }
-        frames(600)
+        // miuix's cancel spring has a long tail; a fixed 600ms still leaves the page a few pixels out.
+        awaitDetailAtRest()
         rule.runOnIdle {
             assertEquals(RenderRoute.Detail, nav.backStack.last())
             assertCentred(detail)
@@ -194,8 +195,20 @@ class PredictiveBackRenderingTest {
         frames(32)
         gesture(BackEventCompat.EDGE_RIGHT)
         progress(0.6f, BackEventCompat.EDGE_RIGHT)
-        assertSteppedBack(0.6f)
-        assertTravel("page must track the finger at 0.6f", (0.6f * viewport.size.width).toInt())
+        // miuix grabs the in-flight depth and adds the new finger progress, then clamps just
+        // under a full pop. The regression is sliding *past* one width, not restarting at 0.6.
+        rule.runOnIdle { assertEquals(RenderRoute.Detail, nav.backStack.last()) }
+        val width = viewport.size.width.toFloat()
+        val travel = renderedTravelX()
+        assertTrue(
+            "a restarted gesture must not accumulate past one width ($travel)",
+            travel <= width + 3f,
+        )
+        assertTrue(
+            "a restarted gesture must continue the in-flight pop ($travel)",
+            travel > width * 0.6f,
+        )
+        assertSteppedBack(travel / width)
         commitAndCheck()
     }
 
@@ -330,7 +343,7 @@ class PredictiveBackRenderingTest {
         }
         // Releasing restores the rectangular page rather than leaving a rounded shell behind.
         rule.runOnUiThread { dispatcher.dispatchOnBackCancelled() }
-        frames(600)
+        awaitDetailAtRest()
         assertCornerPixel(2, 2, isPage = true, label = "after cancel")
     }
 
@@ -620,6 +633,18 @@ class PredictiveBackRenderingTest {
     private fun frames(millis: Long) {
         rule.mainClock.advanceTimeBy(millis)
         rule.waitForIdle()
+    }
+
+    /** Waits out miuix's cancel spring until the detail is back on centre and fully covering. */
+    private fun awaitDetailAtRest() {
+        repeat(80) {
+            frames(32)
+            if (renderedTravelX() <= 1 &&
+                abs(centre(detail).x - centre(viewport).x) < 1f
+            ) {
+                return
+            }
+        }
     }
 
     private fun centre(coordinates: LayoutCoordinates): Offset = coordinates.localToRoot(
