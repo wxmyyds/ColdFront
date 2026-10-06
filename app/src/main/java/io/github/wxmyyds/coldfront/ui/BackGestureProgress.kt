@@ -5,6 +5,7 @@ import androidx.compose.animation.core.snap
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -49,6 +50,20 @@ private const val RELEASE_STALE_MS = 500L
  * release settle itself.
  */
 private const val RELEASE_DIRECTION_CONFIRM_MS = 48L
+
+/**
+ * The gesture-progress value shared by the leaving page and the parent underneath it.
+ *
+ * Both surfaces drive mirror transforms of the *same* value (the leaving page slides out as the
+ * parent steps back in), and their settle targets are numerically identical - both rest at 0 while
+ * a detail is on top and both settle to 1 once the pop commits. They must therefore read one
+ * shared [State]: with two independent [rememberGestureSettleProgress] instances there are two
+ * animation clocks, two Idle-detectors and two collectors, and under real 60fps rendering those
+ * can disagree by a frame - exactly the released-gesture mismatch where one page starts its settle
+ * a frame before the other. [AppNavHost] provides this value for production; a surface falling back
+ * to its own instance when absent (e.g. direct calls in tests) keeps that path self-contained.
+ */
+internal val LocalBackGestureSettleProgress = compositionLocalOf<State<Float>?> { null }
 
 /**
  * Live predictive-back gesture progress, for effects the transition API cannot express.

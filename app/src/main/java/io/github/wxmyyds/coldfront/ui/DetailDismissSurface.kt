@@ -161,10 +161,15 @@ internal fun DetailDismissSurface(
 ) {
     // Settles rather than tracks: the dispatcher zeroes progress the instant the finger lifts, so
     // a raw read would snap this page square while it was still visibly sliding away.
-    val progress = rememberGestureSettleProgress(
-        observeBackGesture = isDismissible,
-        settleTo = if (isLeaving) 1f else 0f,
-    )
+    //
+    // Reads the shared gesture progress when [AppNavHost] provides one, so this page and the parent
+    // underneath it animate on a single clock (see [LocalBackGestureSettleProgress]); falls back to
+    // its own instance when called directly (e.g. in tests) so that path stays self-contained.
+    val progress = LocalBackGestureSettleProgress.current
+        ?: rememberGestureSettleProgress(
+            observeBackGesture = isDismissible,
+            settleTo = if (isLeaving) 1f else 0f,
+        )
     // Resolved in composition, where the insets and density are available, so a drag only reads the
     // State in the layer block and does not recompose the page every frame.
     val cornerRadius = rememberScreenCornerRadius()

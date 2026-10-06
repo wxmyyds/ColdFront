@@ -53,15 +53,21 @@ internal fun ParentScrimSurface(
     // zeroes its progress the instant the finger lifts, and a raw read would snap these effects
     // back to the covered state while the page above is still visibly sliding. Sharing the settle
     // curve with the leaving page means one release drives both layers through the same motion.
-    val progress = rememberGestureSettleProgress(
-        observeBackGesture = isCovered && observeBackGesture,
-        // Covered: the gesture ends without dismissing (cancel), so settle back to 0 - fully
-        // dimmed and stepped back. Uncovered: the pop committed, so settle to 1 - fully lit and
-        // back at rest. Both targets are what [parentScrimAlphaForProgress] /
-        // [parentPageAlphaForProgress] / the step-back expect, and settle exactly in step with the
-        // leaving page's own settle.
-        settleTo = if (isCovered) 0f else 1f,
-    )
+    //
+    // Reads the shared gesture progress when [AppNavHost] provides one, so this page and the
+    // leaving page above it animate on a single clock (see [LocalBackGestureSettleProgress]); falls
+    // back to its own instance when called directly (e.g. in tests) so that path stays
+    // self-contained.
+    val progress = LocalBackGestureSettleProgress.current
+        ?: rememberGestureSettleProgress(
+            observeBackGesture = isCovered && observeBackGesture,
+            // Covered: the gesture ends without dismissing (cancel), so settle back to 0 - fully
+            // dimmed and stepped back. Uncovered: the pop committed, so settle to 1 - fully lit and
+            // back at rest. Both targets are what [parentScrimAlphaForProgress] /
+            // [parentPageAlphaForProgress] / the step-back expect, and settle exactly in step with the
+            // leaving page's own settle.
+            settleTo = if (isCovered) 0f else 1f,
+        )
     Box(
         modifier.fillMaxSize().graphicsLayer {
             // Read the State here per-frame rather than via a by-delegate local, so a drag does not
