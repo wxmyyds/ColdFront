@@ -298,6 +298,39 @@ class GattOperationQueueTest {
 
 
     @Test
+    fun `non-quarantining timeout stays silent and allows immediate retry`() = runTest {
+        val owner = Any()
+        val target = Any()
+        var starts = 0
+        val queue = GattOperationQueue(
+            onTimeout = { error("Non-quarantining timeout must not poison the owner") },
+            onQuarantined = { error("Non-quarantining timeout must not report quarantine") },
+        )
+        val first = async {
+            queue.execute(owner, target, GattOperationQueue.Kind.READ, 100, { true },
+                poisonOnTimeout = false, quarantineOnTimeout = false) { starts++; true }
+        }
+        runCurrent()
+        advanceTimeBy(100)
+        runCurrent()
+        assertFalse(first.await().success)
+        assertEquals(1, starts)
+        // A late callback after a silent timeout is still dropped, as usual.
+        assertFalse(queue.complete(owner, target, GattOperationQueue.Kind.READ, success))
+
+        // Unlike a quarantined lane, the same owner/target/kind can be retried immediately.
+        val retry = async {
+            queue.execute(owner, target, GattOperationQueue.Kind.READ, 100, { true },
+                poisonOnTimeout = false, quarantineOnTimeout = false) { starts++; true }
+        }
+        runCurrent()
+        assertEquals(2, starts)
+        assertTrue(queue.complete(owner, target, GattOperationQueue.Kind.READ, success))
+        advanceUntilIdle()
+        assertTrue(retry.await().success)
+    }
+
+    @Test
     fun `explicit failure retries only after callback and rejection may retry`() = runTest {
         val owner = Any()
         val target = Any()

@@ -469,6 +469,11 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                 s.requiredConfiguration = configurationUuids
                     .filter { s.characteristics[it]?.let(::readable) == true }
                     .toSet()
+                Log.d(TAG, "Config characteristics: " + configurationUuids.joinToString { uuid ->
+                    val ch = s.characteristics[uuid]
+                    val props = ch?.properties ?: -1
+                    "$uuid props=$props(read=${props and BluetoothGattCharacteristic.PROPERTY_READ != 0})"
+                })
                 s.initializing = true
                 armTimeout(s, INIT_TIMEOUT_MS, "Initialization timed out")
                 s.initJob = scope.launch {
@@ -571,7 +576,10 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         for (uuid in s.requiredConfiguration) {
             if (!owns(s)) return
             val ch = s.characteristics[uuid] ?: continue
-            val ok = readIfReadable(s, ch, poisonOnTimeout = false)
+            // The light lane must never quarantine: a single timeout here would otherwise
+            // block the periodic RGB retry that is the only path to the device light state.
+            val ok = readIfReadable(s, ch, poisonOnTimeout = false,
+                quarantineOnTimeout = uuid != CoolerBleConstants.LIGHT_CONTROL_UUID)
             if (!owns(s)) return
             if (!ok) Log.w(TAG, "Initial configuration read unavailable: $uuid")
         }
@@ -625,6 +633,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         ch: BluetoothGattCharacteristic,
         fresh: () -> Boolean = { true },
         poisonOnTimeout: Boolean = true,
+        quarantineOnTimeout: Boolean = true,
     ): Boolean {
         val g = s.gatt ?: return false
         if (!owns(s) || !fresh()) return false
@@ -635,6 +644,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             isCurrent = { owns(s) && s.characteristics[ch.uuid] === ch && fresh() },
             start = { g.readCharacteristic(ch) },
             poisonOnTimeout = poisonOnTimeout,
+            quarantineOnTimeout = quarantineOnTimeout,
         ).success
     }
 
@@ -705,18 +715,32 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
      * characteristic completed successfully. Setup/control paths retain skip-as-success
      * and poisoning defaults; periodic reads cannot invalidate an otherwise healthy session.
      */
-    private suspend fun pollTelemetryOnce(s: Session): Boolean = pollTelemetry(
-        targets = telemetryUuids.filterNot { it == CoolerBleConstants.LIGHT_CONTROL_UUID }
-            .mapNotNull { s.characteristics[it] },
-        temperatureTargets = listOf(CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID, CoolerBleConstants.STATUS_UUID)
-            .mapNotNull { s.characteristics[it] },
-        isCurrent = { ready(s) },
-        isReadable = { it.properties and BluetoothGattCharacteristic.PROPERTY_READ != 0 },
-        read = { readIfReadable(s, it, poisonOnTimeout = false) },
-        temperatureStale = { SystemClock.elapsedRealtime() - s.lastTempUpdateMs > 6000 },
-        subscribe = { enableNotification(s, it, poisonOnTimeout = false) },
-        onTemperatureRecovery = { s.lastTempUpdateMs = SystemClock.elapsedRealtime() - 4000 },
-    )
+    private suspend fun pollTelemetryOnce(s: Session): Boolean {
+        // RGB light state is not telemetry: unless a parseable mode has already arrived,
+        // keep the light characteristic in the periodic pass so an early failed or timed
+        // out read can be retried until the device reports a mode. Its timeout must not
+        // quarantine the lane, or the one retry that could succeed would never fire.
+        val lightPending = _state.value.rgb == null
+        val targets = buildList {
+            addAll(
+                telemetryUuids.filterNot { it == CoolerBleConstants.LIGHT_CONTROL_UUID }
+                    .mapNotNull { s.characteristics[it] }
+            )
+            if (lightPending) s.characteristics[CoolerBleConstants.LIGHT_CONTROL_UUID]?.let(::add)
+        }
+        return pollTelemetry(
+            targets = targets,
+            temperatureTargets = listOf(CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID, CoolerBleConstants.STATUS_UUID)
+                .mapNotNull { s.characteristics[it] },
+            isCurrent = { ready(s) },
+            isReadable = { it.properties and BluetoothGattCharacteristic.PROPERTY_READ != 0 },
+            read = { readIfReadable(s, it, poisonOnTimeout = false,
+                quarantineOnTimeout = it.uuid != CoolerBleConstants.LIGHT_CONTROL_UUID) },
+            temperatureStale = { SystemClock.elapsedRealtime() - s.lastTempUpdateMs > 6000 },
+            subscribe = { enableNotification(s, it, poisonOnTimeout = false) },
+            onTemperatureRecovery = { s.lastTempUpdateMs = SystemClock.elapsedRealtime() - 4000 },
+        )
+    }
 
     private fun handleData(s: Session, uuid: UUID, value: ByteArray) {
         if (!owns(s)) return
@@ -725,6 +749,9 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         // parsed: the read itself is confirmed, only the displayed value stays unknown.
         s.configurationRead += uuid
         val update = CoolerTelemetryReducer.reduce(_state.value, uuid, value)
+        if (uuid == CoolerBleConstants.LIGHT_CONTROL_UUID) {
+            Log.d(TAG, "LIGHT reply bytes=${value.toHex()} size=${value.size} parsed=${update != null}")
+        }
         val next = if (update != null) {
             // Valid reports are authoritative even when they repeat the current value.
             s.telemetryRevision[uuid] = (s.telemetryRevision[uuid] ?: 0L) + 1
@@ -773,8 +800,9 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             if (!fresh(command)) return false
             // A GATT write callback confirms delivery only. The device read-back remains the
             // sole source of the published configuration value; its timeout must quarantine
-            // the lane, never kill an otherwise healthy session.
-            readIfReadable(s, command.characteristic, fresh = { fresh(command) }, poisonOnTimeout = false)
+            // the lane (except light, whose lane must stay retryable), never kill the session.
+            readIfReadable(s, command.characteristic, fresh = { fresh(command) }, poisonOnTimeout = false,
+                quarantineOnTimeout = command.characteristic.uuid != CoolerBleConstants.LIGHT_CONTROL_UUID)
             return ok
         } finally {
             s.controls--

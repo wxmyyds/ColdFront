@@ -75,6 +75,7 @@ internal class GattOperationQueue(
         timeoutMs: Long,
         isCurrent: () -> Boolean,
         poisonOnTimeout: Boolean = true,
+        quarantineOnTimeout: Boolean = true,
         start: () -> Boolean,
     ): Result = mutex.withLock {
         if (!isCurrent() || hasTimedOut(owner, target, kind)) {
@@ -101,7 +102,10 @@ internal class GattOperationQueue(
                         // No retry, even if isCurrent has become false due to a newer intent.
                         // Android callbacks have no generation: quarantine this exact lane
                         // even after a late callback arrives. Other targets/kinds remain usable.
-                        if (poisonOnTimeout) onTimeout(owner) else {
+                        // A non-quarantining timeout stays silent so the caller can retry on a
+                        // later pass (e.g. configuration read-back of a slow characteristic).
+                        if (poisonOnTimeout) onTimeout(owner)
+                        else if (quarantineOnTimeout) {
                             markTimedOut(owner, target, kind)
                             onQuarantined(owner)
                         }
