@@ -99,7 +99,14 @@ internal fun AppNavHost(
                         predictiveBack, initialState.destination.route, targetState.destination.route,
                         topLevelRoutes,
                     )
-                ) predictiveBackExit() else ExitTransition.None
+                ) {
+                    android.util.Log.i(
+                        "PBGDiag",
+                        "popExit: initial=${initialState.destination.route} target=${targetState.destination.route} " +
+                            "predictiveBack=$predictiveBack",
+                    )
+                    predictiveBackExit()
+                } else ExitTransition.None
             },
             builder = builder,
         )
