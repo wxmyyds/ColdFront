@@ -187,15 +187,10 @@ internal fun DetailDismissSurface(
                 // leading edge travels from 0 to one full width. During a push this progress is 0,
                 // so nothing shifts while the page is being entered.
                 translationX = progress.value * size.width
-                if (progress.value > 0.01f && progress.value < 0.99f ||
-                    kotlin.math.abs(progress.value) < 0.005f ||
-                    kotlin.math.abs(progress.value - 1f) < 0.005f
-                ) {
-                    android.util.Log.i(
-                        "PBGDiag",
-                        "detail gl p=${progress.value} tx=$translationX size=${size.width}",
-                    )
-                }
+                android.util.Log.i(
+                    "PBGDiag",
+                    "detail gl FRAME p=${progress.value} tx=$translationX size=${size.width}",
+                )
                 // The page always leaves toward the physical right, so the exposed leading edge is
                 // always the physical left. SquircleLeadingShape rounds those two corners with the
                 // device's smooth continuous-corner curve; the trailing edge stays square.
