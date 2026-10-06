@@ -211,6 +211,11 @@ class PredictiveBackRenderingTest {
         gesture(BackEventCompat.EDGE_LEFT)
         progress(0.5f, BackEventCompat.EDGE_LEFT)
         assertSteppedBack(0.5f)
+        android.util.Log.i(
+            "PBGDiag",
+            "second gesture: detail attached=${detail.isAttached} centre=${centre(detail)} " +
+                "parent centre=${centre(parent)} viewport=${centre(viewport)}",
+        )
         // Diagnostic dump: which layer is drawn where. The parent sits at centre - 0.25*w*(1-p);
         // the detail's leading edge should be at 0.5*w. Sampling a few columns distinguishes
         // "parent drawn over detail" (green wins in the overlap) from "detail never moved" (its
