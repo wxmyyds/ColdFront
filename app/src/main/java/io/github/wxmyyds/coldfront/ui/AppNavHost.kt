@@ -99,7 +99,7 @@ internal fun AppNavHost(
 
     val progress = if (inPredictiveBack) eventInProgress?.latestEvent?.progress ?: 0f else 0f
 
-    val transitionState = remember {
+    val transitionState = remember(currentEntry != null) {
         SeekableTransitionState<NavBackStackEntry?>(currentEntry)
     }
     val transition = rememberTransition(transitionState, label = "appNavHost")
@@ -224,8 +224,16 @@ internal fun AppNavHost(
             },
         ) { entry ->
             if (entry != null) {
-                entry.LocalOwnersProvider(saveableStateHolder) {
-                    destinationContent(entry)
+                val isPredictiveBackCancelAnimation = transitionState.currentState == currentEntry
+                val contentEntry = if (inPredictiveBack || isPredictiveBackCancelAnimation) {
+                    entry
+                } else {
+                    entries.lastOrNull { it == entry }
+                }
+                contentEntry?.let { visibleEntry ->
+                    visibleEntry.LocalOwnersProvider(saveableStateHolder) {
+                        destinationContent(visibleEntry)
+                    }
                 }
             }
         }
