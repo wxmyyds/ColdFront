@@ -127,6 +127,8 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
     val state: StateFlow<CoolerLiveState> = _state.asStateFlow()
     private val _rgbWriteState = MutableStateFlow<RgbWriteState?>(null)
     val rgbWriteState: StateFlow<RgbWriteState?> = _rgbWriteState.asStateFlow()
+    private val _lightDiagnostic = MutableStateFlow(LightDiagnostic())
+    val lightDiagnostic: StateFlow<LightDiagnostic> = _lightDiagnostic.asStateFlow()
     private val _discoveredDevices = MutableStateFlow<List<CoolerDevice>>(emptyList())
     val discoveredDevices: StateFlow<List<CoolerDevice>> = _discoveredDevices.asStateFlow()
     private val _rawDevices = MutableStateFlow<List<BleScanDiagnostic>>(emptyList())
@@ -472,6 +474,11 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                     writable = s.characteristics.values.filter(::writable).map { it.uuid }.toSet(),
                 )
                 _state.update { it.copy(capabilities = capabilities) }
+                val lightCh = s.characteristics[CoolerBleConstants.LIGHT_CONTROL_UUID]
+                _lightDiagnostic.value = LightDiagnostic(
+                    present = lightCh != null,
+                    properties = lightCh?.properties ?: 0,
+                )
                 s.requiredConfiguration = configurationUuids
                     .filter { s.characteristics[it]?.let(::readable) == true }
                     .toSet()
@@ -538,12 +545,12 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
     private fun readCallback(s: Session, g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray, status: Int) = dispatch(s, g) {
         val success = status == BluetoothGatt.GATT_SUCCESS
         if (operations.complete(g, ch, GattOperationQueue.Kind.READ, GattOperationQueue.Result(success, value)) && success) {
-            handleData(s, ch.uuid, value)
+            handleData(s, ch.uuid, value, "read")
         }
     }
 
     private fun notificationCallback(s: Session, g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray) = dispatch(s, g) {
-        if (s.characteristics[ch.uuid] === ch) handleData(s, ch.uuid, value)
+        if (s.characteristics[ch.uuid] === ch) handleData(s, ch.uuid, value, "notify")
     }
 
     private val telemetryUuids = listOf(
@@ -573,6 +580,9 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             if (!owns(s)) return
             val ch = s.characteristics[uuid] ?: continue
             val subscribed = enableNotification(s, ch)
+            if (uuid == CoolerBleConstants.LIGHT_CONTROL_UUID) {
+                _lightDiagnostic.update { it.copy(notifySubscribed = subscribed) }
+            }
             if (!owns(s)) return
             if (!subscribed) Log.w(TAG, "Optional subscription unavailable: $uuid")
         }
@@ -755,6 +765,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                     }
                     s.lastLightReadMs = now
                     val ok = readIfReadable(s, ch, poisonOnTimeout = false, quarantineOnTimeout = false)
+                    _lightDiagnostic.update { it.copy(reads = it.reads + 1, readResult = if (ok) "ok" else "timeout") }
                     if (!ok && _state.value.rgb == null) {
                         Log.d(TAG, "LIGHT read not returned (timeout/rejected)")
                     }
@@ -775,14 +786,15 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             val now = SystemClock.elapsedRealtime()
             if (now - s.lastLightQueryMs >= LIGHT_QUERY_INTERVAL_MS) {
                 s.lastLightQueryMs = now
-                enqueueWrite(s, light, byteArrayOf(CoolerBleConstants.LIGHT_QUERY_COMMAND),
+                val ok = enqueueWrite(s, light, byteArrayOf(CoolerBleConstants.LIGHT_QUERY_COMMAND),
                     poisonOnTimeout = false, quarantineOnTimeout = false)
+                _lightDiagnostic.update { it.copy(queries = it.queries + 1, queryResult = if (ok) "ok" else "failed") }
             }
         }
         return polled
     }
 
-    private fun handleData(s: Session, uuid: UUID, value: ByteArray) {
+    private fun handleData(s: Session, uuid: UUID, value: ByteArray, source: String) {
         if (!owns(s)) return
         // A device reply, read-back or notification, is authoritative confirmation that
         // the characteristic was read — even when the payload's semantics are not yet
@@ -790,7 +802,15 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         s.configurationRead += uuid
         val update = CoolerTelemetryReducer.reduce(_state.value, uuid, value)
         if (uuid == CoolerBleConstants.LIGHT_CONTROL_UUID) {
-            Log.d(TAG, "LIGHT reply bytes=${value.toHex()} size=${value.size} parsed=${update != null}")
+            Log.d(TAG, "LIGHT reply bytes=${value.toHex()} size=${value.size} parsed=${update != null} source=$source")
+            _lightDiagnostic.update {
+                it.copy(
+                    replies = it.replies + 1,
+                    lastReplySource = source,
+                    lastReplyHex = value.toHex(),
+                    lastReplyParsed = update != null,
+                )
+            }
         }
         val next = if (update != null) {
             // Valid reports are authoritative even when they repeat the current value.

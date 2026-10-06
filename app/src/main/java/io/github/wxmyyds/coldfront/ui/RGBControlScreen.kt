@@ -66,9 +66,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.wxmyyds.coldfront.ble.LightDiagnostic
 import io.github.wxmyyds.coldfront.domain.LightEffect
 import io.github.wxmyyds.coldfront.domain.RGBConfig
 import io.github.wxmyyds.coldfront.domain.RgbWriteStatus
@@ -106,6 +109,7 @@ fun RGBControlScreen(vm: CoolerViewModel, isPageActive: Boolean, onConnect: () -
     val strings = LocalStrings.current
     val state by vm.liveState.collectAsStateWithLifecycle()
     val writeState by vm.rgbWriteState.collectAsStateWithLifecycle()
+    val lightDiag by vm.lightDiagnostic.collectAsStateWithLifecycle()
     var resumed by remember(vm) { mutableStateOf(false) }
     LifecycleResumeEffect(vm) {
         resumed = true
@@ -155,7 +159,7 @@ fun RGBControlScreen(vm: CoolerViewModel, isPageActive: Boolean, onConnect: () -
             when {
                 !state.isConnected -> NotConnectedCard(strings, onConnect)
                 state.deviceType?.supportsRgb == false -> NotSupportedCard(strings)
-                state.rgb == null -> SyncingCard(strings)
+                state.rgb == null -> SyncingCard(strings, lightDiag)
                 else -> {
                     // ── 动态预览卡 ──
                     // extraLarge(28dp) 是全应用唯一的强调形状（战术 1：故意打破周围形状语言），
@@ -545,7 +549,7 @@ private fun NotConnectedCard(strings: io.github.wxmyyds.coldfront.ui.i18n.AppStr
 }
 
 @Composable
-private fun SyncingCard(strings: io.github.wxmyyds.coldfront.ui.i18n.AppStrings) {
+private fun SyncingCard(strings: io.github.wxmyyds.coldfront.ui.i18n.AppStrings, diag: LightDiagnostic) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = optionContainerColor(MaterialTheme.colorScheme)),
@@ -556,6 +560,28 @@ private fun SyncingCard(strings: io.github.wxmyyds.coldfront.ui.i18n.AppStrings)
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(strings.rgbSyncing, style = MaterialTheme.typography.titleMedium)
+            // 临时诊断:LIGHT 0x1013 读取实况,用于定位「读不到灯效」。
+            // 纯技术输出(props/超时/回包字节),不进 i18n;问题修复后可整块移除。
+            Text(
+                text = buildString {
+                    append("LIGHT 0x1013 diag\n")
+                    append("present=").append(diag.present)
+                    append(" props=").append(diag.propertiesText).append('\n')
+                    append("notifySubscribed=").append(diag.notifySubscribed).append('\n')
+                    append("reads=").append(diag.reads)
+                    append(" last=").append(diag.readResult ?: "-").append('\n')
+                    append("queries=").append(diag.queries)
+                    append(" last=").append(diag.queryResult ?: "-").append('\n')
+                    append("replies=").append(diag.replies)
+                    append(" src=").append(diag.lastReplySource ?: "-")
+                    append(" parsed=").append(diag.lastReplyParsed?.toString() ?: "-").append('\n')
+                    append("bytes=").append(diag.lastReplyHex ?: "-")
+                },
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+                textAlign = TextAlign.Start,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }
