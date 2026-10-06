@@ -32,6 +32,7 @@ import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.domain.RGBConfig
 import io.github.wxmyyds.coldfront.domain.RgbWriteState
 import io.github.wxmyyds.coldfront.domain.RgbWriteStatus
+import io.github.wxmyyds.coldfront.domain.configurationReadComplete
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
