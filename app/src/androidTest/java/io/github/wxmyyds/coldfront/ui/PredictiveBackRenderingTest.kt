@@ -247,14 +247,16 @@ class PredictiveBackRenderingTest {
         // (last green) to separate the two layers' true rendered offsets.
         var firstRed = -1
         var lastGreen = -1
+        var lastRed = -1
         for (x in 0 until diagPixels.width) {
             val p = diagPixels[x, y]
             if (p.red > 0.9f && firstRed == -1) firstRed = x
+            if (p.red > 0.9f) lastRed = x
             if (p.green > 0.5f && p.red < 0.5f) lastGreen = x
         }
         android.util.Log.i(
             "PBGDiag",
-            "second gesture: firstRed=$firstRed lastGreen=$lastGreen travel=$travel",
+            "second gesture: firstRed=$firstRed lastRed=$lastRed lastGreen=$lastGreen travel=$travel",
         )
         val width = viewport.size.width
         val cols = listOf(
