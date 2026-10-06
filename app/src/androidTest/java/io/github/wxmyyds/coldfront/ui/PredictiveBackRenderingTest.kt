@@ -206,8 +206,9 @@ class PredictiveBackRenderingTest {
         assertTrue("first gesture must already have the detail on top", firstMid.red > 0.5f)
         rule.runOnUiThread { dispatcher.dispatchOnBackCancelled() }
         // The cancellation animation runs fraction * totalDuration (<= 210ms for a 0.7 progress on
-        // a 300ms transition); 600ms leaves it fully settled before the second gesture starts.
-        frames(600)
+        // a 300ms transition); the keep-alive exit holds for RELEASE_SETTLE_CEILING_MS (600ms).
+        // Wait 1000ms so every NavHost settle clock has fully run before the second gesture.
+        frames(1000)
         rule.runOnIdle {
             assertEquals("detail", nav.currentDestination?.route)
             assertCentred(detail)
@@ -219,6 +220,10 @@ class PredictiveBackRenderingTest {
         }
         gesture(BackEventCompat.EDGE_LEFT)
         progress(0.5f, BackEventCompat.EDGE_LEFT)
+        // Extra frames: if the detail's graphics layer eventually re-renders, the failure is
+        // timing; if it never logs a frame, the layer is genuinely frozen across the second
+        // gesture.
+        frames(100)
         assertSteppedBack(0.5f)
         android.util.Log.i(
             "PBGDiag",
