@@ -38,7 +38,6 @@ import io.github.wxmyyds.coldfront.ui.component.isSecondaryDestination
 import io.github.wxmyyds.coldfront.ui.component.isTopLevelDestination
 import io.github.wxmyyds.coldfront.ui.component.predictiveBackParentEnter
 import io.github.wxmyyds.coldfront.ui.component.predictiveBackExit
-import io.github.wxmyyds.coldfront.ui.component.shouldUsePredictivePop
 import kotlinx.coroutines.launch
 
 private const val COMPOSE_NAVIGATOR_NAME = "composable"
@@ -175,12 +174,6 @@ internal fun AppNavHost(
                     }
                 } else {
                     val isPop = initial !in backStack
-                    val isPredictivePop = inPredictiveBack && shouldUsePredictivePop(
-                        predictiveBack,
-                        initial.destination.route,
-                        target?.destination?.route,
-                        topLevelRoutes,
-                    )
                     val initialZ = zIndices[initial.id] ?: 0f
                     val targetZ = when {
                         target == null -> 0f
@@ -190,9 +183,7 @@ internal fun AppNavHost(
                     target?.let { zIndices[it.id] = targetZ }
 
                     val enter = when {
-                        inPredictiveBack -> if (isPredictivePop) {
-                            predictiveBackParentEnter()
-                        } else EnterTransition.None
+                        inPredictiveBack -> EnterTransition.None
                         isPop -> predictiveBackParentEnter()
                         else -> AppMotion.pageEnter(
                             kind = if (isSecondaryDestination(target?.destination?.route, topLevelRoutes)) {
@@ -204,9 +195,7 @@ internal fun AppNavHost(
                         )
                     }
                     val exit = when {
-                        inPredictiveBack -> if (isPredictivePop) {
-                            predictiveBackExit()
-                        } else ExitTransition.None
+                        inPredictiveBack -> ExitTransition.None
                         isPop -> predictiveBackExit()
                         else -> AppMotion.pageExit(
                             kind = if (isSecondaryDestination(target?.destination?.route, topLevelRoutes)) {
