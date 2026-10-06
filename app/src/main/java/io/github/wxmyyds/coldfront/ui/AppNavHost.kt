@@ -39,7 +39,12 @@ internal fun AppNavHost(
     // pixel-synchronised under real 60fps rendering, where two independent instances can disagree
     // by a frame and read as the pages drifting apart on release.
     val backStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = backStackEntry?.destination?.route
+    // The back stack emits a null seed on the very first frame of a cold start, before the graph
+    // has produced an entry. Resolve it to the start destination (which is top-level) exactly like
+    // MainActivity does: treating that frame as "no page" would initialise the settle direction to
+    // the covered value, then flip it to 1f once the start destination lands - one bogus settle
+    // animation on first launch.
+    val currentRoute = backStackEntry?.destination?.route ?: startDestination
     val topLevelIsCurrent = isTopLevelDestination(currentRoute, topLevelRoutes)
     val sharedSettleProgress = rememberGestureSettleProgress(
         // Both roles observe exactly while a detail is on top: the leaving page is dismissible only
