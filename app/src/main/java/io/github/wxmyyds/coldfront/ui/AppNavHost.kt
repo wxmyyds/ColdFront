@@ -169,51 +169,57 @@ internal fun AppNavHost(
             transitionSpec = {
                 val initial = initialState
                 val target = targetState
-                val isPop = initial != null && initial !in backStack
-                val isPredictivePop = inPredictiveBack && shouldUsePredictivePop(
-                    predictiveBack,
-                    initial?.destination?.route,
-                    target?.destination?.route,
-                    topLevelRoutes,
-                )
-                val initialZ = initial?.let { zIndices[it.id] } ?: 0f
-                val targetZ = when {
-                    initial == null || target == null -> 0f
-                    isPop || inPredictiveBack -> initialZ - 1f
-                    else -> initialZ + 1f
-                }
-                target?.let { zIndices[it.id] = targetZ }
+                if (initial == null || initial !in entries) {
+                    (EnterTransition.None togetherWith ExitTransition.None).using(null).apply {
+                        targetContentZIndex = 0f
+                    }
+                } else {
+                    val isPop = initial !in backStack
+                    val isPredictivePop = inPredictiveBack && shouldUsePredictivePop(
+                        predictiveBack,
+                        initial.destination.route,
+                        target?.destination?.route,
+                        topLevelRoutes,
+                    )
+                    val initialZ = zIndices[initial.id] ?: 0f
+                    val targetZ = when {
+                        target == null -> 0f
+                        isPop || inPredictiveBack -> initialZ - 1f
+                        else -> initialZ + 1f
+                    }
+                    target?.let { zIndices[it.id] = targetZ }
 
-                val enter = when {
-                    inPredictiveBack -> if (isPredictivePop) {
-                        predictiveBackParentEnter()
-                    } else EnterTransition.None
-                    isPop -> predictiveBackParentEnter()
-                    else -> AppMotion.pageEnter(
-                        kind = if (isSecondaryDestination(target?.destination?.route, topLevelRoutes)) {
-                            NavigationMotionKind.PushDetail
-                        } else NavigationMotionKind.PopDetail,
-                        forward = true,
-                        motionScheme = motionScheme,
-                        routeDistance = 1,
-                    )
-                }
-                val exit = when {
-                    inPredictiveBack -> if (isPredictivePop) {
-                        predictiveBackExit()
-                    } else ExitTransition.None
-                    isPop -> predictiveBackExit()
-                    else -> AppMotion.pageExit(
-                        kind = if (isSecondaryDestination(target?.destination?.route, topLevelRoutes)) {
-                            NavigationMotionKind.PushDetail
-                        } else NavigationMotionKind.PopDetail,
-                        forward = true,
-                        motionScheme = motionScheme,
-                        routeDistance = 1,
-                    )
-                }
-                (enter togetherWith exit).using(null).apply {
-                    targetContentZIndex = targetZ
+                    val enter = when {
+                        inPredictiveBack -> if (isPredictivePop) {
+                            predictiveBackParentEnter()
+                        } else EnterTransition.None
+                        isPop -> predictiveBackParentEnter()
+                        else -> AppMotion.pageEnter(
+                            kind = if (isSecondaryDestination(target?.destination?.route, topLevelRoutes)) {
+                                NavigationMotionKind.PushDetail
+                            } else NavigationMotionKind.PopDetail,
+                            forward = true,
+                            motionScheme = motionScheme,
+                            routeDistance = 1,
+                        )
+                    }
+                    val exit = when {
+                        inPredictiveBack -> if (isPredictivePop) {
+                            predictiveBackExit()
+                        } else ExitTransition.None
+                        isPop -> predictiveBackExit()
+                        else -> AppMotion.pageExit(
+                            kind = if (isSecondaryDestination(target?.destination?.route, topLevelRoutes)) {
+                                NavigationMotionKind.PushDetail
+                            } else NavigationMotionKind.PopDetail,
+                            forward = true,
+                            motionScheme = motionScheme,
+                            routeDistance = 1,
+                        )
+                    }
+                    (enter togetherWith exit).using(null).apply {
+                        targetContentZIndex = targetZ
+                    }
                 }
             },
         ) { entry ->
