@@ -32,7 +32,7 @@ RSSI:   -43 dBm
 
 ## 2. GATT 结构
 
-⚠️ **特征值不依赖特定服务 UUID**——实测 App 遍历所有服务查找特征(8 Pro 服务 UUID 可能与旧的 `d52082ad-...` 不同,不可只 getService(主服务))。
+⚠️ **特征值遍历所有服务收集,但优先取官方主服务 `d52082ad-e805-9f97-9d4e-1c682d9c9ce6` 的实例**(ColdFront 遍历全部服务、主服务排在最前,按 UUID `putIfAbsent` 先到先得)。依据:官方 `buildServiceAndCharacter` 从该服务取特征,且 `onCharacteristicRead`/`onCharacteristicChanged` 只处理该服务的回调。其它服务可能暴露同 UUID 但语义不同的特征。实测 8 Pro 的 0x1013 位于该服务下(`svc=d52082ad-e805-9f97-9d4e-1c682d9c9ce6`)。
 
 | 特征值 | 语义(实测) | 属性 |
 |---|---|---|
