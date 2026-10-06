@@ -26,7 +26,6 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.ComposeUiTestConfig
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
@@ -211,7 +210,10 @@ class PredictiveBackRenderingTest {
             assertCentred(detail)
             assertFalse("cancel must remove the preview parent", parent.isAttached)
         }
-        rule.onNodeWithTag("detail-state-0").assertExists()
+        assertTrue(
+            "cancel must preserve the detail's rememberSaveable value",
+            rule.onAllNodesWithTag("detail-state-0").fetchSemanticsNodes().isNotEmpty(),
+        )
         gesture(BackEventCompat.EDGE_LEFT)
         progress(0.5f, BackEventCompat.EDGE_LEFT)
         assertSteppedBack(0.5f)
