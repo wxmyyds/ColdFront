@@ -102,7 +102,6 @@ internal fun AppNavHost(
         SeekableTransitionState<NavBackStackEntry?>(currentEntry)
     }
     val transition = rememberTransition(transitionState, label = "appNavHost")
-    val zIndices = remember { mutableMapOf<String, Float>() }
     val saveableStateHolder = rememberSaveableStateHolder()
 
     LaunchedEffect(inPredictiveBack, currentEntry, previousBackEntry) {
@@ -147,8 +146,6 @@ internal fun AppNavHost(
             transition.targetState == currentEntry
         ) {
             entries.forEach(composeNavigator::onTransitionComplete)
-            zIndices.clear()
-            transition.targetState?.let { zIndices[it.id] = 0f }
         }
     }
 
@@ -174,13 +171,11 @@ internal fun AppNavHost(
                     }
                 } else {
                     val isPop = initial !in backStack
-                    val initialZ = zIndices[initial.id] ?: 0f
                     val targetZ = when {
                         target == null -> 0f
-                        isPop || inPredictiveBack -> initialZ - 1f
-                        else -> initialZ + 1f
+                        isSecondaryDestination(target.destination.route, topLevelRoutes) -> 1f
+                        else -> 0f
                     }
-                    target?.let { zIndices[it.id] = targetZ }
 
                     val enter = when {
                         inPredictiveBack -> EnterTransition.None
