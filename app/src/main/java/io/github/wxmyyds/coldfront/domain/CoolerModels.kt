@@ -4,7 +4,9 @@ import java.util.UUID
 
 /**
  * RGB 灯效(逆向自官方 App,写入 0x1013 的命令格式 [mode][R][G][B]):
- * 1=炫彩 2=全彩呼吸 3=单色呼吸 4=常亮 5=场景 6=关闭。
+ * 1=炫彩 2=全彩呼吸 3=单色呼吸 4=常亮 6=关闭。
+ * 官方另有 0x05=场景灯效,仅由场景联动(`sendScenarioCmd`)下发,8 Pro 灯效页不提供;
+ * 本 App 不暴露该选项,0x05 因此按未知处理。
  */
 enum class LightEffect(val code: Byte, val labelZh: String, val labelEn: String) {
     COLORFUL(0x01, "炫彩", "Colorful"),
@@ -16,7 +18,6 @@ enum class LightEffect(val code: Byte, val labelZh: String, val labelEn: String)
      */
     BREATH_SINGLE(0x03, "单色呼吸", "Breathing (Single)"),
     ALWAYS_BRIGHT(0x04, "常亮", "Always On"),
-    SCENE(0x05, "场景", "Scene"),
     OFF(0x06, "关闭", "Off"),
     ;
 
@@ -29,7 +30,7 @@ enum class LightEffect(val code: Byte, val labelZh: String, val labelEn: String)
 
         /** 主菜单项；单色/全彩在呼吸子菜单中选择。 */
         val selectable: List<LightEffect> =
-            listOf(ALWAYS_BRIGHT, BREATH_FULLCOLOR, COLORFUL, SCENE, OFF)
+            listOf(ALWAYS_BRIGHT, BREATH_FULLCOLOR, COLORFUL, OFF)
     }
 }
 
@@ -68,7 +69,7 @@ data class RGBConfig(
 
     /** 序列化为 [effect][R][G][B] 4 字节命令;炫彩/全彩呼吸不带颜色字节(实测 App 同样置零) */
     fun toCommand(): ByteArray = when (effect) {
-        LightEffect.COLORFUL, LightEffect.BREATH_FULLCOLOR, LightEffect.SCENE, LightEffect.OFF ->
+        LightEffect.COLORFUL, LightEffect.BREATH_FULLCOLOR, LightEffect.OFF ->
             byteArrayOf(effect.code, 0, 0, 0)
         else ->
             byteArrayOf(effect.code, red.toByte(), green.toByte(), blue.toByte())

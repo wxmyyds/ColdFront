@@ -66,12 +66,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import io.github.wxmyyds.coldfront.ble.LightDiagnostic
 import io.github.wxmyyds.coldfront.domain.LightEffect
 import io.github.wxmyyds.coldfront.domain.RGBConfig
 import io.github.wxmyyds.coldfront.domain.RgbWriteStatus
@@ -109,7 +106,6 @@ fun RGBControlScreen(vm: CoolerViewModel, isPageActive: Boolean, onConnect: () -
     val strings = LocalStrings.current
     val state by vm.liveState.collectAsStateWithLifecycle()
     val writeState by vm.rgbWriteState.collectAsStateWithLifecycle()
-    val lightDiag by vm.lightDiagnostic.collectAsStateWithLifecycle()
     var resumed by remember(vm) { mutableStateOf(false) }
     LifecycleResumeEffect(vm) {
         resumed = true
@@ -159,7 +155,7 @@ fun RGBControlScreen(vm: CoolerViewModel, isPageActive: Boolean, onConnect: () -
             when {
                 !state.isConnected -> NotConnectedCard(strings, onConnect)
                 state.deviceType?.supportsRgb == false -> NotSupportedCard(strings)
-                state.rgb == null -> SyncingCard(strings, lightDiag)
+                state.rgb == null -> SyncingCard(strings)
                 else -> {
                     // ── 动态预览卡 ──
                     // extraLarge(28dp) 是全应用唯一的强调形状（战术 1：故意打破周围形状语言），
@@ -315,7 +311,11 @@ private val RgbEditorSaver = listSaver<RgbEditorState, Any>(
             address = (it[0] as String).ifEmpty { null },
             sessionId = it[1] as Long,
             connected = it[2] as Boolean,
-            config = RGBConfig(LightEffect.valueOf(it[3] as String), it[4] as Int, it[5] as Int, it[6] as Int),
+            // 按已存名字安全解析:旧版本存过的未知/已移除值(如 SCENE)不能抛异常崩溃。
+            config = RGBConfig(
+                LightEffect.entries.firstOrNull { e -> e.name == it[3] } ?: LightEffect.ALWAYS_BRIGHT,
+                it[4] as Int, it[5] as Int, it[6] as Int,
+            ),
             dirty = it[7] as Boolean,
             submittedRequestId = (it[8] as Long).takeIf { id -> id >= 0 },
             explicitApplyRequestId = (it[9] as Long).takeIf { id -> id >= 0 },
@@ -335,7 +335,6 @@ private fun LightPreview(
     active: Boolean,
 ) {
     val color = Color(r / 255f, g / 255f, b / 255f)
-    val sceneColor = MaterialTheme.colorScheme.surfaceVariant
     val breathAlpha = if (active && (effect == LightEffect.BREATH_SINGLE || effect == LightEffect.BREATH_FULLCOLOR)) {
         rememberInfiniteTransition(label = "light-breath").animateFloat(
             initialValue = 0.15f,
@@ -356,7 +355,6 @@ private fun LightPreview(
     Canvas(modifier = modifier.clip(MaterialTheme.shapes.large)) {
         when (effect) {
             LightEffect.OFF -> drawRect(PreviewLedOff)
-            LightEffect.SCENE -> drawRect(sceneColor)
             LightEffect.COLORFUL -> {
                 // 彩虹流动渐变
                 val phase = hueShift?.value ?: 0f
@@ -405,7 +403,6 @@ private fun effectIcon(e: LightEffect): ImageVector = when (e) {
     // 合并后的「呼吸」（包括设备回报的单色呼吸）统一用波纹图标
     LightEffect.BREATH_FULLCOLOR, LightEffect.BREATH_SINGLE -> Icons.Filled.Waves
     LightEffect.COLORFUL -> Icons.Filled.Palette
-    LightEffect.SCENE -> Icons.Filled.Palette
     LightEffect.OFF -> Icons.Filled.AcUnit
 }
 
@@ -549,7 +546,7 @@ private fun NotConnectedCard(strings: io.github.wxmyyds.coldfront.ui.i18n.AppStr
 }
 
 @Composable
-private fun SyncingCard(strings: io.github.wxmyyds.coldfront.ui.i18n.AppStrings, diag: LightDiagnostic) {
+private fun SyncingCard(strings: io.github.wxmyyds.coldfront.ui.i18n.AppStrings) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = optionContainerColor(MaterialTheme.colorScheme)),
@@ -560,29 +557,6 @@ private fun SyncingCard(strings: io.github.wxmyyds.coldfront.ui.i18n.AppStrings,
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(strings.rgbSyncing, style = MaterialTheme.typography.titleMedium)
-            // 临时诊断:LIGHT 0x1013 读取实况,用于定位「读不到灯效」。
-            // 纯技术输出(props/超时/回包字节),不进 i18n;问题修复后可整块移除。
-            Text(
-                text = buildString {
-                    append("LIGHT 0x1013 diag\n")
-                    append("present=").append(diag.present)
-                    append(" props=").append(diag.propertiesText).append('\n')
-                    append("svc=").append(diag.serviceUuid ?: "-").append('\n')
-                    append("cands=").append(diag.candidates.size).append('\n')
-                    append("notifySubscribed=").append(diag.notifySubscribed).append('\n')
-                    append("reads=").append(diag.reads)
-                    append(" last=").append(diag.readResult ?: "-").append('\n')
-                    append("replies=").append(diag.replies)
-                    append(" parsed=").append(diag.lastReplyParsed?.toString() ?: "-").append('\n')
-                    append("defaultSent=").append(diag.defaultSent).append('\n')
-                    append("hist:")
-                    for (h in diag.history) append('\n').append(h)
-                },
-                style = MaterialTheme.typography.bodySmall,
-                fontFamily = FontFamily.Monospace,
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth(),
-            )
         }
     }
 }

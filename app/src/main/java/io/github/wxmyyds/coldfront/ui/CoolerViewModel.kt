@@ -42,7 +42,6 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
 
     val liveState = ble.state
     val rgbWriteState = ble.rgbWriteState
-    val lightDiagnostic = ble.lightDiagnostic
     val discoveredDevices = ble.discoveredDevices
     val rawDevices = ble.rawDevices
     val scanState = ble.scanState

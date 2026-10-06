@@ -118,7 +118,8 @@ class CoolerTelemetryReducerTest {
         assertEquals(true, reduce(CoolerBleConstants.PROTECTION_UUID, byteArrayOf(7))?.state?.overcoldOn)
         assertEquals(100, reduce(CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID, byteArrayOf(80))?.state?.fanPercent)
         assertEquals(state.rgb?.copy(effect = LightEffect.OFF), reduce(CoolerBleConstants.LIGHT_CONTROL_UUID, byteArrayOf(6))?.state?.rgb)
-        assertEquals(state.rgb?.copy(effect = LightEffect.SCENE), reduce(CoolerBleConstants.LIGHT_CONTROL_UUID, byteArrayOf(5))?.state?.rgb)
+        // 0x05 (official scene effect, not offered by the app) is unknown: no state update.
+        assertNull(reduce(CoolerBleConstants.LIGHT_CONTROL_UUID, byteArrayOf(5)))
         assertNull(CoolerTelemetryReducer.reduce(state.copy(rgb = null), CoolerBleConstants.LIGHT_CONTROL_UUID, byteArrayOf(4)))
         assertEquals(RGBConfig(LightEffect.ALWAYS_BRIGHT, 200, 30, 40), reduce(CoolerBleConstants.LIGHT_CONTROL_UUID, byteArrayOf(4, 200.toByte(), 30, 40))?.state?.rgb)
         assertEquals(6200, reduce(CoolerBleConstants.RPM_UUID, byteArrayOf(0x18, 0x38))?.state?.fanRpm)

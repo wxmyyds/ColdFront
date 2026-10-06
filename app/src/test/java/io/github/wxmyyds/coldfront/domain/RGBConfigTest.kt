@@ -42,13 +42,14 @@ class RGBConfigTest {
     fun `color-independent effects can be confirmed without RGB payload bytes`() {
         assertEquals(RGBConfig(LightEffect.COLORFUL), RGBConfig.fromNotification(byteArrayOf(1), null))
         assertEquals(RGBConfig(LightEffect.BREATH_FULLCOLOR), RGBConfig.fromNotification(byteArrayOf(2), null))
-        assertEquals(RGBConfig(LightEffect.SCENE), RGBConfig.fromNotification(byteArrayOf(5), null))
         assertEquals(RGBConfig(LightEffect.OFF), RGBConfig.fromNotification(byteArrayOf(6), null))
     }
 
     @Test
     fun `unknown mode and empty payload are rejected`() {
         assertNull(RGBConfig.fromNotification(byteArrayOf(0x63), null))
+        // 0x05 is the official scene effect, only used by sendScenarioCmd, not offered by the app.
+        assertNull(RGBConfig.fromNotification(byteArrayOf(0x05), null))
         assertNull(RGBConfig.fromNotification(byteArrayOf(), null))
     }
 
@@ -57,10 +58,6 @@ class RGBConfigTest {
         assertArrayEquals(
             byteArrayOf(0x02, 0, 0, 0),
             RGBConfig(LightEffect.BREATH_FULLCOLOR, 9, 9, 9).toCommand(),
-        )
-        assertArrayEquals(
-            byteArrayOf(0x05, 0, 0, 0),
-            RGBConfig(LightEffect.SCENE, 9, 9, 9).toCommand(),
         )
         assertArrayEquals(
             byteArrayOf(0x06, 0, 0, 0),
