@@ -152,10 +152,16 @@ fun RGBControlScreen(vm: CoolerViewModel, isPageActive: Boolean, onConnect: () -
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
 
+            // The editor works from its own draft, so the page stays usable while the device
+            // light state is still unknown; report that as an additive notice (the same
+            // convention as HomeScreen's degraded banner) instead of replacing the page.
+            if (state.isConnected && state.deviceType?.supportsRgb != false && state.rgb == null) {
+                SyncingNotice(strings)
+            }
+
             when {
                 !state.isConnected -> NotConnectedCard(strings, onConnect)
                 state.deviceType?.supportsRgb == false -> NotSupportedCard(strings)
-                state.rgb == null -> SyncingCard(strings)
                 else -> {
                     // ── 动态预览卡 ──
                     // extraLarge(28dp) 是全应用唯一的强调形状（战术 1：故意打破周围形状语言），
@@ -546,18 +552,16 @@ private fun NotConnectedCard(strings: io.github.wxmyyds.coldfront.ui.i18n.AppStr
 }
 
 @Composable
-private fun SyncingCard(strings: io.github.wxmyyds.coldfront.ui.i18n.AppStrings) {
+private fun SyncingNotice(strings: io.github.wxmyyds.coldfront.ui.i18n.AppStrings) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = optionContainerColor(MaterialTheme.colorScheme)),
     ) {
-        Column(
-            Modifier.padding(32.dp).fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(strings.rgbSyncing, style = MaterialTheme.typography.titleMedium)
-        }
+        Text(
+            strings.rgbSyncing,
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            style = MaterialTheme.typography.bodyMedium,
+        )
     }
 }
 

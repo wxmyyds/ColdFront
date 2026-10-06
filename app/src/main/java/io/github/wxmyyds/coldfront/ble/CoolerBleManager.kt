@@ -588,10 +588,12 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         for (uuid in s.requiredConfiguration) {
             if (!owns(s)) return
             val ch = s.characteristics[uuid] ?: continue
-            // The light lane must never quarantine: a single timeout here would otherwise
-            // block the periodic RGB retry that is the only path to the device light state.
-            val ok = readIfReadable(s, ch, poisonOnTimeout = false,
-                quarantineOnTimeout = uuid != CoolerBleConstants.LIGHT_CONTROL_UUID)
+            // A one-off slow reply right after connecting must not consume the lane: the
+            // periodic pass is the retry path that confirms this configuration and unlocks
+            // its control, so quarantining here would hide the control until a reconnect.
+            // A lane that stays silent is still quarantined by the periodic pass, which
+            // surfaces the loss as degraded telemetry instead of retrying forever.
+            val ok = readIfReadable(s, ch, poisonOnTimeout = false, quarantineOnTimeout = false)
             if (!owns(s)) return
             if (!ok) Log.w(TAG, "Initial configuration read unavailable: $uuid")
         }

@@ -94,6 +94,7 @@ RSSI:   -43 dBm
 - 配置状态按特征分别主动读取;回调将原始数据路由到 `Jacket8ProDataHandler`/ViewModel,再由 LiveData 更新 UI。
 - 1013 使用 `queryLight` → `readCharacteristic`;1011 hall、1012 fan、1017 overclocking、1018 auto 与 101F 温度保护各自回读,不会用本地预设代替回读。
 - ColdFront 对特征不可读或返回无效数据时不伪造状态,相关控制项保持隐藏/未知。
+- 配置回读是解锁对应控制项的前置条件:连接时的首次回读超时不隔离该特征通道,由周期轮询重试确认;持续无响应的通道才会被隔离并提示「状态更新受限」,需重连恢复。
 
 ## 4. 连接流程(官方)
 
