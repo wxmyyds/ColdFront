@@ -196,6 +196,9 @@ class PredictiveBackRenderingTest {
         openDetail()
         gesture(BackEventCompat.EDGE_LEFT)
         progress(0.7f, BackEventCompat.EDGE_LEFT)
+        // First-gesture control: the detail must be on top while the parent steps back beneath.
+        val firstMid = overlapColour(0.7f, "first gesture")
+        assertTrue("first gesture must already have the detail on top", firstMid.red > 0.5f)
         rule.runOnUiThread { dispatcher.dispatchOnBackCancelled() }
         // The cancellation animation runs fraction * totalDuration (<= 210ms for a 0.7 progress on
         // a 300ms transition); 600ms leaves it fully settled before the second gesture starts.
@@ -240,6 +243,19 @@ class PredictiveBackRenderingTest {
             travel > 2 && diagPixels[travel - 2, y].green > 0.5f,
         )
         commitAndCheck()
+    }
+
+    /** Colour in the overlap region (detail's red zone) at the given gesture progress. */
+    private fun overlapColour(progress: Float, label: String): androidx.compose.ui.graphics.Color {
+        val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
+        val y = pixels.height / 2
+        // Sample inside the detail's own coverage: travel = progress * width, so anywhere in
+        // (progress * w, w) is detail territory (red) when the layers are ordered correctly.
+        val x = (viewport.size.width * (progress + 0.25f)).toInt()
+            .coerceIn(0, pixels.width - 1)
+        val c = pixels[x, y]
+        android.util.Log.i("PBGDiag", "$label: x=$x r=${c.red} g=${c.green} b=${c.blue} travel=${renderedTravelX()}")
+        return androidx.compose.ui.graphics.Color(c.red, c.green, c.blue, 1f)
     }
 
     @Test
