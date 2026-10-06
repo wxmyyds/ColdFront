@@ -155,6 +155,7 @@ fun RGBControlScreen(vm: CoolerViewModel, isPageActive: Boolean, onConnect: () -
             when {
                 !state.isConnected -> NotConnectedCard(strings, onConnect)
                 state.deviceType?.supportsRgb == false -> NotSupportedCard(strings)
+                state.rgb == null -> SyncingCard(strings)
                 else -> {
                     // ── 动态预览卡 ──
                     // extraLarge(28dp) 是全应用唯一的强调形状（战术 1：故意打破周围形状语言），
@@ -330,6 +331,7 @@ private fun LightPreview(
     active: Boolean,
 ) {
     val color = Color(r / 255f, g / 255f, b / 255f)
+    val sceneColor = MaterialTheme.colorScheme.surfaceVariant
     val breathAlpha = if (active && (effect == LightEffect.BREATH_SINGLE || effect == LightEffect.BREATH_FULLCOLOR)) {
         rememberInfiniteTransition(label = "light-breath").animateFloat(
             initialValue = 0.15f,
@@ -350,6 +352,7 @@ private fun LightPreview(
     Canvas(modifier = modifier.clip(MaterialTheme.shapes.large)) {
         when (effect) {
             LightEffect.OFF -> drawRect(PreviewLedOff)
+            LightEffect.SCENE -> drawRect(sceneColor)
             LightEffect.COLORFUL -> {
                 // 彩虹流动渐变
                 val phase = hueShift?.value ?: 0f
@@ -398,6 +401,7 @@ private fun effectIcon(e: LightEffect): ImageVector = when (e) {
     // 合并后的「呼吸」（包括设备回报的单色呼吸）统一用波纹图标
     LightEffect.BREATH_FULLCOLOR, LightEffect.BREATH_SINGLE -> Icons.Filled.Waves
     LightEffect.COLORFUL -> Icons.Filled.Palette
+    LightEffect.SCENE -> Icons.Filled.Palette
     LightEffect.OFF -> Icons.Filled.AcUnit
 }
 
@@ -536,6 +540,22 @@ private fun NotConnectedCard(strings: io.github.wxmyyds.coldfront.ui.i18n.AppStr
             )
             Text(strings.rgbConnectFirst, style = MaterialTheme.typography.titleMedium)
             Button(onClick = onConnect, shapes = ButtonDefaults.shapes()) { Text(strings.rgbGoConnect) }
+        }
+    }
+}
+
+@Composable
+private fun SyncingCard(strings: io.github.wxmyyds.coldfront.ui.i18n.AppStrings) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = optionContainerColor(MaterialTheme.colorScheme)),
+    ) {
+        Column(
+            Modifier.padding(32.dp).fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(strings.rgbSyncing, style = MaterialTheme.typography.titleMedium)
         }
     }
 }

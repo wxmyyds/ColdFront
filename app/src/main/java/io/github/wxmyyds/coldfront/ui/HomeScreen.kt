@@ -169,7 +169,7 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
 
     TempHero(state)
 
-    if (state.capabilities.hasCoolingSwitch) {
+    if (state.capabilities.hasCoolingSwitch && state.hasConfirmedConfiguration(CoolerBleConstants.COOLING_SWITCH_UUID)) {
         SegmentedSwitchRow(
             title = strings.homeCoolingSwitch,
             summary = strings.homeCoolingSwitchDesc,
@@ -184,7 +184,7 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
     // 按设备能力显示带说明的开关:分段选项列表(SegmentedGroup)——
     // 外角 16dp / 内角 4dp / 缝隙 / 触感反馈全部由组件统一处理
     SegmentedGroup {
-        item(key = "smart", visible = state.capabilities.smartControl && state.deviceType?.supportsAutoMode == true) {
+        item(key = "smart", visible = state.hasConfirmedConfiguration(CoolerBleConstants.AUTO_MODE_CONTROL_UUID) && state.capabilities.smartControl && state.deviceType?.supportsAutoMode == true) {
             SegmentedSwitchRow(
                 title = strings.homeSmart,
                 summary = strings.homeSmartDesc,
@@ -194,7 +194,7 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
                 leadingContent = { RowIcon(Icons.Filled.AutoMode) },
             )
         }
-        item(key = "boost", visible = state.capabilities.boostControl) {
+        item(key = "boost", visible = state.hasConfirmedConfiguration(CoolerBleConstants.BOOST_CONTROL_UUID) && state.capabilities.boostControl) {
             SegmentedSwitchRow(
                 title = strings.homeBoost,
                 summary = strings.homeBoostDesc,
@@ -204,7 +204,7 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
                 leadingContent = { RowIcon(Icons.Filled.Bolt) },
             )
         }
-        item(key = "overcold", visible = state.capabilities.protectionControl) {
+        item(key = "overcold", visible = state.hasConfirmedConfiguration(CoolerBleConstants.PROTECTION_UUID) && state.capabilities.protectionControl) {
             SegmentedSwitchRow(
                 title = strings.homeOvercold,
                 summary = strings.homeOvercoldDesc,
@@ -328,7 +328,7 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
     val displayedPercent = state.pendingFanPercent ?: state.fanPercent
     val displayedGear = state.fanGear ?: 1
 
-    if (state.isConnected && state.capabilities.fanControl && state.coolingAllowsControl && state.smartOn) {
+    if (state.isConnected && state.hasConfirmedConfiguration(CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID) && state.capabilities.fanControl && state.coolingAllowsControl && state.smartOn) {
         Surface(
             shape = MaterialTheme.shapes.large,
             color = MaterialTheme.colorScheme.tertiaryContainer,

@@ -32,7 +32,6 @@ import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.domain.RGBConfig
 import io.github.wxmyyds.coldfront.domain.RgbWriteState
 import io.github.wxmyyds.coldfront.domain.RgbWriteStatus
-import io.github.wxmyyds.coldfront.domain.withFanMode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -91,6 +90,8 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         var initializing = false
         var controls = 0
         val telemetryRevision = mutableMapOf<UUID, Long>()
+        val configurationRead = mutableSetOf<UUID>()
+        var requiredConfiguration = emptySet<UUID>()
         var lastTempUpdateMs = 0L
     }
 
@@ -463,6 +464,9 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                     writable = s.characteristics.values.filter(::writable).map { it.uuid }.toSet(),
                 )
                 _state.update { it.copy(capabilities = capabilities) }
+                s.requiredConfiguration = configurationUuids
+                    .filter { s.characteristics[it]?.let(::readable) == true }
+                    .toSet()
                 s.initializing = true
                 armTimeout(s, INIT_TIMEOUT_MS, "Initialization timed out")
                 s.initJob = scope.launch {
@@ -542,6 +546,15 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         CoolerBleConstants.LIGHT_CONTROL_UUID,
     )
 
+    private val configurationUuids = listOf(
+        CoolerBleConstants.COOLING_SWITCH_UUID,
+        CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID,
+        CoolerBleConstants.LIGHT_CONTROL_UUID,
+        CoolerBleConstants.AUTO_MODE_CONTROL_UUID,
+        CoolerBleConstants.BOOST_CONTROL_UUID,
+        CoolerBleConstants.PROTECTION_UUID,
+    )
+
     private suspend fun initialize(s: Session) {
         for (uuid in telemetryUuids) {
             if (!owns(s)) return
@@ -550,29 +563,24 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             if (!owns(s)) return
             if (!subscribed) Log.w(TAG, "Optional subscription unavailable: $uuid")
         }
-        s.characteristics[CoolerBleConstants.COOLING_SWITCH_UUID]?.takeIf(::writable)?.let { ch ->
-            if (!owns(s)) return
-            val ok = enqueueWrite(s, ch, byteArrayOf(CoolerBleConstants.COOLING_SWITCH_ON))
-            if (!owns(s)) return
-            if (!ok) { fail(s, "Startup cooling ON failed"); return }
-            _state.update { it.copy(coolingOn = true).withFanMode() }
-        }
-        if (_state.value.deviceType?.supportsRgb == true) {
-            s.characteristics[CoolerBleConstants.LIGHT_CONTROL_UUID]?.let { ch ->
-                if (!owns(s)) return
-                val ok = enqueueWrite(s, ch, byteArrayOf(CoolerBleConstants.LIGHT_QUERY_COMMAND))
-                if (!owns(s)) return
-                if (!ok) Log.w(TAG, "Optional light query rejected")
-            }
-        }
         for (uuid in telemetryUuids) {
             if (!owns(s)) return
             val ch = s.characteristics[uuid] ?: continue
-            val ok = readIfReadable(s, ch)
+            val ok = readIfReadable(s, ch, required = uuid in s.requiredConfiguration)
             if (!owns(s)) return
-            if (!ok) Log.w(TAG, "Optional initial read unavailable: $uuid")
+            if (!ok) {
+                if (uuid in s.requiredConfiguration) {
+                    fail(s, "Required configuration read unavailable: $uuid")
+                    return
+                }
+                Log.w(TAG, "Optional initial read unavailable: $uuid")
+            }
         }
         if (!owns(s)) return
+        if (!configurationReadComplete(s.requiredConfiguration, s.configurationRead)) {
+            fail(s, "Device configuration was not read back")
+            return
+        }
         s.timeoutJob?.cancel()
         _state.update { it.copy(connection = ConnectionState.CONNECTED) }
         if (!ready(s)) return
@@ -582,6 +590,9 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         if (!ready(s)) return
         startPollLoop(s)
     }
+
+    private fun readable(ch: BluetoothGattCharacteristic): Boolean =
+        ch.properties and BluetoothGattCharacteristic.PROPERTY_READ != 0
 
     private fun writable(ch: BluetoothGattCharacteristic): Boolean =
         ch.properties and (BluetoothGattCharacteristic.PROPERTY_WRITE or BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE) != 0
@@ -619,10 +630,11 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         ch: BluetoothGattCharacteristic,
         fresh: () -> Boolean = { true },
         poisonOnTimeout: Boolean = true,
+        required: Boolean = false,
     ): Boolean {
         val g = s.gatt ?: return false
         if (!owns(s) || !fresh()) return false
-        if (ch.properties and BluetoothGattCharacteristic.PROPERTY_READ == 0) return true
+        if (ch.properties and BluetoothGattCharacteristic.PROPERTY_READ == 0) return !required
         return operations.execute(g, ch, GattOperationQueue.Kind.READ, READ_TIMEOUT_MS,
             isCurrent = { owns(s) && s.characteristics[ch.uuid] === ch && fresh() },
             start = { g.readCharacteristic(ch) },
@@ -716,7 +728,8 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         // Valid reports are authoritative even when they repeat the current value.
         s.telemetryRevision[uuid] = (s.telemetryRevision[uuid] ?: 0L) + 1
         if (update.temperatureReported) s.lastTempUpdateMs = SystemClock.elapsedRealtime()
-        _state.value = update.state
+        s.configurationRead += uuid
+        _state.value = update.state.copy(confirmedConfiguration = s.configurationRead.toSet())
     }
 
     private class Command(
@@ -729,6 +742,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
     private fun command(control: Control, uuid: UUID): Command? {
         val s = session ?: return null
         if (!ready(s)) return null
+        if (uuid in configurationUuids && !_state.value.hasConfirmedConfiguration(uuid)) return null
         val ch = s.characteristics[uuid]?.takeIf(::writable) ?: return null
         val generation = (s.generations[control] ?: 0) + 1
         s.generations[control] = generation
@@ -743,31 +757,19 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         command: Command,
         value: ByteArray,
         debounceMs: Long = 0,
-        commit: (CoolerLiveState) -> CoolerLiveState,
     ): Boolean {
         val s = command.session
         s.controls++
         try {
             if (debounceMs > 0) delay(debounceMs)
             if (!fresh(command)) return false
-            var revision = 0L
             val ok = enqueueWrite(s, command.characteristic, value,
-                onStart = { revision = s.telemetryRevision[command.characteristic.uuid] ?: 0L },
                 fresh = { fresh(command) },
             )
             if (!fresh(command)) return false
-            if (ok) {
-                // A device report during this command is more authoritative than our fallback
-                // echo, including notifications delivered during the queue's spacing delay.
-                if ((s.telemetryRevision[command.characteristic.uuid] ?: 0L) == revision) {
-                    _state.update(commit)
-                }
-            } else {
-                // No optimistic value to roll back. Where supported, reconcile the actual
-                // device value after explicit failure (timeouts already fail the session).
-                readIfReadable(s, command.characteristic, fresh = { fresh(command) })
-                if (!fresh(command)) return false
-            }
+            // A GATT write callback confirms delivery only. The device read-back remains the
+            // sole source of the published configuration value.
+            readIfReadable(s, command.characteristic, fresh = { fresh(command) })
             return ok
         } finally {
             s.controls--
@@ -783,9 +785,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         _state.update { it.copy(pendingFanPercent = clamped) }
         scope.launch {
             try {
-                executeCommand(command, byteArrayOf(raw), 150) {
-                    it.copy(fanPercent = clamped, fanRaw = raw.toInt() and 0xFF)
-                }
+                executeCommand(command, byteArrayOf(raw), 150)
             } finally {
                 if (fresh(command)) _state.update { it.copy(pendingFanPercent = null) }
             }
@@ -795,7 +795,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
     fun setCooling(on: Boolean) = onMain {
         val command = command(Control.COOLING, CoolerBleConstants.COOLING_SWITCH_UUID) ?: return@onMain
         val value = if (on) CoolerBleConstants.COOLING_SWITCH_ON else CoolerBleConstants.COOLING_SWITCH_OFF
-        scope.launch { executeCommand(command, byteArrayOf(value)) { it.copy(coolingOn = on).withFanMode() } }
+        scope.launch { executeCommand(command, byteArrayOf(value)) }
     }
 
     fun setSmart(on: Boolean) = onMain { startSmart(on) }
@@ -812,13 +812,13 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
     private fun startSmart(on: Boolean) = command(Control.SMART, CoolerBleConstants.AUTO_MODE_CONTROL_UUID)?.let { command ->
         scope.async {
             val value = if (on) CoolerBleConstants.AUTO_MODE_ON else CoolerBleConstants.AUTO_MODE_OFF
-            executeCommand(command, byteArrayOf(value)) { it.copy(smartOn = on).withFanMode() }
+            executeCommand(command, byteArrayOf(value))
         }
     }
 
     fun setBoost(on: Boolean) = onMain {
         val command = command(Control.BOOST, CoolerBleConstants.BOOST_CONTROL_UUID) ?: return@onMain
-        scope.launch { executeCommand(command, byteArrayOf(if (on) 1 else 0)) { it.copy(boostOn = on) } }
+        scope.launch { executeCommand(command, byteArrayOf(if (on) 1 else 0)) }
     }
 
     fun setOvercoldProtection(on: Boolean) = onMain {
@@ -827,7 +827,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             if (on) CoolerBleConstants.PROTECTION_FLAG_ON else CoolerBleConstants.PROTECTION_FLAG_OFF,
             0, CoolerBleConstants.PROTECTION_HIGH_DEFAULT, CoolerBleConstants.PROTECTION_LOW_DEFAULT,
         )
-        scope.launch { executeCommand(command, value) { it.copy(overcoldOn = on) } }
+        scope.launch { executeCommand(command, value) }
     }
 
     fun setRGB(config: RGBConfig) = onMain {
@@ -848,7 +848,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             return
         }
         scope.launch {
-            val ok = executeCommand(command, request.config.toCommand(), 200) { it.copy(rgb = request.config) }
+            val ok = executeCommand(command, request.config.toCommand(), 200)
             if (!fresh(command) || _rgbWriteState.value?.requestId != request.requestId) return@launch
             _rgbWriteState.update { it?.completed(request.requestId, ok) }
         }

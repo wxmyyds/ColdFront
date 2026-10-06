@@ -69,9 +69,6 @@ object CoolerBleConstants {
     /** 温度显示校准偏移(官方 App:显示 = raw − 6,以官方 App 显示为准) */
     const val TEMPERATURE_OFFSET: Int = 6
 
-    /** 灯光查询/握手命令(写单字节 0x11 到灯光特征) */
-    const val LIGHT_QUERY_COMMAND: Byte = 0x11
-
     /** 自动模式开(官方:"8PRO 背夹 writeAutoOn 写1") */
     const val AUTO_MODE_ON: Byte = 0x01
 

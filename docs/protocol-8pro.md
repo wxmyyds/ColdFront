@@ -38,7 +38,7 @@ RSSI:   -43 dBm
 |---|---|---|
 | `00001011-...` | **散热总开关:写 0x02 开 / 0x03 关;通知 2=开 3=关。不写 ON 风扇不转!** | R/W/Notify |
 | `00001012-...` | **风扇调速:单字节 raw(8 Pro 40–80 共 8 档)** | R/W |
-| `00001013-...` | **灯光:[mode][R][G][B]**;查询写 0x11 | R/W/Notify |
+| `00001013-...` | **灯光状态/控制:[mode][R][G][B]**;官方 `queryLight` 通过 GATT 主动读取,不写查询字节 | R/W/Notify |
 | `00001014-...` | **背夹温度:单字节有符号 °C;固件 8.4.7 为 [0x04, 温度] 包。无 -6 偏移** | Notify |
 | `00001015-...` | **状态包:[tag,...]:tag 0x08 → 后2字节大端 RPM;tag 0x09 → 后1字节功率 W** | Notify |
 | `00001016-...` | LOGGER 日志(UTF-8) | R/Notify |
@@ -48,7 +48,7 @@ RSSI:   -43 dBm
 | `0000101a-...` | 旧版功率 | R |
 | `0000101c-...` | **风扇转速(官方 8.4.7):大端 16 位 RPM** | Notify |
 | `0000101d-...` | **功率(官方 8.4.7):byte0 = W** | Notify |
-| `0000101f-...` | 温度告警/保护阈值 | W |
+| `0000101f-...` | **温度告警/保护配置:**至少 4 字节;byte0 bit0..3 为保护位,byte1 事件 ID,byte2/3 阈值 | R/W |
 
 写类型:`WRITE_TYPE_DEFAULT(2)`。**操作必须串行**(Android BLE 同一时刻仅一个在途操作)。
 
@@ -70,8 +70,9 @@ RSSI:   -43 dBm
 - ~~显示 = raw − 6~~(官方 App 有此校准,实测 App 无偏移;以实测为准)
 
 ### 3.4 灯光(0x1013)
-- 查询/握手:写单字节 `0x11`,随后 Notify/Read 回当前状态
-- 模式命令(4 字节 `[mode, 0/0xFF, 0, 0]`):
+- 查询:按努比亚官方 App `queryLight` 路径对 `0x1013` 执行 GATT `readCharacteristic`,以 `onCharacteristicRead` 返回值作为状态;连接时不写 `0x11`。
+- 官方数据处理器不剥读回数据的前缀,直接以 byte[0] 作为 mode;常亮/单色呼吸颜色来自 byte[1..3]。
+- 模式命令 4 字节 `[mode][R][G][B]`:
 
 | mode 字节 | 语义(官方字符串) |
 |---|---|
@@ -79,25 +80,23 @@ RSSI:   -43 dBm
 | `0x02` | 呼吸 breathe |
 | `0x03` | 呼吸 breathe(带 0xFF 变体) |
 | `0x04` | 常亮 all_on |
-| `0x05` | 场景模式 5 |
+| `0x05` | 场景模式(scene;官方读取时为有效状态) |
 | `0x06` | 关闭 off |
 
 - 场景下发(官方 `sendScenarioCmd`):light=1→`[01,00,00,00]`,2→`[02,00,00,00]`,3→`[01,FF,00,00]`,4→`[03,FF,00,00]`,5→`[05,00,00,00]`
 - 自定义颜色:`[R, G, B]`(3 字节)或 `[R, G, B, 0]`(4 字节,官方示例 `[FF,00,00]`、`[FF,FF,00,00]`)
 
-### 3.5 连接后必做(实测流程)
-1. 订阅 1011/1014/1015/101C/101D/1013 通知
-2. **写 0x02 到 1011(散热总开关 ON)——不写风扇不转**
-3. 读 1012(当前风扇 raw)
-4. 需要灯光状态时写 0x11 到 1013
+- 查询当前保护配置:主动读取 0x101F,至少 4 字节 `[flags,eventId,high,low]`;byte0 bit2 表示过冷/冷凝保护。
+- 配置状态按特征分别主动读取;回调将原始数据路由到 `Jacket8ProDataHandler`/ViewModel,再由 LiveData 更新 UI。
+- 1013 使用 `queryLight` → `readCharacteristic`;1011 hall、1012 fan、1017 overclocking、1018 auto 与 101F 温度保护各自回读,不会用本地预设代替回读。
+- ColdFront 对特征不可读或返回无效数据时不伪造状态,相关控制项保持隐藏/未知。
 
 ## 4. 连接流程(官方)
 
 1. 扫描(过滤 0x4a41 + MSD 0x8CA)→ `connectGatt(autoConnect=false)`
-2. `discoverServices` → `buildServiceAndCharacter`:逐个 getCharacteristic(0x1011…0x101f),缺失记 "can not find fan/light/… characteristic"
-3. 订阅 0x1015/0x1013/0x1019 等通知
-4. 写 0x11 到 0x1013(灯握手)→ 回读状态
-5. 档位/温度/转速全部经 LiveData 推送到 UI
+2. `discoverServices` → `buildServiceAndCharacter`:逐个 getCharacteristic(0x1011…0x101f)
+3. 订阅特征支持的通知,并按配置项主动读取
+4. `onCharacteristicRead`/`onCharacteristicChanged` → 数据处理器按服务和特征分发 → ViewModel LiveData → Activity 观察并刷新 UI
 
 ## 5. 与旧协议(1–6 代)的差异
 

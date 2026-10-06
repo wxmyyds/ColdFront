@@ -1,5 +1,7 @@
 package io.github.wxmyyds.coldfront.domain
 
+import java.util.UUID
+
 /**
  * RGB 灯效(逆向自官方 App,写入 0x1013 的命令格式 [mode][R][G][B]):
  * 1=炫彩 2=全彩呼吸 3=单色呼吸 4=常亮 5=场景 6=关闭。
@@ -14,6 +16,7 @@ enum class LightEffect(val code: Byte, val labelZh: String, val labelEn: String)
      */
     BREATH_SINGLE(0x03, "单色呼吸", "Breathing (Single)"),
     ALWAYS_BRIGHT(0x04, "常亮", "Always On"),
+    SCENE(0x05, "场景", "Scene"),
     OFF(0x06, "关闭", "Off"),
     ;
 
@@ -26,7 +29,7 @@ enum class LightEffect(val code: Byte, val labelZh: String, val labelEn: String)
 
         /** 主菜单项；单色/全彩在呼吸子菜单中选择。 */
         val selectable: List<LightEffect> =
-            listOf(ALWAYS_BRIGHT, BREATH_FULLCOLOR, COLORFUL, OFF)
+            listOf(ALWAYS_BRIGHT, BREATH_FULLCOLOR, COLORFUL, SCENE, OFF)
     }
 }
 
@@ -51,6 +54,9 @@ data class RGBConfig(
         /** Parse complete RGB bytes only; mode-only replies preserve the last known color. */
         fun fromNotification(value: ByteArray, previous: RGBConfig?): RGBConfig? {
             val effect = value.firstOrNull()?.let(LightEffect::fromCode) ?: return null
+            if ((effect == LightEffect.ALWAYS_BRIGHT || effect == LightEffect.BREATH_SINGLE) && value.size < 4) {
+                return null
+            }
             val base = previous ?: RGBConfig(effect)
             return if (value.size >= 4 &&
                 (effect == LightEffect.ALWAYS_BRIGHT || effect == LightEffect.BREATH_SINGLE)
@@ -62,7 +68,7 @@ data class RGBConfig(
 
     /** 序列化为 [effect][R][G][B] 4 字节命令;炫彩/全彩呼吸不带颜色字节(实测 App 同样置零) */
     fun toCommand(): ByteArray = when (effect) {
-        LightEffect.COLORFUL, LightEffect.BREATH_FULLCOLOR, LightEffect.OFF ->
+        LightEffect.COLORFUL, LightEffect.BREATH_FULLCOLOR, LightEffect.SCENE, LightEffect.OFF ->
             byteArrayOf(effect.code, 0, 0, 0)
         else ->
             byteArrayOf(effect.code, red.toByte(), green.toByte(), blue.toByte())
@@ -137,17 +143,23 @@ data class CoolerLiveState(
     /** Distinguish reconnects even when lifecycle collection skips intermediate states. */
     val connectionSessionId: Long = 0L,
     val capabilities: CoolerCapabilities = CoolerCapabilities(),
+    /** Configuration values reported by this connection; never carried across sessions. */
+    val confirmedConfiguration: Set<UUID> = emptySet(),
     /** A telemetry lane was quarantined. Only a new connection can restore that lane safely. */
     val telemetryDegraded: Boolean = false,
 ) {
     val isConnected: Boolean get() = connection == ConnectionState.CONNECTED
     val temperatureText: String get() = temperatureC?.let { "%.1f°C".format(it) } ?: "--"
 
-    /** A missing switch is not an OFF report: legacy fan-only devices remain controllable. */
-    val coolingAllowsControl: Boolean get() = !capabilities.hasCoolingSwitch || coolingOn
+    fun hasConfirmedConfiguration(uuid: UUID): Boolean = uuid in confirmedConfiguration
+
+    val coolingAllowsControl: Boolean
+        get() = !capabilities.hasCoolingSwitch ||
+            (hasConfirmedConfiguration(CoolerBleConstants.COOLING_SWITCH_UUID) && coolingOn)
 
     val manualLevelEnabled: Boolean
-        get() = isConnected && capabilities.fanControl && coolingAllowsControl && !smartOn
+        get() = isConnected && hasConfirmedConfiguration(CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID) &&
+            capabilities.fanControl && coolingAllowsControl && !smartOn
 
     /** Pending intent wins until acknowledged; otherwise use the unrounded device byte. */
     val fanGear: Int?

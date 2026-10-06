@@ -31,6 +31,22 @@ class RGBConfigTest {
     }
 
     @Test
+    fun `color-bearing modes reject mode-only replies instead of inventing a default color`() {
+        for (code in listOf(LightEffect.ALWAYS_BRIGHT.code, LightEffect.BREATH_SINGLE.code)) {
+            assertNull(RGBConfig.fromNotification(byteArrayOf(code), null))
+            assertNull(RGBConfig.fromNotification(byteArrayOf(code, 1, 2), null))
+        }
+    }
+
+    @Test
+    fun `color-independent effects can be confirmed without RGB payload bytes`() {
+        assertEquals(RGBConfig(LightEffect.COLORFUL), RGBConfig.fromNotification(byteArrayOf(1), null))
+        assertEquals(RGBConfig(LightEffect.BREATH_FULLCOLOR), RGBConfig.fromNotification(byteArrayOf(2), null))
+        assertEquals(RGBConfig(LightEffect.SCENE), RGBConfig.fromNotification(byteArrayOf(5), null))
+        assertEquals(RGBConfig(LightEffect.OFF), RGBConfig.fromNotification(byteArrayOf(6), null))
+    }
+
+    @Test
     fun `unknown mode and empty payload are rejected`() {
         assertNull(RGBConfig.fromNotification(byteArrayOf(0x63), null))
         assertNull(RGBConfig.fromNotification(byteArrayOf(), null))
@@ -41,6 +57,10 @@ class RGBConfigTest {
         assertArrayEquals(
             byteArrayOf(0x02, 0, 0, 0),
             RGBConfig(LightEffect.BREATH_FULLCOLOR, 9, 9, 9).toCommand(),
+        )
+        assertArrayEquals(
+            byteArrayOf(0x05, 0, 0, 0),
+            RGBConfig(LightEffect.SCENE, 9, 9, 9).toCommand(),
         )
         assertArrayEquals(
             byteArrayOf(0x06, 0, 0, 0),

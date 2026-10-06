@@ -156,6 +156,7 @@ interface AppStrings {
     val rgbPalette: String
     val rgbCustomColor: String
     val rgbNotSupported: String
+    val rgbSyncing: String
 
     // —— 自动模式/服务 ——
     val serviceChannelName: String
@@ -305,6 +306,7 @@ object ZhStrings : AppStrings {
     override val rgbSent = "已发送到设备"
     override val rgbWriteFailed = "发送失败，点击重试"
     override val rgbNotSupported = "该设备不支持 RGB"
+    override val rgbSyncing = "正在读取设备当前灯效…"
 
     override val serviceChannelName = "散热器服务"
     override val serviceChannelDesc = "散热器自动模式与状态通知"
@@ -452,6 +454,7 @@ object EnStrings : AppStrings {
     override val rgbSent = "Sent to cooler"
     override val rgbWriteFailed = "Send failed — tap to retry"
     override val rgbNotSupported = "This device does not support RGB"
+    override val rgbSyncing = "Reading the cooler's current lighting…"
 
     override val serviceChannelName = "Cooler service"
     override val serviceChannelDesc = "Cooler auto-mode and status notifications"
