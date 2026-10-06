@@ -9,6 +9,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
@@ -29,6 +30,25 @@ import io.github.wxmyyds.coldfront.ui.component.releaseSettleSpec
  * reports Idle; on those it trades a short settling delay for never settling at all.
  */
 private const val RELEASE_STALE_MS = 500L
+
+/**
+ * How long to hold the gesture's last progress after the flow goes [Idle] before committing to a
+ * settle direction.
+ *
+ * The processor completes a back gesture in two async steps: it submits the pop (flipping
+ * [NavigationEventTransitionState] to [Idle] is only cosmetic - the route flip that decides commit
+ * vs cancel comes from the NavController, on its own flow). The two recompositions are not
+ * guaranteed to land in the same batch, so the instant the flow reports Idle the route may not yet
+ * have flipped. Settling immediately then would start the page moving toward the *old* direction
+ * (roll-back on a commit) and reverse when the flip lands - a visible stutter exactly at release.
+ *
+ * So on Idle we hold the last progress for this window and watch [settleTo] (the route-derived
+ * direction): if the pop's recomposition lands inside the window the direction flips and we settle
+ * the new way; if not, the gesture was a cancel and we settle the old way. A commit settles with
+ * only a frame or two of hold; a cancel waits out the window, which is imperceptible next to the
+ * release settle itself.
+ */
+private const val RELEASE_DIRECTION_CONFIRM_MS = 48L
 
 /**
  * Live predictive-back gesture progress, for effects the transition API cannot express.
@@ -101,6 +121,11 @@ internal fun rememberRunningBackProgress(observeBackGesture: Boolean): State<Flo
  * slow drag short; a *pausing* finger (held still mid-drag) is distinguished by the window being
  * long enough to outlast ordinary hesitation.
  *
+ * Which direction to settle is confirmed after a short hold (see [RELEASE_DIRECTION_CONFIRM_MS]):
+ * the processor's pop submission and the flow's return to Idle are separate async steps, so at the
+ * moment Idle arrives the route may not yet have flipped. Settling with the pre-flip [settleTo]
+ * would roll the page back one frame on a commit before reversing - a stutter exactly at release.
+ *
  * @param settleTo where to go once no gesture is running: `1f` when the page is on its way out,
  * `0f` when it is coming back or was never dismissed.
  */
@@ -110,6 +135,12 @@ internal fun rememberGestureSettleProgress(
     settleTo: Float,
 ): State<Float> {
     val running = rememberRunningBackProgress(observeBackGesture)
+    // Latest settleTo across recompositions, so the direction-confirm hold below can observe a
+    // pop's route flip landing after the Idle frame.
+    val latestSettleTo = rememberUpdatedState(settleTo)
+    // The last finger progress, held while the settle direction is being confirmed after release.
+    // Keyed on running so a role flip (push -> pop) resets it to the new role's starting progress.
+    val lastProgress = remember(running) { mutableStateOf(running.value) }
     // Whether the finger has lifted. True when the flow reports Idle (running.value == null) or when
     // the progress is frozen long enough to be a released gesture even though the flow is still
     // InProgress (the device case where transitionState never goes back to Idle). Keyed on the
@@ -117,20 +148,33 @@ internal fun rememberGestureSettleProgress(
     // flag must reset to the new role's initial state rather than carry the old role's value into
     // the first frame of the new one.
     val gestureOver = remember(running) { mutableStateOf(running.value == null) }
+    // The settle direction once confirmed. Initialised from the route-derived settleTo; a pop's
+    // recomposition flips it (via the confirm hold below, or by rebuilding this state when running
+    // flips) so a commit settles out while a cancel rolls back.
+    val settleDirection = remember(running) { mutableStateOf(settleTo) }
     LaunchedEffect(running) {
         var lastValue: Float? = running.value
         while (true) {
             val v = running.value
             when {
                 v == null -> {
-                    // The flow reported Idle (or never started). Nothing to track until a new
-                    // gesture begins, so suspend instead of spinning forever on the frame clock.
+                    // The flow reported Idle (or never started). Hold the last progress while the
+                    // direction is confirmed: the pop's recomposition (flipping settleTo) may land
+                    // after this frame, and settling with the old direction would stutter on a
+                    // commit. A flip inside the window wins; a timeout means cancel, settle old way.
+                    val flipped = withTimeoutOrNull(RELEASE_DIRECTION_CONFIRM_MS) {
+                        snapshotFlow { latestSettleTo.value }.first { it != settleDirection.value }
+                    }
+                    if (flipped != null) settleDirection.value = flipped
                     gestureOver.value = true
+                    // Nothing to track until a new gesture begins, so suspend instead of spinning
+                    // forever on the frame clock.
                     snapshotFlow { running.value }.first { it != null }
                     lastValue = running.value
                 }
                 v != lastValue -> {
                     lastValue = v
+                    lastProgress.value = v
                     gestureOver.value = false
                 }
                 else -> {
@@ -145,17 +189,32 @@ internal fun rememberGestureSettleProgress(
                         snapshotFlow { running.value }.first { it != lastValue }
                     }
                     // A null here is either Idle (value went null) or the timeout; both mean
-                    // the gesture is over. A Float means the finger moved again, handled by the
-                    // next loop pass.
-                    if (moved == null) gestureOver.value = true
+                    // the gesture is over. Same direction-confirm hold as the Idle branch.
+                    if (moved == null) {
+                        val flipped = withTimeoutOrNull(RELEASE_DIRECTION_CONFIRM_MS) {
+                            snapshotFlow { latestSettleTo.value }.first { it != settleDirection.value }
+                        }
+                        if (flipped != null) settleDirection.value = flipped
+                        gestureOver.value = true
+                        snapshotFlow { running.value }.first { it != null }
+                        lastValue = running.value
+                    }
                 }
             }
         }
     }
     return animateFloatAsState(
-        // Once the finger is up the target is the settle point; while it is down it is the live
-        // finger progress.
-        targetValue = if (gestureOver.value) settleTo else running.value ?: settleTo,
+        // While a gesture runs the target is the live finger progress; once the finger is up it is
+        // the confirmed settle direction; between the two - the Idle frame and the direction hold -
+        // it is the last finger progress, so the page holds still instead of starting to move the
+        // wrong way. gestureOver is checked first: a frozen InProgress flow (the stuck device case)
+        // leaves running.value non-null even after the timeout decides the gesture is over, and
+        // settling must win over the stale frozen value.
+        targetValue = when {
+            gestureOver.value -> settleDirection.value
+            running.value != null -> running.value!!
+            else -> lastProgress.value ?: settleDirection.value
+        },
         // While a gesture is running the target is already correct for this frame, so it must be
         // taken as-is - any easing would be applied on top of the finger's own position, which is
         // the same mistake a curved tween made of the page's own travel. Once the finger is up this
