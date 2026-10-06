@@ -397,24 +397,15 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                     predictiveBack = predictiveBack,
                     modifier = Modifier.widthIn(max = 840.dp).fillMaxSize()
                         .semantics { isTraversalGroup = true },
-                ) {
-                    composable(Routes.MAIN) {
-                        // The bar lives *inside* the top-level page, not beside the NavHost. As a
-                        // sibling of the transition viewport it was drawn after every destination and
-                        // therefore always on top, so it could cover a detail page instead of
-                        // belonging to the page it navigates. Here the detail covers it along with
-                        // the rest of MAIN, and a returning gesture uncovers the two together.
-                        //
-                        // Safe inside the transition viewport: NavHost clips each destination to its
-                        // own bounds (EnterExitTransition.kt:1292), and MAIN is the full viewport, so
-                        // nothing here is cropped; MAIN's pop-enter is None, so it is not offset
-                        // either. Both are asserted by the rendering tests.
-                        ParentScrimSurface(
+                    builder = {
+                        composable(Routes.MAIN) {}
+                        composable(Routes.SCAN) {}
+                        composable(Routes.ABOUT) {}
+                    },
+                    destinationContent = { entry ->
+                        when (entry.destination.route) {
+                        Routes.MAIN -> ParentScrimSurface(
                             isCovered = !topLevelIsCurrent,
-                            // The scrim and step-back track the live gesture only when the user
-                            // has predictive back enabled; with the switch off the NavHost does
-                            // not run predictive transitions, so the parent must not drift with
-                            // a gesture that the navigation layer is ignoring.
                             observeBackGesture = predictiveBack,
                         ) {
                             if (useRail) {
@@ -449,30 +440,22 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                                 }
                             }
                         }
-                    }
-                    composable(Routes.SCAN) {
-                        DetailDismissSurface(
-                            // The dismiss surface only reacts to a live gesture when predictive
-                            // back is enabled; with the switch off the NavHost runs no predictive
-                            // transition, so the page must not slide under a gesture the
-                            // navigation layer is ignoring.
+                        Routes.SCAN -> DetailDismissSurface(
                             isDismissible = currentIsDetail && predictiveBack,
                             isLeaving = !currentIsDetail,
                         ) {
                             AddDeviceScreen(vm, onBack = { nav.popBackStack() })
                         }
-                    }
-                    composable(Routes.ABOUT) {
-                        DetailDismissSurface(
-                            // Same gating as SCAN: only track a live gesture while predictive
-                            // back is enabled.
+                        Routes.ABOUT -> DetailDismissSurface(
                             isDismissible = currentIsDetail && predictiveBack,
                             isLeaving = !currentIsDetail,
                         ) {
                             AboutScreen(onBack = { nav.popBackStack() })
                         }
-                    }
-                }
+                        else -> Unit
+                        }
+                    },
+                )
             }
         }
     }

@@ -1,17 +1,38 @@
 package io.github.wxmyyds.coldfront.ui
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.SeekableTransitionState
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.rememberTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.using
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.ComposeNavigator
+import androidx.navigation.compose.LocalOwnersProvider
+import androidx.navigation.compose.NavBackStackEntryInfo
+import androidx.navigation.createGraph
+import androidx.navigation.get
+import androidx.navigationevent.NavigationEventTransitionState
+import androidx.navigationevent.compose.NavigationEventHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 import io.github.wxmyyds.coldfront.ui.component.AppMotion
 import io.github.wxmyyds.coldfront.ui.component.NavigationMotionKind
 import io.github.wxmyyds.coldfront.ui.component.isSecondaryDestination
@@ -19,8 +40,11 @@ import io.github.wxmyyds.coldfront.ui.component.isTopLevelDestination
 import io.github.wxmyyds.coldfront.ui.component.predictiveBackParentEnter
 import io.github.wxmyyds.coldfront.ui.component.predictiveBackExit
 import io.github.wxmyyds.coldfront.ui.component.shouldUsePredictivePop
+import kotlinx.coroutines.launch
 
-/** One transition owner for real destinations. Tab travel belongs exclusively to PrimaryPageStrip. */
+private const val COMPOSE_NAVIGATOR_NAME = "composable"
+
+/** App-owned entry rendering keeps cancellation z-order cleanup coupled to visible-entry updates. */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun AppNavHost(
@@ -30,73 +54,175 @@ internal fun AppNavHost(
     predictiveBack: Boolean,
     modifier: Modifier = Modifier,
     builder: NavGraphBuilder.() -> Unit,
+    destinationContent: @Composable (NavBackStackEntry) -> Unit,
 ) {
-    val motionScheme = MaterialTheme.motionScheme
-    // One shared gesture-progress value for both the leaving page and the parent underneath it.
-    // The two surfaces drive mirror transforms of the same value and their settle targets are
-    // numerically identical (rest at 0 while a detail is on top, settle to 1 once it pops), so
-    // sharing one instance - one collector, one Idle-detector, one animation clock - keeps them
-    // pixel-synchronised under real 60fps rendering, where two independent instances can disagree
-    // by a frame and read as the pages drifting apart on release.
-    val backStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = backStackEntry?.destination?.route
-    val topLevelIsCurrent = isTopLevelDestination(currentRoute, topLevelRoutes)
+    val graph = remember(navController, startDestination, builder) {
+        navController.createGraph(startDestination = startDestination, builder = builder)
+    }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val viewModelStoreOwner = checkNotNull(LocalViewModelStoreOwner.current) {
+        "AppNavHost requires a ViewModelStoreOwner to be provided via LocalViewModelStoreOwner"
+    }
+    navController.setViewModelStore(viewModelStoreOwner.viewModelStore)
+    navController.graph = graph
+    DisposableEffect(lifecycleOwner) {
+        navController.setLifecycleOwner(lifecycleOwner)
+        onDispose { }
+    }
+
+    val composeNavigator = remember(navController) {
+        navController.navigatorProvider.get<ComposeNavigator>(COMPOSE_NAVIGATOR_NAME)
+    }
+    val backStack by composeNavigator.backStack.collectAsState()
+    val allVisibleEntries by navController.visibleEntries.collectAsState()
+    val entries = allVisibleEntries.filter { it.destination.navigatorName == COMPOSE_NAVIGATOR_NAME }
+    val currentEntry = entries.lastOrNull()
+    val previousBackEntry = backStack.getOrNull(backStack.lastIndex - 1)
+    val navigationEventState = rememberNavigationEventState(
+        currentInfo = NavBackStackEntryInfo(backStack.lastOrNull()),
+        backInfo = backStack.dropLast(1).asReversed().map(::NavBackStackEntryInfo),
+    )
+    val eventInProgress = navigationEventState.transitionState as? NavigationEventTransitionState.InProgress
+    val inPredictiveBack = eventInProgress?.direction ==
+        NavigationEventTransitionState.TRANSITIONING_BACK
+    NavigationEventHandler(
+        state = navigationEventState,
+        isBackEnabled = backStack.size > 1,
+        isForwardEnabled = false,
+        onBackCompleted = {
+            if (!inPredictiveBack) {
+                backStack.lastOrNull()?.let(composeNavigator::prepareForTransition)
+                previousBackEntry?.let(composeNavigator::prepareForTransition)
+            }
+            navController.popBackStack()
+        },
+    )
+
+    val progress = if (inPredictiveBack) eventInProgress?.latestEvent?.progress ?: 0f else 0f
+
+    val transitionState = remember {
+        SeekableTransitionState<NavBackStackEntry?>(currentEntry)
+    }
+    val transition = rememberTransition(transitionState, label = "appNavHost")
+    val zIndices = remember { mutableMapOf<String, Float>() }
+    val saveableStateHolder = rememberSaveableStateHolder()
+
+    LaunchedEffect(inPredictiveBack, currentEntry, previousBackEntry) {
+        if (inPredictiveBack) {
+            currentEntry?.let(composeNavigator::prepareForTransition)
+            previousBackEntry?.let(composeNavigator::prepareForTransition)
+        }
+    }
+    if (inPredictiveBack) {
+        LaunchedEffect(progress, previousBackEntry) {
+            previousBackEntry?.let { transitionState.seekTo(progress, it) }
+        }
+    } else {
+        LaunchedEffect(currentEntry) {
+            val target = currentEntry ?: return@LaunchedEffect
+            if (transitionState.currentState != target) {
+                transitionState.animateTo(target)
+            } else if (transitionState.fraction > 0f) {
+                val duration = (transitionState.fraction * transition.totalDurationNanos / 1_000_000).toInt()
+                animate(
+                    transitionState.fraction,
+                    0f,
+                    animationSpec = tween(duration),
+                ) { value, _ ->
+                    this@LaunchedEffect.launch {
+                        if (value > 0f) transitionState.seekTo(value)
+                        else transitionState.snapTo(target)
+                    }
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(
+        transition.currentState,
+        transition.targetState,
+        entries,
+        currentEntry,
+        inPredictiveBack,
+    ) {
+        if (!inPredictiveBack && transition.currentState == transition.targetState &&
+            transition.targetState == currentEntry
+        ) {
+            entries.forEach(composeNavigator::onTransitionComplete)
+            zIndices.clear()
+            transition.targetState?.let { zIndices[it.id] = 0f }
+        }
+    }
+
+    val route by navController.currentBackStackEntryFlow.collectAsState(initial = null)
+    val topLevelIsCurrent = isTopLevelDestination(route?.destination?.route, topLevelRoutes)
     val sharedSettleProgress = rememberGestureSettleProgress(
-        // Both roles observe exactly while a detail is on top: the leaving page is dismissible only
-        // then, and the parent is only covered then. Flipping to false on the pop rebuilds the
-        // running state, which resets gestureOver and starts the settle immediately - the same fast
-        // commit path the surfaces had independently.
         observeBackGesture = predictiveBack && !topLevelIsCurrent,
-        // Unified settle target for both roles: 1 once the pop commits (page slid out / parent
-        // returned), 0 while a detail is on top. DetailDismissSurface reads the same shared value
-        // for its own slide, so one release drives both layers through the same motion.
         settleTo = if (topLevelIsCurrent) 1f else 0f,
     )
+    val motionScheme = MaterialTheme.motionScheme
+
     CompositionLocalProvider(LocalBackGestureSettleProgress provides sharedSettleProgress) {
-        NavHost(
-            navController = navController,
-            startDestination = startDestination,
+        transition.AnimatedContent(
             modifier = modifier,
             contentAlignment = Alignment.Center,
-            // Chrome and destination content must not animate the transition viewport's dimensions.
-            sizeTransform = { null },
-            enterTransition = {
-                AppMotion.pageEnter(
-                    kind = if (isSecondaryDestination(targetState.destination.route, topLevelRoutes)) {
-                        NavigationMotionKind.PushDetail
-                    } else NavigationMotionKind.PopDetail,
-                    forward = true,
-                    motionScheme = motionScheme,
-                    routeDistance = 1,
+            contentKey = { it?.id },
+            transitionSpec = {
+                val initial = initialState
+                val target = targetState
+                val isPop = initial != null && initial !in backStack
+                val isPredictivePop = inPredictiveBack && shouldUsePredictivePop(
+                    predictiveBack,
+                    initial?.destination?.route,
+                    target?.destination?.route,
+                    topLevelRoutes,
                 )
-            },
-            exitTransition = {
-                AppMotion.pageExit(
-                    kind = if (isSecondaryDestination(targetState.destination.route, topLevelRoutes)) {
-                        NavigationMotionKind.PushDetail
-                    } else NavigationMotionKind.PopDetail,
-                    forward = true,
-                    motionScheme = motionScheme,
-                    routeDistance = 1,
-                )
-            },
-            popEnterTransition = { predictiveBackParentEnter() },
-            popExitTransition = { predictiveBackExit() },
-            predictivePopEnterTransition = { _ ->
-                if (shouldUsePredictivePop(
-                        predictiveBack, initialState.destination.route, targetState.destination.route,
-                        topLevelRoutes,
+                val initialZ = initial?.let { zIndices[it.id] } ?: 0f
+                val targetZ = when {
+                    initial == null || target == null -> 0f
+                    isPop || inPredictiveBack -> initialZ - 1f
+                    else -> initialZ + 1f
+                }
+                target?.let { zIndices[it.id] = targetZ }
+
+                val enter = when {
+                    inPredictiveBack -> if (isPredictivePop) {
+                        predictiveBackParentEnter()
+                    } else EnterTransition.None
+                    isPop -> predictiveBackParentEnter()
+                    else -> AppMotion.pageEnter(
+                        kind = if (isSecondaryDestination(target?.destination?.route, topLevelRoutes)) {
+                            NavigationMotionKind.PushDetail
+                        } else NavigationMotionKind.PopDetail,
+                        forward = true,
+                        motionScheme = motionScheme,
+                        routeDistance = 1,
                     )
-                ) predictiveBackParentEnter() else EnterTransition.None
-            },
-            predictivePopExitTransition = { _ ->
-                if (shouldUsePredictivePop(
-                        predictiveBack, initialState.destination.route, targetState.destination.route,
-                        topLevelRoutes,
+                }
+                val exit = when {
+                    inPredictiveBack -> if (isPredictivePop) {
+                        predictiveBackExit()
+                    } else ExitTransition.None
+                    isPop -> predictiveBackExit()
+                    else -> AppMotion.pageExit(
+                        kind = if (isSecondaryDestination(target?.destination?.route, topLevelRoutes)) {
+                            NavigationMotionKind.PushDetail
+                        } else NavigationMotionKind.PopDetail,
+                        forward = true,
+                        motionScheme = motionScheme,
+                        routeDistance = 1,
                     )
-                ) predictiveBackExit() else ExitTransition.None
+                }
+                (enter togetherWith exit).using(null).apply {
+                    targetContentZIndex = targetZ
+                }
             },
-            builder = builder,
-        )
+        ) { entry ->
+            if (entry != null) {
+                entry.LocalOwnersProvider(saveableStateHolder) {
+                    destinationContent(entry)
+                }
+            }
+        }
     }
 }

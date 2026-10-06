@@ -17,6 +17,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -25,6 +26,7 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.ComposeUiTestConfig
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
@@ -56,6 +58,7 @@ class PredictiveBackRenderingTest {
     private lateinit var detail: LayoutCoordinates
     private lateinit var selectedTab: LayoutCoordinates
     private val selected = mutableIntStateOf(3)
+    private val detailStateSeed = mutableIntStateOf(0)
     private val rail = mutableStateOf(false)
     private val rtl = mutableStateOf(false)
     /** Where the top-level page area sits at rest, so the step-back is measured from it. */
@@ -196,6 +199,8 @@ class PredictiveBackRenderingTest {
         openDetail()
         gesture(BackEventCompat.EDGE_LEFT)
         progress(0.7f, BackEventCompat.EDGE_LEFT)
+        rule.runOnUiThread { detailStateSeed.intValue = 42 }
+        frames(16)
         rule.runOnUiThread { dispatcher.dispatchOnBackCancelled() }
         // The cancellation animation runs fraction * totalDuration (<= 210ms for a 0.7 progress on
         // a 300ms transition); the keep-alive exit holds for RELEASE_SETTLE_CEILING_MS (600ms).
@@ -206,6 +211,7 @@ class PredictiveBackRenderingTest {
             assertCentred(detail)
             assertFalse("cancel must remove the preview parent", parent.isAttached)
         }
+        rule.onNodeWithTag("detail-state-0").assertExists()
         gesture(BackEventCompat.EDGE_LEFT)
         progress(0.5f, BackEventCompat.EDGE_LEFT)
         assertSteppedBack(0.5f)
@@ -454,6 +460,7 @@ class PredictiveBackRenderingTest {
     }
 
     private fun setup() {
+        detailStateSeed.intValue = 0
         rule.setContent {
             CompositionLocalProvider(
                 LocalLayoutDirection provides if (rtl.value) LayoutDirection.Rtl else LayoutDirection.Ltr,
@@ -464,50 +471,62 @@ class PredictiveBackRenderingTest {
                     val active = (entry?.destination?.route ?: "root") == "root"
                     Box(Modifier.fillMaxSize().background(Color.Blue).testTag("viewport")
                         .onGloballyPositioned { viewport = it }) {
-                        AppNavHost(nav, "root", setOf("root"), predictiveBack = true) {
-                            composable("root") {
-                                // Mirrors production: the bar is a *sibling of the content inside
-                                // this destination*, so the detail covers the two together. That is
-                                // the whole point - as a sibling of the NavHost it was drawn last
-                                // and therefore on top of every detail page.
-                                ParentScrimSurface(isCovered = !active) {
-                                    val chrome = @Composable {
-                                        Box(
-                                            (if (rail.value) Modifier.width(80.dp).fillMaxHeight()
-                                            else Modifier.fillMaxWidth().height(80.dp))
-                                                .background(Color.Cyan).testTag("chrome"),
-                                        )
-                                    }
-                                    if (rail.value) {
-                                        Row(Modifier.fillMaxSize()) {
-                                            Box(Modifier.weight(1f).fillMaxHeight()) {
-                                                RootPage(active)
-                                            }
-                                            chrome()
+                        AppNavHost(
+                            navController = nav,
+                            startDestination = "root",
+                            topLevelRoutes = setOf("root"),
+                            predictiveBack = true,
+                            builder = {
+                                composable("root") {}
+                                composable("detail") {}
+                            },
+                            destinationContent = { destination ->
+                                when (destination.destination.route) {
+                                    "root" -> ParentScrimSurface(isCovered = !active) {
+                                        val chrome = @Composable {
+                                            Box(
+                                                (if (rail.value) Modifier.width(80.dp).fillMaxHeight()
+                                                else Modifier.fillMaxWidth().height(80.dp))
+                                                    .background(Color.Cyan).testTag("chrome"),
+                                            )
                                         }
-                                    } else {
-                                        Column(Modifier.fillMaxSize()) {
-                                            Box(Modifier.weight(1f).fillMaxWidth()) {
-                                                RootPage(active)
+                                        if (rail.value) {
+                                            Row(Modifier.fillMaxSize()) {
+                                                Box(Modifier.weight(1f).fillMaxHeight()) {
+                                                    RootPage(active)
+                                                }
+                                                chrome()
                                             }
-                                            chrome()
+                                        } else {
+                                            Column(Modifier.fillMaxSize()) {
+                                                Box(Modifier.weight(1f).fillMaxWidth()) {
+                                                    RootPage(active)
+                                                }
+                                                chrome()
+                                            }
                                         }
                                     }
+                                    "detail" -> {
+                                        val seed = detailStateSeed.intValue
+                                        val savedValue by rememberSaveable {
+                                            mutableIntStateOf(seed)
+                                        }
+                                        DetailDismissSurface(
+                                            isDismissible = !active,
+                                            isLeaving = active,
+                                        ) {
+                                            Box(
+                                                Modifier.fillMaxSize()
+                                                    .background(Color.Red)
+                                                    .testTag("detail-state-$savedValue")
+                                                    .onGloballyPositioned { detail = it },
+                                            )
+                                        }
+                                    }
+                                    else -> Unit
                                 }
-                            }
-                            composable("detail") {
-                                DetailDismissSurface(
-                                    // The gesture dismisses the detail, which is on top exactly
-                                    // while "root" is not the current destination; it is only
-                                    // leaving once root has become current again.
-                                    isDismissible = !active,
-                                    isLeaving = active,
-                                ) {
-                                    Box(Modifier.fillMaxSize().background(Color.Red)
-                                        .onGloballyPositioned { detail = it })
-                                }
-                            }
-                        }
+                            },
+                        )
                     }
                 }
             }
