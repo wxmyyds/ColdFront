@@ -212,6 +212,10 @@ class PredictiveBackRenderingTest {
             assertEquals("detail", nav.currentDestination?.route)
             assertCentred(detail)
             assertFalse("cancel must remove the preview parent", parent.isAttached)
+            android.util.Log.i(
+                "PBGDiag",
+                "after cancel: visible=${nav.visibleEntries.value.map { it.destination.route }}",
+            )
         }
         gesture(BackEventCompat.EDGE_LEFT)
         progress(0.5f, BackEventCompat.EDGE_LEFT)
