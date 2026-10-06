@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.core.view.WindowCompat
@@ -18,25 +19,19 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.Bluetooth
@@ -48,19 +43,16 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -68,32 +60,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavDestination
-import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
 import io.github.wxmyyds.coldfront.ble.BlePermissionManager
 import io.github.wxmyyds.coldfront.data.AppSettings
-import io.github.wxmyyds.coldfront.ui.component.AppMotion
-import io.github.wxmyyds.coldfront.ui.component.NavigationMotionKind
-import io.github.wxmyyds.coldfront.ui.component.isForwardTopLevelTransition
-import io.github.wxmyyds.coldfront.ui.component.isSecondaryDestination
-import io.github.wxmyyds.coldfront.ui.component.navigationMotionKind
-import io.github.wxmyyds.coldfront.ui.component.shouldUsePredictivePop
-import io.github.wxmyyds.coldfront.ui.component.topLevelRouteDistance
-import io.github.wxmyyds.coldfront.ui.component.topLevelDragReversed
-import io.github.wxmyyds.coldfront.ui.component.topLevelPositionAfterDrag
-import io.github.wxmyyds.coldfront.ui.component.topLevelTargetAfterDrag
-import io.github.wxmyyds.coldfront.ui.component.topLevelPageIndex
-import io.github.wxmyyds.coldfront.ui.component.TOP_LEVEL_PAGE_DURATION_MS
+import kotlinx.serialization.Serializable
+import top.yukonga.miuix.kmp.nav.core.NavCornerClipMode
+import top.yukonga.miuix.kmp.nav.core.NavDisplay
+import top.yukonga.miuix.kmp.nav.core.NavDisplayEffects
+import top.yukonga.miuix.kmp.nav.core.NavKey
+import top.yukonga.miuix.kmp.nav.core.rememberNavController
+import top.yukonga.miuix.kmp.nav.transition.NavTransitions
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 import io.github.wxmyyds.coldfront.ui.i18n.rememberStrings
 import io.github.wxmyyds.coldfront.ui.theme.BrandSeed
@@ -102,8 +79,6 @@ import io.github.wxmyyds.coldfront.ui.theme.ThemeSeed
 import io.github.wxmyyds.coldfront.ui.theme.colorSchemeFromSeed
 import io.github.wxmyyds.coldfront.ui.theme.pageLayerScheme
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
 
@@ -238,26 +213,72 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private fun routeIsSelected(current: NavDestination?, route: String): Boolean =
-    current?.hierarchy?.any { it.route == route } == true ||
-        (current?.route == Routes.ABOUT && route == Routes.SETTINGS)
+/**
+ * Destinations owned by miuix-nav. [Main] hosts the four tabs; everything else is a detail page
+ * drawn above it. Data objects keep `rememberSaveable` stable across process death.
+ */
+@Serializable
+private sealed interface AppRoute : NavKey {
+    @Serializable
+    data object Main : AppRoute
 
-private object Routes {
-    const val HOME = "home"
-    const val DEVICES = "devices"
-    const val SCAN = "scan"
-    const val RGB = "rgb"
-    const val SETTINGS = "settings"
-    const val ABOUT = "about"
+    @Serializable
+    data object Scan : AppRoute
+
+    @Serializable
+    data object About : AppRoute
 }
 
-@OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+/**
+ * The four primary tabs, inside the top-level destination.
+ *
+ * [WindowInsets.navigationBars] is consumed here rather than by an outer layout: the bar that draws
+ * over that inset is now a sibling of this content inside MAIN, so the two belong to one page and
+ * must reserve the inset between them - the content pads away from it and the bar sits on top of it.
+ */
+@Composable
+private fun MainPage(
+    vm: CoolerViewModel,
+    settings: AppSettings,
+    isActive: Boolean,
+    selectedPage: Int,
+    onSelectPage: (Int) -> Unit,
+    onOpenScan: () -> Unit,
+    onOpenAbout: () -> Unit,
+) {
+    val contentInsets = WindowInsets.navigationBars
+    // windowInsetsPadding, not padding(insets): WindowInsets is not a PaddingValues, and converting
+    // it first would bake the values in at composition rather than per-layout pass.
+    Box(
+        Modifier.fillMaxSize()
+            .windowInsetsPadding(contentInsets)
+            .consumeWindowInsets(contentInsets),
+    ) {
+        TopLevelPager(
+            vm = vm,
+            settings = settings,
+            isActive = isActive,
+            selectedPage = selectedPage,
+            onSelectPage = onSelectPage,
+            onOpenScan = onOpenScan,
+            onOpenAbout = onOpenAbout,
+        )
+    }
+}
+
+/** Identifies the primary tabs inside the pager; these are not NavHost routes. */
+private object TabRoutes {
+    const val HOME = "home"
+    const val DEVICES = "devices"
+    const val RGB = "rgb"
+    const val SETTINGS = "settings"
+}
+
 @Composable
 private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
-    val nav = rememberNavController()
+    val nav = rememberNavController<AppRoute>(AppRoute.Main)
     val strings = LocalStrings.current
-    val backStack by nav.currentBackStackEntryAsState()
-    val current = backStack?.destination
+    val current = nav.backStack.lastOrNull()
 
     // 连接成功后自动离开扫描页,回主页看状态(避免连上后停在列表里像「没反应」)
     val liveState by vm.liveState.collectAsStateWithLifecycle()
@@ -268,66 +289,48 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
     LaunchedEffect(connectionKey) {
         if (shouldLeaveScanOnConnection(
                 connectionKey,
-                isScanDestination = current?.hierarchy?.any { it.route == Routes.SCAN } == true,
+                isScanDestination = current == AppRoute.Scan,
             )
         ) {
-            nav.navigate(Routes.HOME) {
-                popUpTo(nav.graph.findStartDestination().id)
-                launchSingleTop = true
-            }
+            nav.popUntil { it == AppRoute.Main }
         }
+    }
+
+    val open = { route: AppRoute ->
+        if (nav.backStack.lastOrNull() != route) nav.push(route)
     }
 
     val items: List<Triple<String, ImageVector, () -> String>> = remember(strings) {
         listOf(
-            Triple(Routes.HOME, Icons.Filled.AcUnit) { strings.navHome },
-            Triple(Routes.DEVICES, Icons.Filled.Bluetooth) { strings.navDevices },
-            Triple(Routes.RGB, Icons.Filled.Palette) { strings.navRgb },
-            Triple(Routes.SETTINGS, Icons.Filled.Settings) { strings.navSettings },
+            Triple(TabRoutes.HOME, Icons.Filled.AcUnit) { strings.navHome },
+            Triple(TabRoutes.DEVICES, Icons.Filled.Bluetooth) { strings.navDevices },
+            Triple(TabRoutes.RGB, Icons.Filled.Palette) { strings.navRgb },
+            Triple(TabRoutes.SETTINGS, Icons.Filled.Settings) { strings.navSettings },
         )
     }
-    // Top-level destinations are exactly the primary navigation destinations in this NavHost.
-    val topLevelRoutes = remember(items) { items.map { it.first } }
-    val topLevelRouteSet = remember(topLevelRoutes) { topLevelRoutes.toSet() }
+    // The four tabs identify pages inside the pager, so they are not navigation destinations.
+    val tabRoutes = remember(items) { items.map { it.first } }
+    // The four primary tabs are pages inside Main, not destinations of their own, so the selected
+    // tab is its own state. It survives a push of a secondary page, which is what keeps the tab
+    // strip showing the same page underneath after returning.
+    val selectedPage = rememberSaveable { mutableIntStateOf(0) }
 
-    val currentRoute = current?.route
-    val selectedPage = topLevelPageIndex(currentRoute, topLevelRoutes)
-    val pagePosition = remember { Animatable((selectedPage.coerceAtLeast(0)).toFloat()) }
-    val pageScope = rememberCoroutineScope()
-    LaunchedEffect(selectedPage) {
-        if (selectedPage >= 0) {
-            pagePosition.animateTo(
-                targetValue = selectedPage.toFloat(),
-                animationSpec = tween(
-                    TOP_LEVEL_PAGE_DURATION_MS,
-                    easing = androidx.compose.animation.core.FastOutSlowInEasing,
-                ),
-            )
-        }
-    }
-
+    // Switching tabs stays inside Main: no navigation, so no transition and no predictive back.
+    // The strip animates itself.
     val navigateToTab: (String) -> Unit = { route ->
-        nav.navigate(route) {
-            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-            launchSingleTop = true
-            restoreState = true
-        }
+        tabRoutes.indexOf(route)
+            .takeIf { it >= 0 }
+            ?.let { selectedPage.intValue = it }
     }
 
     // Use existing foundation/Material3 APIs, without adding a window-size dependency.
-    // Keep one NavHost at the same composition location across window resizing.
-    val motionScheme = MaterialTheme.motionScheme
+    // Keep one NavDisplay at the same composition location across window resizing.
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val useRail = maxWidth >= 600.dp
-        Scaffold(
-            containerColor = MaterialTheme.colorScheme.background,
-            contentWindowInsets = WindowInsets(left = 0.dp, top = 0.dp, right = 0.dp, bottom = 0.dp),
-            bottomBar = {
-                AnimatedVisibility(
-                    visible = !useRail,
-                    enter = AppMotion.navigationBarEnter(motionScheme),
-                    exit = AppMotion.navigationBarExit(motionScheme),
-                ) {
+        val topLevelIsCurrent = current == null || current == AppRoute.Main
+        val cornerRadius = rememberScreenCornerRadius()
+        val chrome = @Composable {
+            if (!useRail) {
                     NavigationBar(
                         modifier = Modifier.semantics { isTraversalGroup = true },
                         containerColor = MaterialTheme.colorScheme.background,
@@ -338,7 +341,7 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                     ) {
                         items.forEach { (route, icon, label) ->
                             NavigationBarItem(
-                                selected = routeIsSelected(current, route),
+                                selected = tabRoutes.getOrNull(selectedPage.intValue) == route,
                                 onClick = { navigateToTab(route) },
                                 // Label + native selectable semantics announce the destination once.
                                 icon = { Icon(icon, contentDescription = null) },
@@ -346,226 +349,85 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                             )
                         }
                     }
-                }
-            },
-        ) { inner ->
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(inner)
-                    // Consume Scaffold's system/bar padding once; nested app bars and the rail
-                    // see only remaining insets. The bar uses the real navigation inset, at least 12dp.
-                    .consumeWindowInsets(inner),
-            ) {
-                if (useRail) {
-                    NavigationRail(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .semantics { isTraversalGroup = true },
-                        containerColor = MaterialTheme.colorScheme.background,
-                    ) {
-                        // Scroll only the rail contents: keep system insets and the sibling NavHost fixed.
-                        Column(
-                            modifier = Modifier.verticalScroll(rememberScrollState()),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            // Match NavigationRail's native spacing inside the scroll container.
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            items.forEach { (route, icon, label) ->
-                                NavigationRailItem(
-                                    selected = routeIsSelected(current, route),
-                                    onClick = { navigateToTab(route) },
-                                    icon = { Icon(icon, contentDescription = null) },
-                                    label = { Text(label()) },
-                                )
-                            }
-                        }
-                    }
-                }
-                Box(
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
-                    contentAlignment = Alignment.TopCenter,
+            } else {
+                NavigationRail(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .semantics { isTraversalGroup = true },
+                    containerColor = MaterialTheme.colorScheme.background,
                 ) {
-                    BoxWithConstraints(
-                        modifier = Modifier
-                            .widthIn(max = 840.dp)
-                            .fillMaxSize()
-                            .clipToBounds(),
+                    // Scroll only the rail contents: keep system insets and the sibling page fixed.
+                    Column(
+                        modifier = Modifier.verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        // Match NavigationRail's native spacing inside the scroll container.
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        val pageWidth = maxWidth
-                        val pageWidthPx = with(LocalDensity.current) { pageWidth.toPx() }
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .draggable(
-                                    enabled = !isSecondaryDestination(currentRoute, topLevelRouteSet),
-                                    orientation = Orientation.Horizontal,
-                                    // Foundation reverses both delta and stop velocity; offset below
-                                    // already mirrors in RTL, so do not reverse it a second time.
-                                    reverseDirection = topLevelDragReversed(LocalLayoutDirection.current),
-                                    state = rememberDraggableState { delta ->
-                                        pageScope.launch {
-                                            pagePosition.snapTo(
-                                                topLevelPositionAfterDrag(
-                                                    pagePosition.value, delta, pageWidthPx, topLevelRoutes.lastIndex,
-                                                ),
-                                            )
-                                        }
-                                    },
-                                    onDragStopped = { velocity ->
-                                        val target = topLevelTargetAfterDrag(
-                                            pagePosition.value, velocity, topLevelRoutes.lastIndex,
-                                        )
-                                        val targetRoute = topLevelRoutes[target]
-                                        if (targetRoute != currentRoute) {
-                                            navigateToTab(targetRoute)
-                                        } else {
-                                            pageScope.launch {
-                                                pagePosition.animateTo(
-                                                    target.toFloat(),
-                                                    tween(
-                                                        TOP_LEVEL_PAGE_DURATION_MS,
-                                                        easing = androidx.compose.animation.core.FastOutSlowInEasing,
-                                                    ),
-                                                )
-                                            }
-                                        }
-                                    },
-                                ),
-                        ) {
-                            listOf<@Composable () -> Unit>(
-                                { HomeScreen(vm, onAddDevice = { nav.navigate(Routes.SCAN) { launchSingleTop = true } }) },
-                                { DevicesScreen(vm, onAddDevice = { nav.navigate(Routes.SCAN) { launchSingleTop = true } }) },
-                                {
-                                    RGBControlScreen(
-                                        vm,
-                                        isPageActive = currentRoute == Routes.RGB,
-                                        onConnect = { nav.navigate(Routes.SCAN) { launchSingleTop = true } },
+                        items.forEach { (route, icon, label) ->
+                            NavigationRailItem(
+                                selected = tabRoutes.getOrNull(selectedPage.intValue) == route,
+                                onClick = { navigateToTab(route) },
+                                icon = { Icon(icon, contentDescription = null) },
+                                label = { Text(label()) },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                NavDisplay(
+                    navController = nav,
+                    modifier = Modifier.widthIn(max = 840.dp).fillMaxSize()
+                        .semantics { isTraversalGroup = true },
+                    transition = NavTransitions.MiuixDefault,
+                    effects = NavDisplayEffects(
+                        cornerClipRadius = cornerRadius,
+                        cornerClipMode = NavCornerClipMode.Leading,
+                        dimAmount = 0.5f,
+                    ),
+                ) {
+                    entry<AppRoute.Main> {
+                        if (useRail) {
+                            Row(Modifier.fillMaxSize()) {
+                                Box(Modifier.weight(1f).fillMaxHeight()) {
+                                    MainPage(
+                                        vm = vm,
+                                        settings = settings,
+                                        isActive = topLevelIsCurrent,
+                                        selectedPage = selectedPage.intValue,
+                                        onSelectPage = { selectedPage.intValue = it },
+                                        onOpenScan = { open(AppRoute.Scan) },
+                                        onOpenAbout = { open(AppRoute.About) },
                                     )
-                                },
-                                { SettingsScreen(vm, settings, onAbout = { nav.navigate(Routes.ABOUT) { launchSingleTop = true } }) },
-                            ).forEachIndexed { index, content ->
-                                Box(
-                                    modifier = Modifier
-                                        .width(pageWidth)
-                                        .fillMaxHeight()
-                                        .offset {
-                                            IntOffset(
-                                                ((index - pagePosition.value) * pageWidthPx).roundToInt(),
-                                                0,
-                                            )
-                                        },
-                                ) { content() }
+                                }
+                                chrome()
+                            }
+                        } else {
+                            Column(Modifier.fillMaxSize()) {
+                                Box(Modifier.weight(1f).fillMaxWidth()) {
+                                    MainPage(
+                                        vm = vm,
+                                        settings = settings,
+                                        isActive = topLevelIsCurrent,
+                                        selectedPage = selectedPage.intValue,
+                                        onSelectPage = { selectedPage.intValue = it },
+                                        onOpenScan = { open(AppRoute.Scan) },
+                                        onOpenAbout = { open(AppRoute.About) },
+                                    )
+                                }
+                                chrome()
                             }
                         }
                     }
-                    NavHost(
-                        navController = nav,
-                        startDestination = Routes.HOME,
-                        enterTransition = {
-                            val initialRoute = initialState.destination.route
-                            val targetRoute = targetState.destination.route
-                            val kind = navigationMotionKind(
-                                isPop = false,
-                                initialIsSecondary = isSecondaryDestination(initialRoute, topLevelRouteSet),
-                                targetIsSecondary = isSecondaryDestination(targetRoute, topLevelRouteSet),
-                            )
-                            AppMotion.pageEnter(
-                                kind = kind,
-                                forward = isForwardTopLevelTransition(initialRoute, targetRoute, topLevelRoutes),
-                                motionScheme = motionScheme,
-                                routeDistance = topLevelRouteDistance(initialRoute, targetRoute, topLevelRoutes),
-                            )
-                        },
-                        exitTransition = {
-                            val initialRoute = initialState.destination.route
-                            val targetRoute = targetState.destination.route
-                            val kind = navigationMotionKind(
-                                isPop = false,
-                                initialIsSecondary = isSecondaryDestination(initialRoute, topLevelRouteSet),
-                                targetIsSecondary = isSecondaryDestination(targetRoute, topLevelRouteSet),
-                            )
-                            AppMotion.pageExit(
-                                kind = kind,
-                                forward = isForwardTopLevelTransition(initialRoute, targetRoute, topLevelRoutes),
-                                motionScheme = motionScheme,
-                                routeDistance = topLevelRouteDistance(initialRoute, targetRoute, topLevelRoutes),
-                            )
-                        },
-                        popEnterTransition = {
-                            val initialRoute = initialState.destination.route
-                            val targetRoute = targetState.destination.route
-                            val kind = navigationMotionKind(
-                                isPop = true,
-                                initialIsSecondary = isSecondaryDestination(initialRoute, topLevelRouteSet),
-                                targetIsSecondary = isSecondaryDestination(targetRoute, topLevelRouteSet),
-                            )
-                            AppMotion.pageEnter(
-                                kind = kind,
-                                forward = isForwardTopLevelTransition(initialRoute, targetRoute, topLevelRoutes),
-                                motionScheme = motionScheme,
-                                routeDistance = topLevelRouteDistance(initialRoute, targetRoute, topLevelRoutes),
-                            )
-                        },
-                        popExitTransition = {
-                            val initialRoute = initialState.destination.route
-                            val targetRoute = targetState.destination.route
-                            val kind = navigationMotionKind(
-                                isPop = true,
-                                initialIsSecondary = isSecondaryDestination(initialRoute, topLevelRouteSet),
-                                targetIsSecondary = isSecondaryDestination(targetRoute, topLevelRouteSet),
-                            )
-                            AppMotion.pageExit(
-                                kind = kind,
-                                forward = isForwardTopLevelTransition(initialRoute, targetRoute, topLevelRoutes),
-                                motionScheme = motionScheme,
-                                routeDistance = topLevelRouteDistance(initialRoute, targetRoute, topLevelRoutes),
-                            )
-                        },
-                        predictivePopEnterTransition = { _ ->
-                            if (shouldUsePredictivePop(
-                                    predictiveBackEnabled = predictiveBack,
-                                    currentRoute = initialState.destination.route,
-                                    previousRoute = targetState.destination.route,
-                                    topLevelRoutes = topLevelRouteSet,
-                                )
-                            ) {
-                                AppMotion.pageEnter(
-                                    kind = NavigationMotionKind.PopDetail,
-                                    forward = false,
-                                    motionScheme = motionScheme,
-                                    routeDistance = 1,
-                                )
-                            } else EnterTransition.None
-                        },
-                        predictivePopExitTransition = { _ ->
-                            if (shouldUsePredictivePop(
-                                    predictiveBackEnabled = predictiveBack,
-                                    currentRoute = initialState.destination.route,
-                                    previousRoute = targetState.destination.route,
-                                    topLevelRoutes = topLevelRouteSet,
-                                )
-                            ) {
-                                AppMotion.pageExit(
-                                    kind = NavigationMotionKind.PopDetail,
-                                    forward = false,
-                                    motionScheme = motionScheme,
-                                    routeDistance = 1,
-                                )
-                            } else ExitTransition.None
-                        },
-                        // Constrain the child, not the weighted slot: retain centering on wide windows.
-                        modifier = Modifier
-                            .widthIn(max = 840.dp)
-                            .fillMaxSize()
-                            .semantics { isTraversalGroup = true },
-                    ) {
-                        composable(Routes.HOME) {}
-                        composable(Routes.DEVICES) {}
-                        composable(Routes.SCAN) { AddDeviceScreen(vm, onBack = { nav.popBackStack() }) }
-                        composable(Routes.RGB) {}
-                        composable(Routes.SETTINGS) {}
-                        composable(Routes.ABOUT) { AboutScreen(onBack = { nav.popBackStack() }) }
+                    entry<AppRoute.Scan> {
+                        if (!predictiveBack) BackHandler { nav.pop() }
+                        AddDeviceScreen(vm, onBack = { nav.pop() })
+                    }
+                    entry<AppRoute.About> {
+                        if (!predictiveBack) BackHandler { nav.pop() }
+                        AboutScreen(onBack = { nav.pop() })
                     }
                 }
             }

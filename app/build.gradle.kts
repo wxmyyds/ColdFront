@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -37,11 +38,22 @@ android {
         buildConfig = true
     }
 
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
+    }
+
     // Compose UI; XML resources contain the manifest and launcher vector, plus product images.
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
     }
 }
 
@@ -59,7 +71,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.datastore.preferences)
-    implementation(libs.androidx.navigation.compose)
+    implementation(libs.miuix.nav)
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.material.kolor)
 
     // Compose（版本由 alpha BOM 托管 → material3 1.5.0-alpha29）
