@@ -233,6 +233,19 @@ class PredictiveBackRenderingTest {
         val travel = renderedTravelX()
         val diagPixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
         val y = diagPixels.height / 2
+        // Locate the detail's rendered left edge (first red) and the parent's rendered right edge
+        // (last green) to separate the two layers' true rendered offsets.
+        var firstRed = -1
+        var lastGreen = -1
+        for (x in 0 until diagPixels.width) {
+            val p = diagPixels[x, y]
+            if (p.red > 0.9f && firstRed == -1) firstRed = x
+            if (p.green > 0.5f && p.red < 0.5f) lastGreen = x
+        }
+        android.util.Log.i(
+            "PBGDiag",
+            "second gesture: firstRed=$firstRed lastGreen=$lastGreen travel=$travel",
+        )
         val width = viewport.size.width
         val cols = listOf(
             (0.2f * width).toInt(), (0.5f * width).toInt(), (0.7f * width).toInt(),
