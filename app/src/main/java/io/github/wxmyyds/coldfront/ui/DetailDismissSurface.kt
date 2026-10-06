@@ -186,7 +186,8 @@ internal fun DetailDismissSurface(
                 // release to the settle spring. The page leaves toward the physical right, so its
                 // leading edge travels from 0 to one full width. During a push this progress is 0,
                 // so nothing shifts while the page is being entered.
-                translationX = progress.value * size.width
+                // EXPERIMENT: translationX disabled to isolate NavHost's own displacement.
+                // translationX = progress.value * size.width
                 android.util.Log.i(
                     "PBGDiag",
                     "detail gl FRAME p=${progress.value} tx=$translationX size=${size.width}",
