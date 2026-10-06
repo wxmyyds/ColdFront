@@ -197,6 +197,11 @@ class PredictiveBackRenderingTest {
         gesture(BackEventCompat.EDGE_LEFT)
         progress(0.7f, BackEventCompat.EDGE_LEFT)
         // First-gesture control: the detail must be on top while the parent steps back beneath.
+        android.util.Log.i(
+            "PBGDiag",
+            "first gesture: detail centre=${centre(detail)} parent centre=${centre(parent)} " +
+                "viewport=${centre(viewport)} travel=${renderedTravelX()}",
+        )
         val firstMid = overlapColour(0.7f, "first gesture")
         assertTrue("first gesture must already have the detail on top", firstMid.red > 0.5f)
         rule.runOnUiThread { dispatcher.dispatchOnBackCancelled() }
