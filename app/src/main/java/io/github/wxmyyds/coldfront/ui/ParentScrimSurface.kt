@@ -1,19 +1,15 @@
 package io.github.wxmyyds.coldfront.ui
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.snap
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import io.github.wxmyyds.coldfront.ui.component.PARENT_PARALLAX_FRACTION
 import io.github.wxmyyds.coldfront.ui.component.parentPageAlphaForProgress
 import io.github.wxmyyds.coldfront.ui.component.parentScrimAlphaForProgress
-import io.github.wxmyyds.coldfront.ui.component.releaseSettleSpec
 
 /**
  * Dims and fades a top-level page while a detail page sits on top of it, so that it reads as
@@ -23,16 +19,28 @@ import io.github.wxmyyds.coldfront.ui.component.releaseSettleSpec
  * darkens the page, and a faint **fade of the page's own pixels** so the backdrop reads as
  * extending outward instead of as a hard patch. Both are driven by the back gesture rather than a
  * timer, so one finger brightens the parent and slides the page away together. That is why it reads
- * [rememberRunningBackProgress] directly instead of reusing the leaving page's own settle: the
- * parent is *not* the page being dismissed, so its brightness has to be a function of the gesture
- * alone. It cannot settle to `1f` on commit, because by then this page is the one on screen and
- * must be fully lit - it goes to `0f` instead, and [parentScrimAlphaForProgress] /
- * [parentPageAlphaForProgress] invert progress into brightness.
+ * the same settled progress as the leaving page ([rememberGestureSettleProgress], the mirror of
+ * [DetailDismissSurface]'s use) instead of the raw gesture: on release the dispatcher zeroes its
+ * progress the instant the finger lifts, and a raw read would snap the scrim back to full darkness
+ * and the step-back back to full depth while the page above was still visibly sliding - which is
+ * what made the parent jump behind the leaving page on release. Settling it on the same curve as
+ * the page above means one release drives both layers through the same motion and they cannot drift
+ * apart.
  *
  * The scrim is drawn *over* the page rather than merely fading the page's own pixels: fading alone
  * would let the window background show through, which reads lighter, whereas the brief is for the
  * parent to get darker. Black darkens in both themes. The two effects still stack (the page fades
  * and a black layer darkens on top), exactly as in the reference.
+ *
+ * @param isCovered whether a detail page covers this page right now. While covered the page is
+ * tracked from the live gesture and settles back to the fully-covered state on release (the gesture
+ * cancelled, or nothing happened); once the covering page is committed away (`isCovered` flips
+ * false) the settle target becomes the fully-lit, at-rest state, so the parent and the leaving page
+ * finish together.
+ *
+ * @param observeBackGesture whether this surface should react to a running back gesture at all,
+ * when it is covered. Pass the user's predictive-back preference; the covered check is applied
+ * internally so an uncovered page (which is what the gesture is returning to) never tracks.
  */
 @Composable
 internal fun ParentScrimSurface(
@@ -41,57 +49,44 @@ internal fun ParentScrimSurface(
     observeBackGesture: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    val progress = rememberRunningBackProgress(observeBackGesture)
-    // While a detail covers the page, the scrim is a pure function of the gesture; snap(), not a
-    // tween, because easing it would slide the backdrop out of step with the page above it.
-    // When nothing covers the page there is nothing to track, so the scrim animates itself out.
-    val target = if (isCovered) parentScrimAlphaForProgress(progress.value ?: 0f) else 0f
-    val alpha by animateFloatAsState(
-        targetValue = target,
-        animationSpec = if (isCovered) snap() else releaseSettleSpec(),
-        label = "parentScrimAlpha",
-    )
-    // The page's own opacity, driven by the same gesture so it fades in step with the scrim and the
-    // page above it. Same settle choice as the scrim: while a gesture runs the value is already
-    // right for the frame, so snap; otherwise animate the parent back to fully lit.
-    val contentTarget = if (isCovered) parentPageAlphaForProgress(progress.value ?: 0f) else 1f
-    val contentAlpha by animateFloatAsState(
-        targetValue = contentTarget,
-        animationSpec = if (isCovered) snap() else releaseSettleSpec(),
-        label = "parentPageAlpha",
-    )
-    // How far this page has stepped back, 1f when a detail fully covers it.
-    //
-    // Applied as a graphics layer rather than as a NavHost transition on purpose. The transition
-    // API was tried first and is wrong here: an exit offset is retained by Compose and re-applied
-    // when the push is interrupted, which slid the parent over the page being dragged and made it
-    // vanish mid-gesture. A layer here also keeps the parent exactly in place at rest, so repeated
-    // push/pop cycles cannot accumulate a drift.
-    val stepBack by animateFloatAsState(
-        // 1f while a detail covers this page, easing to 0 as a gesture uncovers it. The route only
-        // reports the cover once the push has finished, so before that the page reads as uncovered
-        // and animates in - which is exactly the step-back a push should produce.
-        targetValue = if (isCovered) 1f - (progress.value ?: 0f) else 0f,
-        // While a gesture uncovers the page the value is already right for this frame; any easing
-        // would be applied on top of the finger. On a push nothing is moving the page, so it eases.
-        animationSpec = if (progress.value != null) snap() else releaseSettleSpec(),
-        label = "parentStepBack",
+    // Settles rather than tracks the raw gesture, mirroring DetailDismissSurface: the dispatcher
+    // zeroes its progress the instant the finger lifts, and a raw read would snap these effects
+    // back to the covered state while the page above is still visibly sliding. Sharing the settle
+    // curve with the leaving page means one release drives both layers through the same motion.
+    val progress = rememberGestureSettleProgress(
+        observeBackGesture = isCovered && observeBackGesture,
+        // Covered: the gesture ends without dismissing (cancel), so settle back to 0 - fully
+        // dimmed and stepped back. Uncovered: the pop committed, so settle to 1 - fully lit and
+        // back at rest. Both targets are what [parentScrimAlphaForProgress] /
+        // [parentPageAlphaForProgress] / the step-back expect, and settle exactly in step with the
+        // leaving page's own settle.
+        settleTo = if (isCovered) 0f else 1f,
     )
     Box(
         modifier.fillMaxSize().graphicsLayer {
-            translationX = -size.width * PARENT_PARALLAX_FRACTION * stepBack
+            // Read the State here per-frame rather than via a by-delegate local, so a drag does not
+            // recompose the page. `progress` is already the settled value, so the effects below
+            // read it directly - there is no second animation layer on top.
+            val p = progress.value
+            // How far this page has stepped back, 1f when a detail fully covers it.
+            //
+            // Applied as a graphics layer rather than as a NavHost transition on purpose. The
+            // transition API was tried first and is wrong here: an exit offset is retained by
+            // Compose and re-applied when the push is interrupted, which slid the parent over the
+            // page being dragged and made it vanish mid-gesture. A layer here also keeps the parent
+            // exactly in place at rest, so repeated push/pop cycles cannot accumulate a drift.
+            translationX = -size.width * PARENT_PARALLAX_FRACTION * (1f - p)
         },
     ) {
-        // The page's own pixels fade a tenth as the backdrop darkens, matching the Miuix covered-
-        // layer alpha falloff. It is applied to the content only, not to the scrim, so the two
-        // effects stack rather than the scrim being re-faded. Read here per-frame so the drag does
-        // not recompose.
-        Box(Modifier.fillMaxSize().graphicsLayer { this.alpha = contentAlpha }) {
+        // The page's own opacity, driven by the same progress so it fades in step with the scrim
+        // and the page above it. Applied to the content only, not to the scrim, so the two effects
+        // stack rather than the scrim being re-faded. Read per-frame so the drag does not recompose.
+        Box(Modifier.fillMaxSize().graphicsLayer { this.alpha = parentPageAlphaForProgress(progress.value) }) {
             content()
         }
         Box(
             Modifier.fillMaxSize()
-                .graphicsLayer { this.alpha = alpha }
+                .graphicsLayer { this.alpha = parentScrimAlphaForProgress(progress.value) }
                 .background(Color.Black),
         )
     }

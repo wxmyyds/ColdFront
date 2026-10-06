@@ -19,16 +19,16 @@ import io.github.wxmyyds.coldfront.ui.component.releaseSettleSpec
 /**
  * How long the gesture progress has to stay frozen before we treat the drag as over, even though
  * the dispatcher is still reporting `InProgress`. While the finger is down and moving, the progress
- * changes frame to frame; once the finger lifts (or the flow gets stuck at the last value on a
- * device that never completes it) the value stops changing and this window elapses, which is what
- * lets the effects kick into the release settle.
+ * changes frame to frame; a released drag on a device whose flow never completes leaves it frozen.
  *
- * 200ms is deliberately generous: a drag that *pauses* mid-way (finger held still for a moment
- * before continuing) must not be mistaken for a release, or the page would start settling under a
- * still-down finger and then snap back when the drag resumes. The value changes on every movement
- * frame, so only a genuinely stopped drag survives the whole window.
+ * 500ms is deliberately long, and that is the point: a drag that *pauses* mid-way (finger held
+ * still for a moment before continuing) must not be mistaken for a release, or the page would
+ * start settling under a still-down finger and then snap back when the drag resumes - which reads
+ * as a stutter mid-gesture. A released drag is normally caught by the dispatcher going `Idle` in
+ * the same frame, so this window only stands in for the pathological device where the flow never
+ * reports Idle; on those it trades a short settling delay for never settling at all.
  */
-private const val RELEASE_STALE_MS = 200L
+private const val RELEASE_STALE_MS = 500L
 
 /**
  * Live predictive-back gesture progress, for effects the transition API cannot express.
@@ -98,7 +98,8 @@ internal fun rememberRunningBackProgress(observeBackGesture: Boolean): State<Flo
  * flow - leaving the progress frozen in `InProgress` - the drag is also treated as over once the
  * progress has been frozen for [RELEASE_STALE_MS]. A lifted finger and a stuck flow both freeze
  * the value, while an actively dragged finger keeps it changing every frame, so this does not cut a
- * slow drag short.
+ * slow drag short; a *pausing* finger (held still mid-drag) is distinguished by the window being
+ * long enough to outlast ordinary hesitation.
  *
  * @param settleTo where to go once no gesture is running: `1f` when the page is on its way out,
  * `0f` when it is coming back or was never dismissed.
