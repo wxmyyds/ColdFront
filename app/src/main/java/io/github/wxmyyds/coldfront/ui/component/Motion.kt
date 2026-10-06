@@ -230,7 +230,7 @@ internal fun releaseSettleSpec(): FiniteAnimationSpec<Float> =
  * same keep-alive, so the two cannot drift apart. Built once because `slideOutHorizontally`
  * allocates per call.
  */
-internal fun predictiveBackExit(): ExitTransition = EnterTransition.None
+internal fun predictiveBackExit(): ExitTransition = ExitTransition.None
 
 private val detailPopKeepAlive: ExitTransition = slideOutHorizontally(
     animationSpec = tween(RELEASE_SETTLE_CEILING_MS, easing = LinearEasing),
