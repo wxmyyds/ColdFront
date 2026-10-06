@@ -23,6 +23,7 @@ import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.core.util.size
 import io.github.wxmyyds.coldfront.domain.CoolerBleConstants
+import io.github.wxmyyds.coldfront.domain.CoolerCapabilities
 import io.github.wxmyyds.coldfront.domain.CoolerDevice
 import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
 import io.github.wxmyyds.coldfront.domain.CoolerLiveState
@@ -101,9 +102,17 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
     private var nextRgbRequestId = 0L
     private var pendingRgb: RgbWriteState? = null
 
-    private val operations = GattOperationQueue(onTimeout = { owner ->
-        session?.takeIf { it.gatt === owner }?.let { fail(it, "GATT callback timeout") }
-    })
+    private val operations = GattOperationQueue(
+        onTimeout = { owner ->
+            session?.takeIf { it.gatt === owner }?.let { fail(it, "GATT callback timeout") }
+        },
+        onQuarantined = { owner ->
+            // Keep isolation intact; expose the loss instead of silently showing frozen telemetry.
+            session?.takeIf { it.gatt === owner && ready(it) }?.let {
+                _state.update { state -> state.copy(telemetryDegraded = true) }
+            }
+        },
+    )
 
     private val _state = MutableStateFlow(CoolerLiveState())
     val state: StateFlow<CoolerLiveState> = _state.asStateFlow()
@@ -449,6 +458,11 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                     fail(s, "Missing cooler characteristics (1011/1012)")
                     return@dispatch
                 }
+                val capabilities = CoolerCapabilities.fromCharacteristics(
+                    available = s.characteristics.keys,
+                    writable = s.characteristics.values.filter(::writable).map { it.uuid }.toSet(),
+                )
+                _state.update { it.copy(capabilities = capabilities) }
                 s.initializing = true
                 armTimeout(s, INIT_TIMEOUT_MS, "Initialization timed out")
                 s.initJob = scope.launch {
@@ -536,7 +550,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             if (!owns(s)) return
             if (!subscribed) Log.w(TAG, "Optional subscription unavailable: $uuid")
         }
-        s.characteristics[CoolerBleConstants.COOLING_SWITCH_UUID]?.let { ch ->
+        s.characteristics[CoolerBleConstants.COOLING_SWITCH_UUID]?.takeIf(::writable)?.let { ch ->
             if (!owns(s)) return
             val ok = enqueueWrite(s, ch, byteArrayOf(CoolerBleConstants.COOLING_SWITCH_ON))
             if (!owns(s)) return
@@ -761,6 +775,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
     }
 
     fun setFanSpeed(percent: Int) = onMain {
+        if (!_state.value.manualLevelEnabled) return@onMain
         val command = command(Control.FAN, CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID) ?: return@onMain
         val type = _state.value.deviceType ?: return@onMain
         val clamped = percent.coerceIn(0, 100)
@@ -768,11 +783,14 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         _state.update { it.copy(pendingFanPercent = clamped) }
         scope.launch {
             try {
-                executeCommand(command, byteArrayOf(raw), 150) { it.copy(fanPercent = clamped) }
+                executeCommand(command, byteArrayOf(raw), 150) {
+                    it.copy(fanPercent = clamped, fanRaw = raw.toInt() and 0xFF)
+                }
             } finally {
                 if (fresh(command)) _state.update { it.copy(pendingFanPercent = null) }
             }
-        }    }
+        }
+    }
 
     fun setCooling(on: Boolean) = onMain {
         val command = command(Control.COOLING, CoolerBleConstants.COOLING_SWITCH_UUID) ?: return@onMain

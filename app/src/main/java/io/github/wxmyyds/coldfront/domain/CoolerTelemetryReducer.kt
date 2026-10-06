@@ -9,7 +9,9 @@ internal object CoolerTelemetryReducer {
     fun reduce(state: CoolerLiveState, uuid: UUID, value: ByteArray): Update? = when (uuid) {
         CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID -> temperature(state, value)
         CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID -> state.deviceType?.let { type ->
-            CoolerTelemetryParser.fanPercent(value, type)?.let { Update(state.copy(fanPercent = it)) }
+            CoolerTelemetryParser.fanPercent(value, type)?.let {
+                Update(state.copy(fanPercent = it, fanRaw = value[0].toInt() and 0xFF))
+            }
         }
         CoolerBleConstants.LIGHT_CONTROL_UUID -> RGBConfig.fromNotification(value, state.rgb)?.let {
             Update(state.copy(rgb = it))

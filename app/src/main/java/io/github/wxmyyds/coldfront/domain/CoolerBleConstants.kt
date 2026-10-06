@@ -80,6 +80,33 @@ object CoolerBleConstants {
 
     // —— 风扇调速换算:百分比 ↔ raw(逐型号范围) ——
 
+    /** Official 8 Pro raw boundaries, presented as 1..8 rather than firmware's 0..7. */
+    fun rawToGear8Pro(raw: Int): Int = when {
+        raw <= 42 -> 1
+        raw <= 48 -> 2
+        raw <= 54 -> 3
+        raw <= 60 -> 4
+        raw <= 66 -> 5
+        raw <= 70 -> 6
+        raw <= 74 -> 7
+        else -> 8
+    }
+
+    /** Even representatives survive the integer percentage round-trip; endpoints reach 40/80. */
+    fun gearToRaw8Pro(gear: Int): Int = when (gear.coerceIn(1, 8)) {
+        1 -> 40
+        2 -> 46
+        3 -> 52
+        4 -> 58
+        5 -> 64
+        6 -> 68
+        7 -> 72
+        else -> 80
+    }
+
+    fun gearToPercentage8Pro(gear: Int): Int =
+        rawToPercentage(gearToRaw8Pro(gear), CoolerDeviceType.JACKET_8_PRO)
+
     /** 百分比(0–100)→ 该型号 raw */
     fun percentageToRaw(percentage: Int, type: CoolerDeviceType): Int {
         val clamped = percentage.coerceIn(0, 100)

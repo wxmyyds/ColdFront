@@ -19,6 +19,7 @@ internal class GattOperationQueue(
     private val onTimeout: (owner: Any) -> Unit,
     private val spacingMs: Long = 60,
     private val retryDelayMs: Long = 120,
+    private val onQuarantined: (owner: Any) -> Unit = {},
 ) {
     enum class Kind { READ, WRITE, DESCRIPTOR, RSSI }
 
@@ -100,8 +101,10 @@ internal class GattOperationQueue(
                         // No retry, even if isCurrent has become false due to a newer intent.
                         // Android callbacks have no generation: quarantine this exact lane
                         // even after a late callback arrives. Other targets/kinds remain usable.
-                        if (poisonOnTimeout) onTimeout(owner)
-                        else markTimedOut(owner, target, kind)
+                        if (poisonOnTimeout) onTimeout(owner) else {
+                            markTimedOut(owner, target, kind)
+                            onQuarantined(owner)
+                        }
                         return@withContext Result(false)
                     }
                     result = callback

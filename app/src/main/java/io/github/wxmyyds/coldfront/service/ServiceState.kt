@@ -43,6 +43,15 @@ internal fun tileStartProfile(
     return active
 }
 
+/** Explicit activation/reconnect must replace a quarantined GATT, even if still CONNECTED. */
+internal fun serviceNeedsConnection(profile: CoolerProfile, state: CoolerLiveState): Boolean =
+    state.telemetryDegraded || !profile.matches(state) || state.connection !in setOf(
+        ConnectionState.CONNECTED, ConnectionState.CONNECTING, ConnectionState.DISCOVERING,
+    )
+
+internal fun CoolerProfile.matches(state: CoolerLiveState): Boolean =
+    macAddress.equals(state.deviceAddress, ignoreCase = true) && deviceType == state.deviceType
+
 /** Every visible notification field, including actions, participates in deduplication. */
 internal data class ServiceNotification(
     val text: String,
@@ -57,6 +66,7 @@ internal fun serviceNotification(
 ): ServiceNotification = ServiceNotification(
     text = when {
         state.isConnected && activationFailed -> strings.serviceControlFailed
+        state.isConnected && state.telemetryDegraded -> strings.telemetryDegradedTitle
         state.isConnected && state.smartOn -> strings.serviceAutoOn
         state.isConnected -> strings.serviceManual
         state.connection == ConnectionState.CONNECTING ||
@@ -65,5 +75,5 @@ internal fun serviceNotification(
         else -> strings.serviceReconnect
     },
     fanPercent = state.fanPercent,
-    showReconnect = !state.isConnected || activationFailed,
+    showReconnect = !state.isConnected || activationFailed || state.telemetryDegraded,
 )

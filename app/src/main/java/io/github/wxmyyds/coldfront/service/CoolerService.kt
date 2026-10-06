@@ -18,8 +18,6 @@ import io.github.wxmyyds.coldfront.ble.BlePermissionManager
 import io.github.wxmyyds.coldfront.ble.CoolerBleManager
 import io.github.wxmyyds.coldfront.data.ProfileRepository
 import io.github.wxmyyds.coldfront.data.SettingsRepository
-import io.github.wxmyyds.coldfront.domain.ConnectionState
-import io.github.wxmyyds.coldfront.domain.CoolerLiveState
 import io.github.wxmyyds.coldfront.domain.CoolerProfile
 import io.github.wxmyyds.coldfront.ui.i18n.AppStrings
 import io.github.wxmyyds.coldfront.ui.i18n.stringsFor
@@ -179,10 +177,9 @@ class CoolerService : Service() {
         target = profile
         activationFailed = false
         val current = ble.state.value
-        if (!profile.matches(current) || current.connection !in setOf(
-                ConnectionState.CONNECTED, ConnectionState.CONNECTING, ConnectionState.DISCOVERING,
-            )
-        ) ble.connectByAddress(profile.macAddress, profile.deviceType)
+        if (serviceNeedsConnection(profile, current)) {
+            ble.connectByAddress(profile.macAddress, profile.deviceType)
+        }
         activation = scope.launch {
             ble.state.filter { it.isConnected && profile.matches(it) }
                 .distinctUntilChangedBy { it.connectionSessionId }
@@ -308,6 +305,4 @@ class CoolerService : Service() {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 
-    private fun CoolerProfile.matches(state: CoolerLiveState): Boolean =
-        macAddress.equals(state.deviceAddress, ignoreCase = true) && deviceType == state.deviceType
 }

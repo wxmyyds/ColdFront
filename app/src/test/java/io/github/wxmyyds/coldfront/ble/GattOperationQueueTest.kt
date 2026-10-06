@@ -142,6 +142,63 @@ class GattOperationQueueTest {
     }
 
     @Test
+    fun `quarantine reports degradation once but keeps old callbacks isolated from a new owner`() = runTest {
+        val old = Any()
+        val replacement = Any()
+        val target = Any()
+        val degradedOwners = mutableListOf<Any>()
+        val queue = GattOperationQueue(
+            onTimeout = { error("Optional timeout must not poison owner") },
+            onQuarantined = { degradedOwners += it },
+        )
+        val timedOut = async {
+            queue.execute(old, target, GattOperationQueue.Kind.READ, 100, { true }, poisonOnTimeout = false) { true }
+        }
+        advanceUntilIdle()
+        assertFalse(timedOut.await().success)
+        assertEquals(listOf(old), degradedOwners)
+        assertFalse(queue.complete(old, target, GattOperationQueue.Kind.READ, success))
+        assertFalse(queue.execute(old, target, GattOperationQueue.Kind.READ, 100, { true }, poisonOnTimeout = false) {
+            error("Quarantined read must not reach the platform")
+        }.success)
+        assertEquals(listOf(old), degradedOwners)
+
+        queue.abort(old)
+        val resumed = async {
+            queue.execute(replacement, target, GattOperationQueue.Kind.READ, 100, { true }, poisonOnTimeout = false) { true }
+        }
+        runCurrent()
+        assertFalse(queue.complete(old, target, GattOperationQueue.Kind.READ, success))
+        assertFalse(resumed.isCompleted)
+        assertTrue(queue.complete(replacement, target, GattOperationQueue.Kind.READ, success))
+        advanceUntilIdle()
+        assertTrue(resumed.await().success)
+        assertEquals(listOf(old), degradedOwners)
+    }
+
+    @Test
+    fun `fatal timeout or explicitly rejected telemetry does not report quarantine`() = runTest {
+        val owner = Any()
+        val target = Any()
+        var fatalTimeouts = 0
+        val queue = GattOperationQueue(
+            onTimeout = { fatalTimeouts++ },
+            onQuarantined = { error("Only accepted optional timeouts report degradation") },
+        )
+        val fatal = async {
+            queue.execute(owner, target, GattOperationQueue.Kind.WRITE, 100, { true }) { true }
+        }
+        advanceUntilIdle()
+        assertFalse(fatal.await().success)
+        assertEquals(1, fatalTimeouts)
+        val rejected = async {
+            queue.execute(owner, target, GattOperationQueue.Kind.READ, 100, { true }, poisonOnTimeout = false) { false }
+        }
+        advanceUntilIdle()
+        assertFalse(rejected.await().success)
+    }
+
+    @Test
     fun `quarantine is scoped to owner identity target identity and kind`() = runTest {
         data class Token(val id: String)
         for (kind in GattOperationQueue.Kind.entries) {

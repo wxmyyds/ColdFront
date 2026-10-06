@@ -32,6 +32,8 @@ interface AppStrings {
     // —— 首页:独立控制 ——
     val homeCoolingSwitch: String
     val homeCoolingSwitchDesc: String
+    val telemetryDegradedTitle: String
+    val telemetryDegradedHint: String
     val homeSmart: String
     val homeSmartDesc: String
     val homeBoost: String
@@ -186,6 +188,8 @@ object ZhStrings : AppStrings {
 
     override val homeCoolingSwitch = "散热开关"
     override val homeCoolingSwitchDesc = "关闭后风扇全停"
+    override val telemetryDegradedTitle = "状态更新受限"
+    override val telemetryDegradedHint = "部分状态已停止更新，显示值可能已过期。请重新连接以恢复更新。"
     override val homeSmart = "智能温控"
     override val homeSmartDesc = "由散热器根据温度自动调节档位"
     override val homeBoost = "破坏神"
@@ -331,6 +335,8 @@ object EnStrings : AppStrings {
 
     override val homeCoolingSwitch = "Cooling switch"
     override val homeCoolingSwitchDesc = "Off stops the fan completely"
+    override val telemetryDegradedTitle = "Telemetry updates interrupted"
+    override val telemetryDegradedHint = "Some readings have stopped updating and may be out of date. Reconnect to restore updates."
     override val homeSmart = "Smart temp control"
     override val homeSmartDesc = "The cooler adjusts its level by itself"
     override val homeBoost = "Boost (Destruction God)"

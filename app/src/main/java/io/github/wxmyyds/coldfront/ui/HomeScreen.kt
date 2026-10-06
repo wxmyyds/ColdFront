@@ -34,6 +34,7 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -55,6 +56,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.wxmyyds.coldfront.domain.CoolerBleConstants
 import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.domain.CoolerLiveState
 import io.github.wxmyyds.coldfront.ui.component.AppMotion
@@ -143,45 +145,66 @@ fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
 
 // ───────────────────── 已连接 ─────────────────────
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
     val strings = LocalStrings.current
 
+    if (state.telemetryDegraded) {
+        Surface(
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        ) {
+            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(strings.telemetryDegradedTitle, style = MaterialTheme.typography.titleMedium)
+                Text(strings.telemetryDegradedHint, style = MaterialTheme.typography.bodyMedium)
+                OutlinedButton(
+                    onClick = { vm.reconnectTelemetry(state) },
+                    shapes = ButtonDefaults.shapes(),
+                ) { Text(strings.serviceReconnect) }
+            }
+        }
+    }
+
     TempHero(state)
 
-    SegmentedSwitchRow(
-        title = strings.homeCoolingSwitch,
-        summary = strings.homeCoolingSwitchDesc,
-        checked = state.coolingOn,
-        shapes = staticStandaloneRowShapes(),
-        onCheckedChange = vm::setCooling,
-        leadingContent = { RowIcon(Icons.Filled.AcUnit) },
-    )
+    if (state.capabilities.hasCoolingSwitch) {
+        SegmentedSwitchRow(
+            title = strings.homeCoolingSwitch,
+            summary = strings.homeCoolingSwitchDesc,
+            checked = state.coolingOn,
+            enabled = state.isConnected && state.capabilities.coolingControl,
+            shapes = staticStandaloneRowShapes(),
+            onCheckedChange = vm::setCooling,
+            leadingContent = { RowIcon(Icons.Filled.AcUnit) },
+        )
+    }
 
-    // 三个带说明的开关:分段选项列表(SegmentedGroup)——
+    // 按设备能力显示带说明的开关:分段选项列表(SegmentedGroup)——
     // 外角 16dp / 内角 4dp / 缝隙 / 触感反馈全部由组件统一处理
     SegmentedGroup {
-        item(key = "smart") {
+        item(key = "smart", visible = state.capabilities.smartControl && state.deviceType?.supportsAutoMode == true) {
             SegmentedSwitchRow(
                 title = strings.homeSmart,
                 summary = strings.homeSmartDesc,
                 checked = state.smartOn,
-                enabled = state.coolingOn,
+                enabled = state.isConnected && state.coolingAllowsControl,
                 onCheckedChange = { vm.setSmart(it) },
                 leadingContent = { RowIcon(Icons.Filled.AutoMode) },
             )
         }
-        item(key = "boost") {
+        item(key = "boost", visible = state.capabilities.boostControl) {
             SegmentedSwitchRow(
                 title = strings.homeBoost,
                 summary = strings.homeBoostDesc,
                 checked = state.boostOn,
-                enabled = state.coolingOn,
+                enabled = state.isConnected && state.coolingAllowsControl,
                 onCheckedChange = { vm.setBoost(it) },
                 leadingContent = { RowIcon(Icons.Filled.Bolt) },
             )
         }
-        item(key = "overcold") {
+        item(key = "overcold", visible = state.capabilities.protectionControl) {
             SegmentedSwitchRow(
                 title = strings.homeOvercold,
                 summary = strings.homeOvercoldDesc,
@@ -301,11 +324,11 @@ private fun MetricPill(icon: ImageVector, text: String, content: Color) {
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: AppStrings) {
-    val type = state.deviceType
-    val isGear = type?.generation == 8
+    val isGear = state.deviceType?.generation == 8
     val displayedPercent = state.pendingFanPercent ?: state.fanPercent
+    val displayedGear = state.fanGear ?: 1
 
-    if (state.coolingOn && state.smartOn) {
+    if (state.isConnected && state.capabilities.fanControl && state.coolingAllowsControl && state.smartOn) {
         Surface(
             shape = MaterialTheme.shapes.large,
             color = MaterialTheme.colorScheme.tertiaryContainer,
@@ -330,7 +353,7 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
         }
         return
     }
-    if (!state.coolingOn) return
+    if (!state.manualLevelEnabled) return
 
     Card(
         modifier = Modifier
@@ -355,7 +378,7 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
                 Text(strings.homeLevel, style = MaterialTheme.typography.titleMedium)
                 // 设备档位可能随实时回读更新，保持数值即时，避免每次遥测都重启动效。
                 Text(
-                    if (isGear) strings.homeLevelGear.format(levelToGear(displayedPercent))
+                    if (isGear) strings.homeLevelGear.format(displayedGear)
                     else strings.homeLevelPercent.format(displayedPercent),
                     style = EmphasizedTypography.headlineLarge,
                     color = MaterialTheme.colorScheme.primary,
@@ -364,7 +387,7 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
             // MD3E:Slider 走 SliderState(alpha28 起 Slider(value=…) 无状态重载已弃用)。
             // 拖动期间以滑条为准,松手后再由设备回读值同步,避免两边互相打架。
             var dragging by remember { mutableStateOf(false) }
-            val gear = levelToGear(displayedPercent).toFloat()
+            val gear = displayedGear.toFloat()
             val percent = displayedPercent.toFloat()
             val gearSlider = rememberSliderState(value = gear, steps = 6, trackRange = 1f..8f)
             val percentSlider = rememberSliderState(value = percent, trackRange = 0f..100f)
@@ -380,7 +403,7 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
                     onValueChange = {
                         dragging = true
                         gearSlider.value = it
-                        vm.setFanSpeed(gearToLevel(it.roundToInt()))
+                        vm.setFanSpeed(CoolerBleConstants.gearToPercentage8Pro(it.roundToInt()))
                     },
                     onValueChangeFinished = { dragging = false },
                     enabled = !state.smartOn,
@@ -486,11 +509,3 @@ private fun NotConnectedContent(strings: AppStrings, onAddDevice: () -> Unit) {
         }
     }
 }
-
-// ───────────────────── 工具 ─────────────────────
-
-/** 8 Pro:百分比 → 1..8 档 */
-private fun levelToGear(percent: Int): Int = ((percent + 12) / 13f).toInt().coerceIn(1, 8)
-
-/** 8 Pro:档位 → 百分比(中心值) */
-private fun gearToLevel(gear: Int): Int = ((gear - 0.5f) / 8f * 100f).roundToInt()
