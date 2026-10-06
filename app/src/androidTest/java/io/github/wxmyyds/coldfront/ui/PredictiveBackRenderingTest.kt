@@ -186,6 +186,48 @@ class PredictiveBackRenderingTest {
     }
 
     @Test
+    fun secondGestureAfterCompletedCancellationKeepsTheDetailOnTop() {
+        // A cancel runs NavHost's own cancellation animation (seek the transition back to zero,
+        // then snapTo the detail), and only once that completes is the parent's preview removed.
+        // A second gesture started after that must find the same layer order as the first: the
+        // detail on top, the parent stepping back underneath. This locks the regression where the
+        // second gesture rendered the layers reversed - the parent drawn over the detail.
+        setup()
+        openDetail()
+        gesture(BackEventCompat.EDGE_LEFT)
+        progress(0.7f, BackEventCompat.EDGE_LEFT)
+        rule.runOnUiThread { dispatcher.dispatchOnBackCancelled() }
+        // The cancellation animation runs fraction * totalDuration (<= 210ms for a 0.7 progress on
+        // a 300ms transition); 600ms leaves it fully settled before the second gesture starts.
+        frames(600)
+        rule.runOnIdle {
+            assertEquals("detail", nav.currentDestination?.route)
+            assertCentred(detail)
+            assertFalse("cancel must remove the preview parent", parent.isAttached)
+        }
+        gesture(BackEventCompat.EDGE_LEFT)
+        progress(0.5f, BackEventCompat.EDGE_LEFT)
+        assertSteppedBack(0.5f)
+        assertTravel("page must track the finger at 0.5f", (0.5f * viewport.size.width).toInt())
+        // The layer order itself: the detail's own pixels (red) must still cover the parent's
+        // (green) across the overlap region. Sampled inside the detail's rendered coverage, away
+        // from both edges, so the sample cannot land on the exposed parent strip.
+        val travel = renderedTravelX()
+        val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
+        val y = pixels.height / 2
+        val mid = ((travel + pixels.width) / 2).coerceAtMost(pixels.width - 1)
+        assertTrue(
+            "detail must be drawn over the parent (x=$mid r=${pixels[mid, y].red} g=${pixels[mid, y].green})",
+            pixels[mid, y].red > 0.9f,
+        )
+        assertTrue(
+            "parent must still be uncovered left of the page edge",
+            travel > 2 && pixels[travel - 2, y].green > 0.5f,
+        )
+        commitAndCheck()
+    }
+
+    @Test
     fun detailPreviewDoesNotReplayAnInterruptedTabAnimation() {
         selected.intValue = 0
         setup()
