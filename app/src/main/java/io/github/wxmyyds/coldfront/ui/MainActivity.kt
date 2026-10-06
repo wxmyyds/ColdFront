@@ -64,7 +64,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.wxmyyds.coldfront.ble.BlePermissionManager
 import io.github.wxmyyds.coldfront.data.AppSettings
-import io.github.wxmyyds.coldfront.ui.component.topLevelPageIndex
 import kotlinx.serialization.Serializable
 import top.yukonga.miuix.kmp.nav.core.NavCornerClipMode
 import top.yukonga.miuix.kmp.nav.core.NavDisplay
@@ -319,7 +318,7 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
     // Switching tabs stays inside Main: no navigation, so no transition and no predictive back.
     // The strip animates itself.
     val navigateToTab: (String) -> Unit = { route ->
-        topLevelPageIndex(route, tabRoutes)
+        tabRoutes.indexOf(route)
             .takeIf { it >= 0 }
             ?.let { selectedPage.intValue = it }
     }
