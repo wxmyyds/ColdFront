@@ -224,6 +224,11 @@ class PredictiveBackRenderingTest {
         // timing; if it never logs a frame, the layer is genuinely frozen across the second
         // gesture.
         frames(100)
+        android.util.Log.i(
+            "PBGDiag",
+            "second gesture: detail topLeft=${detail.localToRoot(Offset.Zero)} size=${detail.size} " +
+                "parent topLeft=${parent.localToRoot(Offset.Zero)} size=${parent.size}",
+        )
         assertSteppedBack(0.5f)
         android.util.Log.i(
             "PBGDiag",
