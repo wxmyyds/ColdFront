@@ -32,7 +32,6 @@ import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.domain.RGBConfig
 import io.github.wxmyyds.coldfront.domain.RgbWriteState
 import io.github.wxmyyds.coldfront.domain.RgbWriteStatus
-import io.github.wxmyyds.coldfront.domain.configurationReadComplete
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -92,6 +91,8 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         var controls = 0
         val telemetryRevision = mutableMapOf<UUID, Long>()
         val configurationRead = mutableSetOf<UUID>()
+        // Readable configuration characteristics to read back after connecting.
+        // Best-effort: a failed or unparsed read must not block CONNECTED.
         var requiredConfiguration = emptySet<UUID>()
         var lastTempUpdateMs = 0L
     }
@@ -564,24 +565,17 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             if (!owns(s)) return
             if (!subscribed) Log.w(TAG, "Optional subscription unavailable: $uuid")
         }
-        for (uuid in telemetryUuids) {
+        // Read back every discovered readable configuration once after connecting. A
+        // failed or unparsed reply never blocks CONNECTED: the corresponding control
+        // stays unknown/unavailable until a later read or notification confirms it.
+        for (uuid in s.requiredConfiguration) {
             if (!owns(s)) return
             val ch = s.characteristics[uuid] ?: continue
-            val ok = readIfReadable(s, ch, required = uuid in s.requiredConfiguration)
+            val ok = readIfReadable(s, ch, poisonOnTimeout = false)
             if (!owns(s)) return
-            if (!ok) {
-                if (uuid in s.requiredConfiguration) {
-                    fail(s, "Required configuration read unavailable: $uuid")
-                    return
-                }
-                Log.w(TAG, "Optional initial read unavailable: $uuid")
-            }
+            if (!ok) Log.w(TAG, "Initial configuration read unavailable: $uuid")
         }
         if (!owns(s)) return
-        if (!configurationReadComplete(s.requiredConfiguration, s.configurationRead)) {
-            fail(s, "Device configuration was not read back")
-            return
-        }
         s.timeoutJob?.cancel()
         _state.update { it.copy(connection = ConnectionState.CONNECTED) }
         if (!ready(s)) return
@@ -631,11 +625,12 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         ch: BluetoothGattCharacteristic,
         fresh: () -> Boolean = { true },
         poisonOnTimeout: Boolean = true,
-        required: Boolean = false,
     ): Boolean {
         val g = s.gatt ?: return false
         if (!owns(s) || !fresh()) return false
-        if (ch.properties and BluetoothGattCharacteristic.PROPERTY_READ == 0) return !required
+        // A missing READ property is a deliberate skip, not a failed read: the caller
+        // only asked because the characteristic might be readable.
+        if (ch.properties and BluetoothGattCharacteristic.PROPERTY_READ == 0) return true
         return operations.execute(g, ch, GattOperationQueue.Kind.READ, READ_TIMEOUT_MS,
             isCurrent = { owns(s) && s.characteristics[ch.uuid] === ch && fresh() },
             start = { g.readCharacteristic(ch) },
@@ -725,12 +720,20 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
 
     private fun handleData(s: Session, uuid: UUID, value: ByteArray) {
         if (!owns(s)) return
-        val update = CoolerTelemetryReducer.reduce(_state.value, uuid, value) ?: return
-        // Valid reports are authoritative even when they repeat the current value.
-        s.telemetryRevision[uuid] = (s.telemetryRevision[uuid] ?: 0L) + 1
-        if (update.temperatureReported) s.lastTempUpdateMs = SystemClock.elapsedRealtime()
+        // A device reply, read-back or notification, is authoritative confirmation that
+        // the characteristic was read — even when the payload's semantics are not yet
+        // parsed: the read itself is confirmed, only the displayed value stays unknown.
         s.configurationRead += uuid
-        _state.value = update.state.copy(confirmedConfiguration = s.configurationRead.toSet())
+        val update = CoolerTelemetryReducer.reduce(_state.value, uuid, value)
+        val next = if (update != null) {
+            // Valid reports are authoritative even when they repeat the current value.
+            s.telemetryRevision[uuid] = (s.telemetryRevision[uuid] ?: 0L) + 1
+            if (update.temperatureReported) s.lastTempUpdateMs = SystemClock.elapsedRealtime()
+            update.state
+        } else {
+            _state.value
+        }
+        _state.value = next.copy(confirmedConfiguration = s.configurationRead.toSet())
     }
 
     private class Command(
@@ -769,8 +772,9 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             )
             if (!fresh(command)) return false
             // A GATT write callback confirms delivery only. The device read-back remains the
-            // sole source of the published configuration value.
-            readIfReadable(s, command.characteristic, fresh = { fresh(command) })
+            // sole source of the published configuration value; its timeout must quarantine
+            // the lane, never kill an otherwise healthy session.
+            readIfReadable(s, command.characteristic, fresh = { fresh(command) }, poisonOnTimeout = false)
             return ok
         } finally {
             s.controls--
