@@ -58,6 +58,12 @@ internal fun AppNavHost(
         settleTo = if (topLevelIsCurrent) 1f else 0f,
     )
     CompositionLocalProvider(LocalBackGestureSettleProgress provides sharedSettleProgress) {
+        // Debug: log the shared progress value on every change to confirm the second gesture
+        // actually moves it (0 -> 0.5) as the parent's scrim implies.
+        val sharedValue = sharedSettleProgress.value
+        LaunchedEffect(sharedValue) {
+            android.util.Log.i("PBGDiag", "shared progress=$sharedValue")
+        }
         NavHost(
             navController = navController,
             startDestination = startDestination,
