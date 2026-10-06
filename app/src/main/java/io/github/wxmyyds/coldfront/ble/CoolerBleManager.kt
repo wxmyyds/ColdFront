@@ -753,7 +753,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                     }
                     ok
                 } else {
-                    readIfReadable(s, it, poisonOnTimeout = false)
+                    readIfReadable(s, ch, poisonOnTimeout = false)
                 }
             },
             temperatureStale = { SystemClock.elapsedRealtime() - s.lastTempUpdateMs > 6000 },
