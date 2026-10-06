@@ -213,33 +213,31 @@ class PredictiveBackRenderingTest {
         // "parent drawn over detail" (green wins in the overlap) from "detail never moved" (its
         // red stays wherever it was laid out) - the two failure modes look identical to travel
         // alone.
+        val travel = renderedTravelX()
+        val diagPixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
+        val y = diagPixels.height / 2
         val width = viewport.size.width
-        val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
-        val y = pixels.height / 2
         val cols = listOf(
             (0.2f * width).toInt(), (0.5f * width).toInt(), (0.7f * width).toInt(),
             (0.85f * width).toInt(), (0.95f * width).toInt(),
         )
         val samples = cols.joinToString(" | ") { c ->
-            val p = pixels[c.coerceIn(0, pixels.width - 1), y]
+            val p = diagPixels[c.coerceIn(0, diagPixels.width - 1), y]
             "x=$c r=${p.red} g=${p.green} b=${p.blue}"
         }
-        android.util.Log.i("PBGDiag", "second gesture: $samples travel=${renderedTravelX()}")
+        android.util.Log.i("PBGDiag", "second gesture: $samples travel=$travel")
         assertTravel("page must track the finger at 0.5f", (0.5f * viewport.size.width).toInt())
         // The layer order itself: the detail's own pixels (red) must still cover the parent's
         // (green) across the overlap region. Sampled inside the detail's rendered coverage, away
         // from both edges, so the sample cannot land on the exposed parent strip.
-        val travel = renderedTravelX()
-        val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
-        val y = pixels.height / 2
-        val mid = ((travel + pixels.width) / 2).coerceAtMost(pixels.width - 1)
+        val mid = ((travel + diagPixels.width) / 2).coerceAtMost(diagPixels.width - 1)
         assertTrue(
-            "detail must be drawn over the parent (x=$mid r=${pixels[mid, y].red} g=${pixels[mid, y].green})",
-            pixels[mid, y].red > 0.9f,
+            "detail must be drawn over the parent (x=$mid r=${diagPixels[mid, y].red} g=${diagPixels[mid, y].green})",
+            diagPixels[mid, y].red > 0.9f,
         )
         assertTrue(
             "parent must still be uncovered left of the page edge",
-            travel > 2 && pixels[travel - 2, y].green > 0.5f,
+            travel > 2 && diagPixels[travel - 2, y].green > 0.5f,
         )
         commitAndCheck()
     }
