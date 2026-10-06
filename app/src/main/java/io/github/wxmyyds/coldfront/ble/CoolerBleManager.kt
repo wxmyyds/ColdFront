@@ -51,12 +51,12 @@ import java.util.UUID
 private const val TAG = "CoolerBleManager"
 private val CCC_DESCRIPTOR_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 private const val OP_TIMEOUT_MS = 2500L
-private const val READ_TIMEOUT_MS = 1200L
+private const val READ_TIMEOUT_MS = 2500L
 private const val CONNECT_TIMEOUT_MS = 15000L
 private const val DISCOVERY_TIMEOUT_MS = 10000L
 private const val INIT_TIMEOUT_MS = 30000L
-/** 不可读固件上,写 0x11 灯光查询的最小间隔,避免每轮轮询都打扰设备 */
-private const val LIGHT_QUERY_INTERVAL_MS = 5000L
+/** 灯效未读到前的 read 重试间隔:大于 READ_TIMEOUT_MS,避免慢设备每次 read 都被超时打断 */
+private const val LIGHT_READ_RETRY_MS = 4000L
 
 data class ScanState(
     val scanning: Boolean = false,
@@ -97,7 +97,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         // Best-effort: a failed or unparsed read must not block CONNECTED.
         var requiredConfiguration = emptySet<UUID>()
         var lastTempUpdateMs = 0L
-        var lastLightQueryMs = 0L
+        var lastLightReadMs = 0L
     }
 
     private enum class Control { FAN, COOLING, SMART, BOOST, PROTECTION, RGB }
@@ -609,8 +609,6 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         value: ByteArray,
         onStart: () -> Unit = {},
         fresh: () -> Boolean = { true },
-        poisonOnTimeout: Boolean = true,
-        quarantineOnTimeout: Boolean = true,
     ): Boolean {
         val g = s.gatt ?: return false
         if (!writable(ch)) return false
@@ -626,8 +624,6 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                 @Suppress("DEPRECATION")
                 g.writeCharacteristic(ch)
             },
-            poisonOnTimeout = poisonOnTimeout,
-            quarantineOnTimeout = quarantineOnTimeout,
         ).success
     }
 
@@ -727,6 +723,8 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         // keep the light characteristic in the periodic pass so an early failed or timed
         // out read can be retried until the device reports a mode. Its timeout must not
         // quarantine the lane, or the one retry that could succeed would never fire.
+        // The retry is throttled above READ_TIMEOUT_MS so a slow firmware's read can
+        // complete instead of being starved by the 500ms poll cadence.
         val lightPending = _state.value.rgb == null
         val light = s.characteristics[CoolerBleConstants.LIGHT_CONTROL_UUID]
         val targets = buildList {
@@ -736,30 +734,32 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             )
             if (lightPending && light != null && readable(light)) add(light)
         }
-        val polled = pollTelemetry(
+        return pollTelemetry(
             targets = targets,
             temperatureTargets = listOf(CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID, CoolerBleConstants.STATUS_UUID)
                 .mapNotNull { s.characteristics[it] },
             isCurrent = { ready(s) },
             isReadable = { it.properties and BluetoothGattCharacteristic.PROPERTY_READ != 0 },
-            read = { readIfReadable(s, it, poisonOnTimeout = false,
-                quarantineOnTimeout = it.uuid != CoolerBleConstants.LIGHT_CONTROL_UUID) },
+            read = { ch ->
+                if (ch.uuid == CoolerBleConstants.LIGHT_CONTROL_UUID) {
+                    val now = SystemClock.elapsedRealtime()
+                    if (now - s.lastLightReadMs < LIGHT_READ_RETRY_MS) {
+                        return@pollTelemetry false
+                    }
+                    s.lastLightReadMs = now
+                    val ok = readIfReadable(s, ch, poisonOnTimeout = false, quarantineOnTimeout = false)
+                    if (!ok && _state.value.rgb == null) {
+                        Log.d(TAG, "LIGHT read not returned (timeout/rejected)")
+                    }
+                    ok
+                } else {
+                    readIfReadable(s, it, poisonOnTimeout = false)
+                }
+            },
             temperatureStale = { SystemClock.elapsedRealtime() - s.lastTempUpdateMs > 6000 },
             subscribe = { enableNotification(s, it, poisonOnTimeout = false) },
             onTemperatureRecovery = { s.lastTempUpdateMs = SystemClock.elapsedRealtime() - 4000 },
         )
-        // Firmware without a usable read of the light lane: periodically write the query
-        // byte so the device pushes its current effect over the subscribed notification
-        // instead. Also covers readable-but-silent lanes until a read succeeds.
-        if (lightPending && light != null && writable(light)) {
-            val now = SystemClock.elapsedRealtime()
-            if (now - s.lastLightQueryMs >= LIGHT_QUERY_INTERVAL_MS) {
-                s.lastLightQueryMs = now
-                enqueueWrite(s, light, byteArrayOf(CoolerBleConstants.LIGHT_QUERY_COMMAND),
-                    poisonOnTimeout = false, quarantineOnTimeout = false)
-            }
-        }
-        return polled
     }
 
     private fun handleData(s: Session, uuid: UUID, value: ByteArray) {
