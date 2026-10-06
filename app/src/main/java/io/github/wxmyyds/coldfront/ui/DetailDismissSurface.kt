@@ -170,6 +170,7 @@ internal fun DetailDismissSurface(
             observeBackGesture = isDismissible,
             settleTo = if (isLeaving) 1f else 0f,
         )
+    android.util.Log.i("PBGDiag", "detail surface: shared=${LocalBackGestureSettleProgress.current != null}")
     // Resolved in composition, where the insets and density are available, so a drag only reads the
     // State in the layer block and does not recompose the page every frame.
     val cornerRadius = rememberScreenCornerRadius()
