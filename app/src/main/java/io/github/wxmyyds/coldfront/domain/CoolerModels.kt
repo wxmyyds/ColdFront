@@ -52,16 +52,17 @@ data class RGBConfig(
     }
 
     companion object {
-        /** Parse complete RGB bytes only; mode-only replies preserve the last known color. */
+        /**
+         * ALWAYS_BRIGHT/BREATH_SINGLE carry a colour and need all three colour bytes: a
+         * mode-only reply is rejected rather than inventing a colour. Every other mode parses
+         * from the mode byte alone and keeps the previously known colour.
+         */
         fun fromNotification(value: ByteArray, previous: RGBConfig?): RGBConfig? {
             val effect = value.firstOrNull()?.let(LightEffect::fromCode) ?: return null
-            if ((effect == LightEffect.ALWAYS_BRIGHT || effect == LightEffect.BREATH_SINGLE) && value.size < 4) {
-                return null
-            }
+            val colourBearing = effect == LightEffect.ALWAYS_BRIGHT || effect == LightEffect.BREATH_SINGLE
+            if (colourBearing && value.size < 4) return null
             val base = previous ?: RGBConfig(effect)
-            return if (value.size >= 4 &&
-                (effect == LightEffect.ALWAYS_BRIGHT || effect == LightEffect.BREATH_SINGLE)
-            ) {
+            return if (colourBearing) {
                 RGBConfig(effect, value[1].toInt() and 0xFF, value[2].toInt() and 0xFF, value[3].toInt() and 0xFF)
             } else base.copy(effect = effect)
         }

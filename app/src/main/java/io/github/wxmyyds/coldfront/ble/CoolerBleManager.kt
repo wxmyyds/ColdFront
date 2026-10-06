@@ -96,7 +96,6 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         var discoveryRequested = false
         var initializing = false
         var controls = 0
-        val telemetryRevision = mutableMapOf<UUID, Long>()
         val configurationRead = mutableSetOf<UUID>()
         // Readable configuration characteristics to read back after connecting.
         // Best-effort: a failed or unparsed read must not block CONNECTED.
@@ -813,8 +812,6 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             maybeSendDefaultLight(s)
         }
         val next = if (update != null) {
-            // Valid reports are authoritative even when they repeat the current value.
-            s.telemetryRevision[uuid] = (s.telemetryRevision[uuid] ?: 0L) + 1
             if (update.temperatureReported) s.lastTempUpdateMs = SystemClock.elapsedRealtime()
             update.state
         } else {
