@@ -68,7 +68,6 @@ internal fun ParentScrimSurface(
             // leaving page's own settle.
             settleTo = if (isCovered) 0f else 1f,
         )
-    android.util.Log.i("PBGDiag", "parent surface: shared=${LocalBackGestureSettleProgress.current != null}")
     Box(
         modifier.fillMaxSize().graphicsLayer {
             // Read the State here per-frame rather than via a by-delegate local, so a drag does not

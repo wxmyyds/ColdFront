@@ -170,7 +170,6 @@ internal fun DetailDismissSurface(
             observeBackGesture = isDismissible,
             settleTo = if (isLeaving) 1f else 0f,
         )
-    android.util.Log.i("PBGDiag", "detail surface: shared=${LocalBackGestureSettleProgress.current != null}")
     // Resolved in composition, where the insets and density are available, so a drag only reads the
     // State in the layer block and does not recompose the page every frame.
     val cornerRadius = rememberScreenCornerRadius()
@@ -186,12 +185,7 @@ internal fun DetailDismissSurface(
                 // release to the settle spring. The page leaves toward the physical right, so its
                 // leading edge travels from 0 to one full width. During a push this progress is 0,
                 // so nothing shifts while the page is being entered.
-                // EXPERIMENT: translationX disabled to isolate NavHost's own displacement.
-                // translationX = progress.value * size.width
-                android.util.Log.i(
-                    "PBGDiag",
-                    "detail gl FRAME p=${progress.value} tx=$translationX size=${size.width}",
-                )
+                translationX = progress.value * size.width
                 // The page always leaves toward the physical right, so the exposed leading edge is
                 // always the physical left. SquircleLeadingShape rounds those two corners with the
                 // device's smooth continuous-corner curve; the trailing edge stays square.

@@ -5,7 +5,6 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,12 +39,7 @@ internal fun AppNavHost(
     // pixel-synchronised under real 60fps rendering, where two independent instances can disagree
     // by a frame and read as the pages drifting apart on release.
     val backStackEntry by navController.currentBackStackEntryAsState()
-    // The back stack emits a null seed on the very first frame of a cold start, before the graph
-    // has produced an entry. Resolve it to the start destination (which is top-level) exactly like
-    // MainActivity does: treating that frame as "no page" would initialise the settle direction to
-    // the covered value, then flip it to 1f once the start destination lands - one bogus settle
-    // animation on first launch.
-    val currentRoute = backStackEntry?.destination?.route ?: startDestination
+    val currentRoute = backStackEntry?.destination?.route
     val topLevelIsCurrent = isTopLevelDestination(currentRoute, topLevelRoutes)
     val sharedSettleProgress = rememberGestureSettleProgress(
         // Both roles observe exactly while a detail is on top: the leaving page is dismissible only
@@ -59,12 +53,6 @@ internal fun AppNavHost(
         settleTo = if (topLevelIsCurrent) 1f else 0f,
     )
     CompositionLocalProvider(LocalBackGestureSettleProgress provides sharedSettleProgress) {
-        // Debug: log the shared progress value on every change to confirm the second gesture
-        // actually moves it (0 -> 0.5) as the parent's scrim implies.
-        val sharedValue = sharedSettleProgress.value
-        LaunchedEffect(sharedValue) {
-            android.util.Log.i("PBGDiag", "shared progress=$sharedValue")
-        }
         NavHost(
             navController = navController,
             startDestination = startDestination,
@@ -106,14 +94,7 @@ internal fun AppNavHost(
                         predictiveBack, initialState.destination.route, targetState.destination.route,
                         topLevelRoutes,
                     )
-                ) {
-                    android.util.Log.i(
-                        "PBGDiag",
-                        "popExit: initial=${initialState.destination.route} target=${targetState.destination.route} " +
-                            "predictiveBack=$predictiveBack",
-                    )
-                    predictiveBackExit()
-                } else ExitTransition.None
+                ) predictiveBackExit() else ExitTransition.None
             },
             builder = builder,
         )
