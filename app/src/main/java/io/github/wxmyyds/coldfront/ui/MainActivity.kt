@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.core.view.WindowCompat
@@ -61,16 +62,16 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
 import io.github.wxmyyds.coldfront.ble.BlePermissionManager
 import io.github.wxmyyds.coldfront.data.AppSettings
-import io.github.wxmyyds.coldfront.ui.component.isSecondaryDestination
-import io.github.wxmyyds.coldfront.ui.component.showsPrimaryNavigation
 import io.github.wxmyyds.coldfront.ui.component.topLevelPageIndex
+import kotlinx.serialization.Serializable
+import top.yukonga.miuix.kmp.nav.core.NavCornerClipMode
+import top.yukonga.miuix.kmp.nav.core.NavDisplay
+import top.yukonga.miuix.kmp.nav.core.NavDisplayEffects
+import top.yukonga.miuix.kmp.nav.core.NavKey
+import top.yukonga.miuix.kmp.nav.core.rememberNavController
+import top.yukonga.miuix.kmp.nav.transition.NavTransitions
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 import io.github.wxmyyds.coldfront.ui.i18n.rememberStrings
 import io.github.wxmyyds.coldfront.ui.theme.BrandSeed
@@ -213,15 +214,21 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private object Routes {
-    /** The single entry that hosts all four primary destinations as a pager. */
-    const val MAIN = "main"
-    const val SCAN = "scan"
-    const val ABOUT = "about"
-}
+/**
+ * Destinations owned by miuix-nav. [Main] hosts the four tabs; everything else is a detail page
+ * drawn above it. Data objects keep `rememberSaveable` stable across process death.
+ */
+@Serializable
+private sealed interface AppRoute : NavKey {
+    @Serializable
+    data object Main : AppRoute
 
-/** Kept in one place so the NavHost and the not-yet-resolved route can never disagree. */
-private const val NavHostStartDestination = Routes.MAIN
+    @Serializable
+    data object Scan : AppRoute
+
+    @Serializable
+    data object About : AppRoute
+}
 
 /**
  * The four primary tabs, inside the top-level destination.
@@ -268,13 +275,11 @@ private object TabRoutes {
     const val SETTINGS = "settings"
 }
 
-@OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
-    val nav = rememberNavController()
+    val nav = rememberNavController<AppRoute>(AppRoute.Main)
     val strings = LocalStrings.current
-    val backStack by nav.currentBackStackEntryAsState()
-    val current = backStack?.destination
+    val current = nav.backStack.lastOrNull()
 
     // 连接成功后自动离开扫描页,回主页看状态(避免连上后停在列表里像「没反应」)
     val liveState by vm.liveState.collectAsStateWithLifecycle()
@@ -285,14 +290,15 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
     LaunchedEffect(connectionKey) {
         if (shouldLeaveScanOnConnection(
                 connectionKey,
-                isScanDestination = current?.hierarchy?.any { it.route == Routes.SCAN } == true,
+                isScanDestination = current == AppRoute.Scan,
             )
         ) {
-            nav.navigate(Routes.MAIN) {
-                popUpTo(nav.graph.findStartDestination().id)
-                launchSingleTop = true
-            }
+            nav.popUntil { it == AppRoute.Main }
         }
+    }
+
+    val open = { route: AppRoute ->
+        if (nav.backStack.lastOrNull() != route) nav.push(route)
     }
 
     val items: List<Triple<String, ImageVector, () -> String>> = remember(strings) {
@@ -305,19 +311,13 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
     }
     // The four tabs identify pages inside the pager, so they are not navigation destinations.
     val tabRoutes = remember(items) { items.map { it.first } }
-    // For the NavHost, MAIN is the only primary destination: everything else is a detail page with
-    // a real parent underneath it. Keying the transitions on this is what makes the parent a page
-    // that can stay still, instead of something that has to be special-cased per route.
-    val navTopLevelRouteSet = remember { setOf(Routes.MAIN) }
-
-    val currentRoute = current?.route
-    // The four primary tabs are pages inside MAIN, not destinations of their own, so the selected
+    // The four primary tabs are pages inside Main, not destinations of their own, so the selected
     // tab is its own state. It survives a push of a secondary page, which is what keeps the tab
     // strip showing the same page underneath after returning.
     val selectedPage = rememberSaveable { mutableIntStateOf(0) }
 
-    // Switching tabs stays inside MAIN: no navigation, so no NavHost transition and no predictive
-    // back. The strip animates itself.
+    // Switching tabs stays inside Main: no navigation, so no transition and no predictive back.
+    // The strip animates itself.
     val navigateToTab: (String) -> Unit = { route ->
         topLevelPageIndex(route, tabRoutes)
             .takeIf { it >= 0 }
@@ -325,23 +325,11 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
     }
 
     // Use existing foundation/Material3 APIs, without adding a window-size dependency.
-    // Keep one NavHost at the same composition location across window resizing.
+    // Keep one NavDisplay at the same composition location across window resizing.
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val useRail = maxWidth >= 600.dp
-        // Which layer is current, from the route alone. A null route means the back stack has not
-        // emitted yet, which is the first frame of a cold start; the graph's start destination is a
-        // top-level page, so resolve to it rather than treating the frame as "no page".
-        val topLevelIsCurrent = showsPrimaryNavigation(
-            currentRoute ?: NavHostStartDestination,
-            navTopLevelRouteSet,
-        )
-        // True while a detail page is the one being dismissed, i.e. the gesture pops back onto a
-        // top-level page. Resolved from the navigation layer, so any future detail page is covered
-        // without naming it.
-        val currentIsDetail = isSecondaryDestination(
-            currentRoute ?: NavHostStartDestination,
-            navTopLevelRouteSet,
-        )
+        val topLevelIsCurrent = current == null || current == AppRoute.Main
+        val cornerRadius = rememberScreenCornerRadius()
         val chrome = @Composable {
             if (!useRail) {
                     NavigationBar(
@@ -369,7 +357,7 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                         .semantics { isTraversalGroup = true },
                     containerColor = MaterialTheme.colorScheme.background,
                 ) {
-                    // Scroll only the rail contents: keep system insets and the sibling NavHost fixed.
+                    // Scroll only the rail contents: keep system insets and the sibling page fixed.
                     Column(
                         modifier = Modifier.verticalScroll(rememberScrollState()),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -390,72 +378,59 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
         }
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-                AppNavHost(
+                NavDisplay(
                     navController = nav,
-                    startDestination = NavHostStartDestination,
-                    topLevelRoutes = navTopLevelRouteSet,
-                    predictiveBack = predictiveBack,
                     modifier = Modifier.widthIn(max = 840.dp).fillMaxSize()
                         .semantics { isTraversalGroup = true },
-                    builder = {
-                        composable(Routes.MAIN) {}
-                        composable(Routes.SCAN) {}
-                        composable(Routes.ABOUT) {}
-                    },
-                    destinationContent = { entry ->
-                        when (entry.destination.route) {
-                        Routes.MAIN -> ParentScrimSurface(
-                            isCovered = !topLevelIsCurrent,
-                            observeBackGesture = predictiveBack,
-                        ) {
-                            if (useRail) {
-                                Row(Modifier.fillMaxSize()) {
-                                    Box(Modifier.weight(1f).fillMaxHeight()) {
-                                        MainPage(
-                                            vm = vm,
-                                            settings = settings,
-                                            isActive = topLevelIsCurrent,
-                                            selectedPage = selectedPage.intValue,
-                                            onSelectPage = { selectedPage.intValue = it },
-                                            onOpenScan = { nav.navigate(Routes.SCAN) { launchSingleTop = true } },
-                                            onOpenAbout = { nav.navigate(Routes.ABOUT) { launchSingleTop = true } },
-                                        )
-                                    }
-                                    chrome()
+                    transition = NavTransitions.MiuixDefault,
+                    effects = NavDisplayEffects(
+                        cornerClipRadius = cornerRadius,
+                        cornerClipMode = NavCornerClipMode.Leading,
+                        dimAmount = 0.5f,
+                    ),
+                ) {
+                    entry<AppRoute.Main> {
+                        if (useRail) {
+                            Row(Modifier.fillMaxSize()) {
+                                Box(Modifier.weight(1f).fillMaxHeight()) {
+                                    MainPage(
+                                        vm = vm,
+                                        settings = settings,
+                                        isActive = topLevelIsCurrent,
+                                        selectedPage = selectedPage.intValue,
+                                        onSelectPage = { selectedPage.intValue = it },
+                                        onOpenScan = { open(AppRoute.Scan) },
+                                        onOpenAbout = { open(AppRoute.About) },
+                                    )
                                 }
-                            } else {
-                                Column(Modifier.fillMaxSize()) {
-                                    Box(Modifier.weight(1f).fillMaxWidth()) {
-                                        MainPage(
-                                            vm = vm,
-                                            settings = settings,
-                                            isActive = topLevelIsCurrent,
-                                            selectedPage = selectedPage.intValue,
-                                            onSelectPage = { selectedPage.intValue = it },
-                                            onOpenScan = { nav.navigate(Routes.SCAN) { launchSingleTop = true } },
-                                            onOpenAbout = { nav.navigate(Routes.ABOUT) { launchSingleTop = true } },
-                                        )
-                                    }
-                                    chrome()
+                                chrome()
+                            }
+                        } else {
+                            Column(Modifier.fillMaxSize()) {
+                                Box(Modifier.weight(1f).fillMaxWidth()) {
+                                    MainPage(
+                                        vm = vm,
+                                        settings = settings,
+                                        isActive = topLevelIsCurrent,
+                                        selectedPage = selectedPage.intValue,
+                                        onSelectPage = { selectedPage.intValue = it },
+                                        onOpenScan = { open(AppRoute.Scan) },
+                                        onOpenAbout = { open(AppRoute.About) },
+                                    )
                                 }
+                                chrome()
                             }
                         }
-                        Routes.SCAN -> DetailDismissSurface(
-                            isDismissible = currentIsDetail && predictiveBack,
-                            isLeaving = !currentIsDetail,
-                        ) {
-                            AddDeviceScreen(vm, onBack = { nav.popBackStack() })
-                        }
-                        Routes.ABOUT -> DetailDismissSurface(
-                            isDismissible = currentIsDetail && predictiveBack,
-                            isLeaving = !currentIsDetail,
-                        ) {
-                            AboutScreen(onBack = { nav.popBackStack() })
-                        }
-                        else -> Unit
-                        }
-                    },
-                )
+                    }
+                    entry<AppRoute.Scan> {
+                        if (!predictiveBack) BackHandler { nav.pop() }
+                        AddDeviceScreen(vm, onBack = { nav.pop() })
+                    }
+                    entry<AppRoute.About> {
+                        if (!predictiveBack) BackHandler { nav.pop() }
+                        AboutScreen(onBack = { nav.pop() })
+                    }
+                }
             }
         }
     }

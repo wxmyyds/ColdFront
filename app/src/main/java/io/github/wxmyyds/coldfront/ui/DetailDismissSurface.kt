@@ -2,18 +2,12 @@ package io.github.wxmyyds.coldfront.ui
 
 import android.os.Build
 import android.view.RoundedCorner
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Density
@@ -124,75 +118,4 @@ internal fun rememberScreenCornerRadius(): Dp {
     }
     val radiusPx = systemRadius ?: (DetailDismissCornerRadius.value * density).toInt()
     return (radiusPx / density).dp
-}
-
-/**
- * Wraps a secondary page so it reads as a surface that is being pushed away by the back gesture.
- *
- * NavHost drives the page's *position* with the real gesture progress, but the transition API
- * cannot round the page's corners - its graphics-layer hook is internal - so the corner is applied
- * here, on the page's own root, from the same progress value.
- *
- * The radius is scaled by progress and is exactly zero when no gesture is running, so a page at
- * rest keeps its ordinary full-bleed rectangular shape and this changes nothing until the user
- * actually starts dragging.
- *
- * Only the leading corners are rounded: the trailing edge travels off-screen, so rounding it would
- * be invisible, and a rounded trailing edge is what makes a page look like it shrank rather than
- * moved.
- *
- * @param isDismissible whether a back gesture on this page would dismiss it, and so whether this
- * page should react to the gesture at all. `false` for the page being uncovered: it is not what the
- * gesture dismisses, but it still has to brighten while the gesture runs.
- *
- * @param isLeaving whether a gesture has already dismissed this page, so it is on its way out
- * rather than being cancelled. This is read from the navigation layer rather than from the gesture
- * because [androidx.navigationevent.NavigationEventTransitionState] cannot express it: the
- * dispatcher goes back to `Idle` for a commit and for a cancel alike, so the two are
- * indistinguishable from progress alone. A leaving page keeps its corner until it is gone; a
- * cancelled one un-rounds as it slides back.
- */
-@Composable
-internal fun DetailDismissSurface(
-    isDismissible: Boolean,
-    isLeaving: Boolean,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
-) {
-    // Settles rather than tracks: the dispatcher zeroes progress the instant the finger lifts, so
-    // a raw read would snap this page square while it was still visibly sliding away.
-    //
-    // Reads the shared gesture progress when [AppNavHost] provides one, so this page and the parent
-    // underneath it animate on a single clock (see [LocalBackGestureSettleProgress]); falls back to
-    // its own instance when called directly (e.g. in tests) so that path stays self-contained.
-    val progress = LocalBackGestureSettleProgress.current
-        ?: rememberGestureSettleProgress(
-            observeBackGesture = isDismissible,
-            settleTo = if (isLeaving) 1f else 0f,
-        )
-    // Resolved in composition, where the insets and density are available, so a drag only reads the
-    // State in the layer block and does not recompose the page every frame.
-    val cornerRadius = rememberScreenCornerRadius()
-    Box(
-        modifier
-            .fillMaxSize()
-            .graphicsLayer {
-                // Read the State, not a by-delegate local, so a drag does not recompose the page.
-                val radius = cornerRadius.toPx() * progress.value
-                // The page's own slide is a graphics layer, not a NavHost transition. NavHost keeps
-                // the page with a fixed-duration keep-alive exit and does not move it, so the drag
-                // axis stays linear (it seeks the raw finger progress) while this layer can hand the
-                // release to the settle spring. The page leaves toward the physical right, so its
-                // leading edge travels from 0 to one full width. During a push this progress is 0,
-                // so nothing shifts while the page is being entered.
-                translationX = progress.value * size.width
-                // The page always leaves toward the physical right, so the exposed leading edge is
-                // always the physical left. SquircleLeadingShape rounds those two corners with the
-                // device's smooth continuous-corner curve; the trailing edge stays square.
-                shape = if (radius > 0f) SquircleLeadingShape(radius) else RectangleShape
-                clip = radius > 0f
-            }
-    ) {
-        content()
-    }
 }

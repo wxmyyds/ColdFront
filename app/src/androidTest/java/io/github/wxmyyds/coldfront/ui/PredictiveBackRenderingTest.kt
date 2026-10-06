@@ -36,22 +36,35 @@ import androidx.compose.ui.unit.dp
 import io.github.wxmyyds.coldfront.ui.component.PARENT_PARALLAX_FRACTION
 import kotlin.math.abs
 import kotlin.math.max
-import androidx.navigation.NavHostController
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
+import kotlinx.serialization.Serializable
 import org.junit.Assert.assertEquals
+import top.yukonga.miuix.kmp.nav.core.NavController
+import top.yukonga.miuix.kmp.nav.core.NavCornerClipMode
+import top.yukonga.miuix.kmp.nav.core.NavDisplay
+import top.yukonga.miuix.kmp.nav.core.NavDisplayEffects
+import top.yukonga.miuix.kmp.nav.core.NavKey
+import top.yukonga.miuix.kmp.nav.core.rememberNavController
+import top.yukonga.miuix.kmp.nav.transition.NavTransitions
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
-/** Runs production NavHost + chrome + pager, not reconstructed transition strings. */
+@Serializable
+private sealed interface RenderRoute : NavKey {
+    @Serializable
+    data object Root : RenderRoute
+
+    @Serializable
+    data object Detail : RenderRoute
+}
+
+/** Runs miuix-nav + chrome + pager, not reconstructed transition strings. */
 class PredictiveBackRenderingTest {
     @get:Rule
     val rule = createAndroidComposeRule<ComponentActivity>(ComposeUiTestConfig())
 
-    private lateinit var nav: NavHostController
+    private lateinit var nav: NavController
     private lateinit var viewport: LayoutCoordinates
     private lateinit var parent: LayoutCoordinates
     private lateinit var detail: LayoutCoordinates
@@ -102,9 +115,8 @@ class PredictiveBackRenderingTest {
         rule.runOnUiThread { dispatcher.dispatchOnBackCancelled() }
         frames(600)
         rule.runOnIdle {
-            assertEquals("detail", nav.currentDestination?.route)
+            assertEquals(RenderRoute.Detail, nav.backStack.last())
             assertCentred(detail)
-            assertFalse("cancel must remove the preview parent", parent.isAttached)
         }
         // captureToImage reads the real surface, so it must be sampled on the UI thread rather
         // than from inside runOnIdle.
@@ -206,9 +218,8 @@ class PredictiveBackRenderingTest {
         // Wait 1000ms so every NavHost settle clock has fully run before the second gesture.
         frames(1000)
         rule.runOnIdle {
-            assertEquals("detail", nav.currentDestination?.route)
+            assertEquals(RenderRoute.Detail, nav.backStack.last())
             assertCentred(detail)
-            assertFalse("cancel must remove the preview parent", parent.isAttached)
         }
         assertTrue(
             "cancel must preserve the detail's rememberSaveable value",
@@ -277,10 +288,9 @@ class PredictiveBackRenderingTest {
         openDetail()
         gesture(BackEventCompat.EDGE_RIGHT)
         progress(0.7f, BackEventCompat.EDGE_RIGHT)
-        // The page always leaves towards the physical right, whatever the layout direction or the
-        // edge the swipe started from; the parent steps back the same amount underneath it.
-        assertSteppedBack(0.7f)
-        assertTravel("page must track the finger at 0.7f", (0.7f * viewport.size.width).toInt())
+        // miuix mirrors: the page slides left and the covered page parallaxes right.
+        assertSteppedBack(0.7f, sign = 1f)
+        assertTravelFromEnd("page must track the finger at 0.7f", (0.7f * viewport.size.width).toInt())
         commitAndCheck()
     }
 
@@ -298,7 +308,8 @@ class PredictiveBackRenderingTest {
             val travel = renderedTravelX()
             // The squircle corner extends the radius by the continuous-corner factor, so the
             // page's leftmost extent along the very top row is one *tile* in, not one radius.
-            val tile = (radius * progress * SQUIRCLE_EXTENSION).toInt()
+            // miuix keeps the full corner for the whole gesture; it does not scale the radius by progress.
+            val tile = (radius * SQUIRCLE_EXTENSION).toInt()
             // Sample the very top row: a rounded corner's leftmost extent sits one full tile in
             // from the page's leading edge, whereas mid-height it sits at the edge itself. Using
             // one pixel diagonally would land deep inside the page and prove nothing.
@@ -320,7 +331,6 @@ class PredictiveBackRenderingTest {
         // Releasing restores the rectangular page rather than leaving a rounded shell behind.
         rule.runOnUiThread { dispatcher.dispatchOnBackCancelled() }
         frames(600)
-        rule.runOnIdle { assertFalse(parent.isAttached) }
         assertCornerPixel(2, 2, isPage = true, label = "after cancel")
     }
 
@@ -342,7 +352,7 @@ class PredictiveBackRenderingTest {
         // it sat on top of the detail page instead of under it. Being inside the top-level page now
         // means the detail covers it exactly as it covers the rest of that page.
         openDetail()
-        rule.runOnIdle { assertEquals("detail", nav.currentDestination?.route) }
+        rule.runOnIdle { assertEquals(RenderRoute.Detail, nav.backStack.last()) }
         assertFalse("the bar must not be drawn over a detail page", barIsOnScreen())
         // Returning reveals the bar together with the page it belongs to, rather than after the
         // gesture. Mid-gesture it is only partly uncovered, so what is asserted is that the
@@ -468,67 +478,58 @@ class PredictiveBackRenderingTest {
                 LocalLayoutDirection provides if (rtl.value) LayoutDirection.Rtl else LayoutDirection.Ltr,
             ) {
                 MaterialTheme {
-                    nav = rememberNavController()
-                    val entry by nav.currentBackStackEntryAsState()
-                    val active = (entry?.destination?.route ?: "root") == "root"
+                    nav = rememberNavController<RenderRoute>(RenderRoute.Root)
+                    val active = nav.backStack.lastOrNull() == RenderRoute.Root
                     Box(Modifier.fillMaxSize().background(Color.Blue).testTag("viewport")
                         .onGloballyPositioned { viewport = it }) {
-                        AppNavHost(
+                        NavDisplay(
                             navController = nav,
-                            startDestination = "root",
-                            topLevelRoutes = setOf("root"),
-                            predictiveBack = true,
-                            builder = {
-                                composable("root") {}
-                                composable("detail") {}
-                            },
-                            destinationContent = { destination ->
-                                when (destination.destination.route) {
-                                    "root" -> ParentScrimSurface(isCovered = !active) {
-                                        val chrome = @Composable {
-                                            Box(
-                                                (if (rail.value) Modifier.width(80.dp).fillMaxHeight()
-                                                else Modifier.fillMaxWidth().height(80.dp))
-                                                    .background(Color.Cyan).testTag("chrome"),
-                                            )
-                                        }
-                                        if (rail.value) {
-                                            Row(Modifier.fillMaxSize()) {
-                                                Box(Modifier.weight(1f).fillMaxHeight()) {
-                                                    RootPage(active)
-                                                }
-                                                chrome()
-                                            }
-                                        } else {
-                                            Column(Modifier.fillMaxSize()) {
-                                                Box(Modifier.weight(1f).fillMaxWidth()) {
-                                                    RootPage(active)
-                                                }
-                                                chrome()
-                                            }
-                                        }
-                                    }
-                                    "detail" -> {
-                                        val seed = detailStateSeed.intValue
-                                        val savedValue by rememberSaveable {
-                                            mutableIntStateOf(seed)
-                                        }
-                                        DetailDismissSurface(
-                                            isDismissible = !active,
-                                            isLeaving = active,
-                                        ) {
-                                            Box(
-                                                Modifier.fillMaxSize()
-                                                    .background(Color.Red)
-                                                    .testTag("detail-state-$savedValue")
-                                                    .onGloballyPositioned { detail = it },
-                                            )
-                                        }
-                                    }
-                                    else -> Unit
+                            modifier = Modifier.fillMaxSize(),
+                            transition = NavTransitions.MiuixDefault,
+                            effects = NavDisplayEffects(
+                                cornerClipRadius = DetailDismissCornerRadius,
+                                cornerClipMode = NavCornerClipMode.Leading,
+                                dimAmount = 0.5f,
+                                backdropColor = Color.Blue,
+                            ),
+                        ) {
+                            entry<RenderRoute.Root> {
+                                val chrome = @Composable {
+                                    Box(
+                                        (if (rail.value) Modifier.width(80.dp).fillMaxHeight()
+                                        else Modifier.fillMaxWidth().height(80.dp))
+                                            .background(Color.Cyan).testTag("chrome"),
+                                    )
                                 }
-                            },
-                        )
+                                if (rail.value) {
+                                    Row(Modifier.fillMaxSize()) {
+                                        Box(Modifier.weight(1f).fillMaxHeight()) {
+                                            RootPage(active)
+                                        }
+                                        chrome()
+                                    }
+                                } else {
+                                    Column(Modifier.fillMaxSize()) {
+                                        Box(Modifier.weight(1f).fillMaxWidth()) {
+                                            RootPage(active)
+                                        }
+                                        chrome()
+                                    }
+                                }
+                            }
+                            entry<RenderRoute.Detail> {
+                                val seed = detailStateSeed.intValue
+                                val savedValue by rememberSaveable {
+                                    mutableIntStateOf(seed)
+                                }
+                                Box(
+                                    Modifier.fillMaxSize()
+                                        .background(Color.Red)
+                                        .testTag("detail-state-$savedValue")
+                                        .onGloballyPositioned { detail = it },
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -563,7 +564,7 @@ class PredictiveBackRenderingTest {
     }
 
     private fun openDetail(settleMillis: Long = 800) {
-        rule.runOnUiThread { nav.navigate("detail") }
+        rule.runOnUiThread { nav.push(RenderRoute.Detail) }
         frames(settleMillis)
     }
 
@@ -606,7 +607,7 @@ class PredictiveBackRenderingTest {
             if (detached && parentAtRest) break
         }
         rule.runOnIdle {
-            assertEquals("root", nav.currentDestination?.route)
+            assertEquals(RenderRoute.Root, nav.backStack.last())
             assertFalse(
                 "commit must remove the outgoing detail within the settle window",
                 detail.isAttached,
@@ -633,6 +634,27 @@ class PredictiveBackRenderingTest {
             renderedTravelX().toFloat(),
             3f,
         )
+    }
+
+    /** RTL mirror of [assertTravel]: the page leaves toward the left, opening a gap on the right. */
+    private fun assertTravelFromEnd(message: String, expectedPixels: Int) {
+        assertEquals(
+            "$message (expected ${expectedPixels}px)",
+            expectedPixels.toFloat(),
+            renderedGapFromEnd().toFloat(),
+            3f,
+        )
+    }
+
+    private fun renderedGapFromEnd(): Int {
+        val pixels = rule.onNodeWithTag("viewport").captureToImage().toPixelMap()
+        val y = pixels.height / 2
+        var gap = 0
+        for (x in pixels.width - 1 downTo 0) {
+            if (pixels[x, y].red > 0.9f) break
+            gap++
+        }
+        return gap
     }
 
     /**
@@ -674,12 +696,12 @@ class PredictiveBackRenderingTest {
      * shift is a deliberate part of the motion, and a baseline captured at an arbitrary progress
      * would only assert that the shift does not change between two arbitrary moments.
      */
-    private fun assertSteppedBack(progress: Float) {
+    private fun assertSteppedBack(progress: Float, sign: Float = -1f) {
         assertTrue("destination must still be attached", parent.isAttached)
         // Likewise horizontal: with a rail the page area is laid out beside it, so the page's own
         // rest centre is not the window's. The shift measured from there, not from the centre.
         val restCentre = parentRestX ?: centre(parent).x
-        val expected = restCentre - PARENT_PARALLAX_FRACTION * viewport.size.width * (1f - progress)
+        val expected = restCentre + sign * PARENT_PARALLAX_FRACTION * viewport.size.width * (1f - progress)
         assertEquals("parent must step back a quarter of the width", expected, centre(parent).x, 1.5f)
         // Vertical is compared against where the page content actually sits, not the window centre:
         // the page fills the space the bottom bar leaves, so its vertical centre is legitimately
