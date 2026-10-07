@@ -799,7 +799,8 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         // the characteristic was read — even when the payload's semantics are not yet
         // parsed: the read itself is confirmed, only the displayed value stays unknown.
         s.configurationRead += uuid
-        val update = CoolerTelemetryReducer.reduce(_state.value, uuid, value)
+        val previous = _state.value
+        val update = CoolerTelemetryReducer.reduce(previous, uuid, value)
         // Official refreshLightModeView else-branch: a non-empty 0x1013 reply whose
         // effect byte is not a known mode (1/2/3/4/6) cannot be displayed, so the
         // official app pushes the default effect to bring the device to a known state.
@@ -815,9 +816,42 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             if (update.temperatureReported) s.lastTempUpdateMs = SystemClock.elapsedRealtime()
             update.state
         } else {
-            _state.value
+            previous
         }
-        _state.value = next.copy(confirmedConfiguration = s.configurationRead.toSet())
+        val committed = next.copy(confirmedConfiguration = s.configurationRead.toSet())
+        _state.value = committed
+        // 官方 Jacket8ProActivityV3.N4 同样只在限档值发生变化时动作:重复上报不会重复下发。
+        if (previous.fanLimit != committed.fanLimit) enforcePowerLimit()
+    }
+
+    /**
+     * 官方 Jacket8ProActivityV3.N4:设备上报的供电功率限档降到"不限档"以下时,把当前档位压回
+     * 限档并下发(官方 `LimitedSeekBar.setProgress(限档)` → 回调 → `viewModel.y1(e(限档))`,即真正
+     * 写 0x1012),同时自动关闭破坏神(`CustomSwitchView.c()` → 0x1017=0)。
+     *
+     * 与官方的一处差异:智能温控开启时只关破坏神,不写风扇转速——此时档位由设备固件自己调节,
+     * 再写 0x1012 只会和固件抢控制权(官方也没有在 UI 上展示这条档位限制)。
+     */
+    private fun enforcePowerLimit() {
+        val state = _state.value
+        val maxRaw = state.fanRawLimit ?: return
+        if (state.boostOn) setBoost(false)
+        val type = state.deviceType ?: return
+        // 待确认的拖动目标优先于回读值(与 fanGear 同一口径):刚拖到超限档位、限档随后才上报时,
+        // 只比回读值会漏掉本次拖动。
+        val intendedRaw = state.pendingFanPercent
+            ?.let { CoolerBleConstants.percentageToRaw(it, type) }
+            ?: state.fanRaw ?: return
+        if (intendedRaw <= maxRaw) return
+        // 破坏神已在上面关掉(状态随后回读确认),所以按破坏神关闭后的口径判断是否有手动档位可写;
+        // 否则限档上报那一刻正开着破坏神时会直接 return,边缘触发的这次压档就永远丢失了。
+        if (!state.copy(boostOn = false).manualLevelEnabled) return
+        Log.i(TAG, "Power limit ${state.fanLimit} clamps fan raw $intendedRaw -> $maxRaw")
+        // 不能调公开的 setFanSpeed:它按当前快照再查一次 manualLevelEnabled,而此时
+        // 破坏神关闭的回读还没回来(boostOn 仍为 true),压档会被直接吞掉且边沿不再补发。
+        // 手动闸上面已经评估过,这里只做钳制和发写;onMain 则是因为 enforce 可能跑在 binder 线程。
+        val percent = CoolerBleConstants.rawToPercentage(maxRaw, type)
+        onMain { writeFanSpeed(percent, enforceManual = false) }
     }
 
     private class Command(
@@ -866,11 +900,22 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         }
     }
 
-    fun setFanSpeed(percent: Int) = onMain {
-        if (!_state.value.manualLevelEnabled) return@onMain
-        val command = command(Control.FAN, CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID) ?: return@onMain
-        val type = _state.value.deviceType ?: return@onMain
-        val clamped = percent.coerceIn(0, 100)
+    fun setFanSpeed(percent: Int) = onMain { writeFanSpeed(percent, enforceManual = true) }
+
+    /**
+     * 发写风扇百分比(已按限档钳制)。[enforceManual] 为 true 时沿用手动档位闸门(UI/调用方入口);
+     * 为 false 时仅限 enforcePowerLimit 调用——它在调用前已用"破坏神关闭后"的口径评估过闸门,
+     * 这里再查快照会因回读未到而误杀那次一次性的压档。
+     */
+    private fun writeFanSpeed(percent: Int, enforceManual: Boolean) {
+        if (enforceManual && !_state.value.manualLevelEnabled) return
+        val command = command(Control.FAN, CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID) ?: return
+        val type = _state.value.deviceType ?: return
+        // 供电功率不足时把请求钳到限档 raw 对应的百分比:整数换算只能往下取整,
+        // 所以钳后重新算出的 raw 不会超过限档值。
+        val maxPercent = _state.value.fanRawLimit
+            ?.let { CoolerBleConstants.rawToPercentage(it, type) } ?: 100
+        val clamped = percent.coerceIn(0, maxPercent)
         val raw = CoolerBleConstants.percentageToRaw(clamped, type).toByte()
         _state.update { it.copy(pendingFanPercent = clamped) }
         scope.launch {
@@ -899,14 +944,26 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         startSmart(on)?.await() ?: false
     }
 
-    private fun startSmart(on: Boolean) = command(Control.SMART, CoolerBleConstants.AUTO_MODE_CONTROL_UUID)?.let { command ->
+    private fun startSmart(on: Boolean) = command(Control.SMART, CoolerBleConstants.AUTO_MODE_CONTROL_UUID)?.let { smart ->
         scope.async {
+            // 官方 Jacket8ProActivityV3.o6/b6:智能温控与破坏神互斥——开启温控会先关掉破坏神
+            // (写入前先落 0x1017=0,顺序与官方一致)。放在这里而不是 UI 层,是为了让磁贴/后台
+            // 服务开启温控时也走同一条规则。
+            if (on && _state.value.boostOn) {
+                command(Control.BOOST, CoolerBleConstants.BOOST_CONTROL_UUID)
+                    ?.let { executeCommand(it, byteArrayOf(0)) }
+            }
             val value = if (on) CoolerBleConstants.AUTO_MODE_ON else CoolerBleConstants.AUTO_MODE_OFF
-            executeCommand(command, byteArrayOf(value))
+            executeCommand(smart, byteArrayOf(value))
         }
     }
 
     fun setBoost(on: Boolean) = onMain {
+        // 官方 Jacket8ProActivityV3.u5:功耗限档低于"不限档"时,开启破坏神的请求被否决。
+        if (on && _state.value.powerLimited) {
+            Log.i(TAG, "Boost on refused: charger power limited (limit=${_state.value.fanLimit})")
+            return@onMain
+        }
         val command = command(Control.BOOST, CoolerBleConstants.BOOST_CONTROL_UUID) ?: return@onMain
         scope.launch { executeCommand(command, byteArrayOf(if (on) 1 else 0)) }
     }

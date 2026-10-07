@@ -126,5 +126,19 @@ class CoolerTelemetryReducerTest {
         assertEquals(200, reduce(CoolerBleConstants.POWER_UUID, byteArrayOf(200.toByte()))?.state?.powerW)
     }
 
+    @Test
+    fun `status tag 07 carries the charger power fan limit`() {
+        // 官方 b.smali tag 0x7:byte1 是供电功率限档的官方档位索引。
+        assertNull(reduce(CoolerBleConstants.STATUS_UUID, byteArrayOf(7)))
+        val limited = requireNotNull(reduce(CoolerBleConstants.STATUS_UUID, byteArrayOf(7, 6)))
+        assertEquals(6, limited.state.fanLimit)
+        assertTrue(limited.state.powerLimited)
+        assertFalse(limited.temperatureReported)
+        // 8 = 不限档,与"尚未上报"一样不构成限制。
+        val unlimited = requireNotNull(reduce(CoolerBleConstants.STATUS_UUID, byteArrayOf(7, 8)))
+        assertEquals(8, unlimited.state.fanLimit)
+        assertFalse(unlimited.state.powerLimited)
+    }
+
     private fun reduce(uuid: UUID, value: ByteArray) = CoolerTelemetryReducer.reduce(state, uuid, value)
 }
