@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Material Symbols "expand_circle_right" 24dp filled (Apache 2.0, © Google LLC) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/white"
+        android:fillType="nonZero"
+        android:pathData="M12.68,12L9.6,15.08L11,16.5L15.5,12L11,7.5L9.6,8.92L12.68,12ZM12,22Q9.93,22 8.1,21.21Q6.28,20.43 4.93,19.08Q3.58,17.73 2.79,15.9T2,12Q2,9.92 2.79,8.1Q3.58,6.27 4.93,4.93Q6.28,3.57 8.1,2.79Q9.93,2 12,2t3.9,.79t3.17,2.14q1.35,1.35 2.14,3.17Q22,9.92 22,12t-.79,3.9t-2.14,3.17q-1.35,1.35 -3.17,2.14T12,22Z" />
+</vector>
