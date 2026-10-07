@@ -82,9 +82,7 @@ fun AboutScreen(onBack: () -> Unit) {
                     Image(
                         painter = painterResource(R.drawable.ic_launcher_foreground),
                         contentDescription = null,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(8.dp),
+                        modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Fit,
                         colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onPrimary),
                     )
