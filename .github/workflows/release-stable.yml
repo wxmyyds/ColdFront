@@ -98,8 +98,46 @@ jobs:
       - name: Run tests and lint
         run: ./gradlew testDebugUnitTest testReleaseUnitTest lintRelease --stacktrace
 
+      # 正式发布必须带签名：密钥库只存在于 Secrets，不落仓库。缺密钥时直接失败，
+      # 避免静默发出未签名（实际上无法安装）的 APK。
+      - name: Materialize release keystore
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.COLDFRONT_KEYSTORE_BASE64 }}
+          KEYSTORE_PATH: ${{ runner.temp }}/coldfront-release.jks
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_BASE64:-}" ]; then
+            echo "::error::仓库缺少 Secret COLDFRONT_KEYSTORE_BASE64，无法签名发布"
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$KEYSTORE_PATH"
+          chmod 600 "$KEYSTORE_PATH"
+          echo "密钥库已就绪：$KEYSTORE_PATH（$(stat -c%s "$KEYSTORE_PATH") 字节）"
+
       - name: Assemble release APK
-        run: ./gradlew assembleRelease --stacktrace
+        shell: bash
+        env:
+          COLDFRONT_KEYSTORE_FILE: ${{ runner.temp }}/coldfront-release.jks
+          COLDFRONT_KEYSTORE_PASSWORD: ${{ secrets.COLDFRONT_KEYSTORE_PASSWORD }}
+          COLDFRONT_KEY_ALIAS: ${{ secrets.COLDFRONT_KEY_ALIAS }}
+          COLDFRONT_KEY_PASSWORD: ${{ secrets.COLDFRONT_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          ./gradlew assembleRelease --stacktrace
+          # 签名生效时 AGP 产出 app-release.apk；未签名会以 -unsigned 结尾，此处直接卡住
+          test -f app/build/outputs/apk/release/app-release.apk \
+            || { echo "::error::未生成已签名 APK"; ls -l app/build/outputs/apk/release/; exit 1; }
+
+      # 发布前校对签名：确认 APK 真的带证书且是预期的那把
+      - name: Verify APK signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          APKSIGNER=$(ls -d "$SDK_ROOT"/build-tools/*/apksigner | sort -V | tail -1)
+          echo "使用 $APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk
 
       - name: Sync release branch, commit version and tag
         shell: bash
@@ -137,7 +175,7 @@ jobs:
           {
             echo "# ColdFront v${VERSION}"
             echo
-            echo "> 本 APK 为未签名版本，安装需在系统设置中允许「未知来源」。"
+            echo "> 本 APK 已使用 ColdFront 发布密钥签名，安装时需在系统设置中允许「未知来源」。"
             echo
             echo "## ✨ 新功能"
             echo "$LOG" | grep -E '^(feat|feature)(\(|:)' | sed 's/^/ - /' || true
@@ -161,7 +199,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           # 纯 Kotlin 应用：无原生库，通用 APK 兼容所有 ABI，以应用名上传
-          cp app/build/outputs/apk/release/app-release-unsigned.apk ColdFront.apk
+          cp app/build/outputs/apk/release/app-release.apk ColdFront.apk
           gh release create "v${{ steps.resolve.outputs.version }}" \
             --title "ColdFront v${{ steps.resolve.outputs.version }}" \
             --notes-file "/tmp/coldfront-notes-${{ steps.resolve.outputs.version }}.md" \

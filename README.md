@@ -70,6 +70,30 @@ cd ColdFront
 >
 > MD3E 完整 API 需要 material3 alpha 线（已在 `gradle/libs.versions.toml` 配置 `compose-bom-alpha`）。
 
+### Release 签名
+
+发布 APK 由 CI 用固定发布密钥签名。密钥库与口令**不入库**，只存在本机备份与 GitHub Secrets：
+
+| Secret | 内容 |
+| --- | --- |
+| `COLDFRONT_KEYSTORE_BASE64` | `base64 -w0 ~/.keystores/coldfront-release.jks` |
+| `COLDFRONT_KEYSTORE_PASSWORD` | 密钥库口令 |
+| `COLDFRONT_KEY_ALIAS` | `coldfront` |
+| `COLDFRONT_KEY_PASSWORD` | 密钥条目口令（PKCS12 下与密钥库口令相同） |
+
+发布密钥 SHA-256 指纹（可用于校对下载的 APK 签名）：
+
+```
+C7:55:6E:0E:4B:18:C0:17:F9:83:88:D3:04:AF:26:97:24:BE:2D:39:3B:03:43:AF:21:A1:1D:5E:9E:A1:C9:63
+```
+
+- `release-stable.yml`：缺任一 Secret 直接失败，不会静默发出未签名 APK（未签名 APK 实际无法安装）；发布前用 `apksigner verify` 校对签名。
+- `build.yml`：不注入密钥（PR / fork 拿不到 Secrets），仍产出未签名 APK 供校验。
+- 本机签名构建（可选）：把 `~/.keystores/coldfront-keystore.properties` 中的 `coldfront.*` 四项放进 `~/.gradle/gradle.properties`，或用环境变量 `COLDFRONT_KEYSTORE_*` / `-P coldfront.*` 传入。环境变量优先于 Gradle 属性。
+- 未配置凭据时 `assembleRelease` 回退为未签名构建，fork 仍能编译。
+
+> ⚠️ **密钥库与口令丢失后，无法再为已安装的应用发布更新**（Android 要求更新包与已装应用同签名）。请把 `~/.keystores/coldfront-release.jks` 与口令离线备份到两处以上。
+
 ## 已知问题：图标库部分矢量坐标损坏
 
 图标来自 [`com.composables` Material Symbols](https://github.com/composablehorizons/compose-icons)（`icons-material-symbols-rounded[-filled]`，当前 2.2.1）。**该库有未修复的上游 bug：部分图标的 path 坐标生成错误——Y 整体偏移出 viewport，渲染时图形缺失/越界/错位**，只在个别图标上出现，不代表全部。
