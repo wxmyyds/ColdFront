@@ -460,7 +460,7 @@ fun SegmentedSwitchRow(
                 thumbContent = {
                     Icon(
                         painter = painterResource(
-                            if (checked) R.drawable.materialsymbols_ic_task_alt_rounded_filled
+                            if (checked) R.drawable.ms_check_fill1_24
                             else R.drawable.materialsymbols_ic_close_rounded_filled
                         ),
                         contentDescription = null,
@@ -699,7 +699,7 @@ private fun <T> SingleChoiceDropdownMenu(
                     // 选中勾选图标：组件自带 expandHorizontally + fadeIn 动画
                     selectedLeadingIcon = {
                         Icon(
-                            painter = painterResource(R.drawable.materialsymbols_ic_task_alt_rounded_filled),
+                            painter = painterResource(R.drawable.ms_check_fill1_24),
                             contentDescription = null,
                             modifier = Modifier.size(MenuDefaults.LeadingIconSize),
                         )
