@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -38,6 +39,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberSliderState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -169,6 +171,27 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
 
     TempHero(state)
 
+    // 官方 Jacket8ProActivityV3.N4 只在限档变化时提示一次(重复上报不重复提示):
+    // 同一限档值只弹一次；限档变化,或解除限档后再次受限,才重新提示。
+    // 重连会换 connectionSessionId,随之重置已确认记录。
+    var acknowledgedLimit by remember(state.connectionSessionId) { mutableStateOf<Int?>(null) }
+    LaunchedEffect(state.connectionSessionId, state.powerLimited) {
+        if (!state.powerLimited) acknowledgedLimit = null
+    }
+    val limit = state.fanLimit
+    if (state.powerLimited && limit != null && acknowledgedLimit != limit) {
+        AlertDialog(
+            onDismissRequest = { acknowledgedLimit = limit },
+            title = { Text(strings.homePowerLimitedTitle) },
+            text = { Text(strings.homePowerLimitedHint) },
+            confirmButton = {
+                TextButton(onClick = { acknowledgedLimit = limit }) {
+                    Text(strings.homePowerLimitedConfirm)
+                }
+            },
+        )
+    }
+
     if (state.capabilities.hasCoolingSwitch && state.hasConfirmedConfiguration(CoolerBleConstants.COOLING_SWITCH_UUID)) {
         SegmentedSwitchRow(
             title = strings.homeCoolingSwitch,
@@ -189,7 +212,8 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
                 title = strings.homeSmart,
                 summary = strings.homeSmartDesc,
                 checked = state.smartOn,
-                enabled = state.isConnected && state.coolingAllowsControl,
+                // 官方 Jacket8ProActivityV3.m6:破坏神开启时温控开关被禁用(并强制取消选中)。
+                enabled = state.isConnected && state.coolingAllowsControl && !state.boostOn,
                 onCheckedChange = { vm.setSmart(it) },
                 leadingContent = { RowIcon(Icons.Filled.AutoMode) },
             )
@@ -199,7 +223,10 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
                 title = strings.homeBoost,
                 summary = strings.homeBoostDesc,
                 checked = state.boostOn,
-                enabled = state.isConnected && state.coolingAllowsControl,
+                // 官方 Jacket8ProActivityV3:破坏神与智能温控互斥(温控开启时禁用),
+                // 且供电功率不足时(u5)直接否决开启破坏神的请求。
+                enabled = state.isConnected && state.coolingAllowsControl &&
+                    !state.smartOn && !state.powerLimited,
                 onCheckedChange = { vm.setBoost(it) },
                 leadingContent = { RowIcon(Icons.Filled.Bolt) },
             )
@@ -327,6 +354,9 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
     val isGear = state.deviceType?.generation == 8
     val displayedPercent = state.pendingFanPercent ?: state.fanPercent
     val displayedGear = state.fanGear ?: 1
+    // 官方把滑条的 maxSelectableProgress 设为功耗限档,超出的拖动会被弹回并提示
+    // (`LimitedSeekBar.a.onProgressChanged`)。这里同样保留整条 1–8 轨道,只把可选上限钳住。
+    val maxGear = state.fanGearLimit ?: 8
 
     if (state.isConnected && state.hasConfirmedConfiguration(CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID) && state.capabilities.fanControl && state.coolingAllowsControl && state.smartOn) {
         Surface(
@@ -402,8 +432,9 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
                     },
                     onValueChange = {
                         dragging = true
-                        gearSlider.value = it
-                        vm.setFanSpeed(CoolerBleConstants.gearToPercentage8Pro(it.roundToInt()))
+                        val capped = it.coerceAtMost(maxGear.toFloat())
+                        gearSlider.value = capped
+                        vm.setFanSpeed(CoolerBleConstants.gearToPercentage8Pro(capped.roundToInt()))
                     },
                     onValueChangeFinished = { dragging = false },
                     enabled = !state.smartOn,

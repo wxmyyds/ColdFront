@@ -23,11 +23,16 @@ internal object CoolerTelemetryReducer {
         }
         CoolerBleConstants.STATUS_UUID -> when (CoolerTelemetryParser.unsignedByte(value)) {
             // 1015 is always tagged. Unlike 1014, [04] alone is not a temperature sample.
-            0x04 -> if (value.size >= 2) temperature(state, value) else null
-            0x08 -> CoolerTelemetryParser.bigEndianShort(value.copyOfRange(1, value.size))?.let {
-                Update(state.copy(fanRpm = it))
-            }
-            0x09 -> value.getOrNull(1)?.let { Update(state.copy(powerW = it.toInt() and 0xFF)) }
+            CoolerBleConstants.STATUS_TAG_TEMPERATURE -> if (value.size >= 2) temperature(state, value) else null
+            CoolerBleConstants.STATUS_TAG_FAN_RPM ->
+                CoolerTelemetryParser.bigEndianShort(value.copyOfRange(1, value.size))?.let {
+                    Update(state.copy(fanRpm = it))
+                }
+            CoolerBleConstants.STATUS_TAG_FAN_POWER ->
+                value.getOrNull(1)?.let { Update(state.copy(powerW = it.toInt() and 0xFF)) }
+            // 官方 b.smali 的 tag 0x7 分支:byte1 = 供电功率限档的官方档位索引(0–8)。
+            CoolerBleConstants.STATUS_TAG_FAN_LIMIT ->
+                value.getOrNull(1)?.let { Update(state.copy(fanLimit = it.toInt() and 0xFF)) }
             else -> null
         }
         CoolerBleConstants.RPM_UUID -> CoolerTelemetryParser.bigEndianShort(value)?.let {

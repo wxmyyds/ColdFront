@@ -147,6 +147,11 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
             ble.setSmart(true)
             return
         }
+        stopSmart()
+    }
+
+    /** 关闭智能温控,并取消同一个设备上还在跑的后台温控服务(否则它会再次打开温控)。 */
+    private fun stopSmart() {
         val requested = liveState.value
         saveSetting {
             val target = profileRepo.loadServiceProfile()
@@ -163,7 +168,18 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
     }
-    fun setBoost(on: Boolean) = ble.setBoost(on)
+
+    fun setBoost(on: Boolean) {
+        if (!on) {
+            ble.setBoost(false)
+            return
+        }
+        // 官方 Jacket8ProActivityV3.n5:破坏神与智能温控互斥——开启破坏神前先关掉温控,并一并
+        // 取消后台温控服务(官方只关开关,没有后台服务这一层)。反过来开启温控时关破坏神的规则
+        // 由 CoolerBleManager.startSmart 统一处理,所有开启温控的入口都走那里。
+        if (liveState.value.smartOn) stopSmart()
+        ble.setBoost(true)
+    }
     fun setOvercoldProtection(on: Boolean) = ble.setOvercoldProtection(on)
     fun setRGB(config: RGBConfig) = ble.setRGB(config)
     fun deleteProfile(id: String) = saveSetting {

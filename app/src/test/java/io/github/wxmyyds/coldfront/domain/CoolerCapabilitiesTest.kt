@@ -40,6 +40,19 @@ class CoolerCapabilitiesTest {
     }
 
     @Test
+    fun `boost mode hides manual fan control like smart mode does`() {
+        val capabilities = CoolerCapabilities.fromCharacteristics(setOf(fan, cooling), setOf(fan, cooling))
+        val on = CoolerLiveState(
+            connection = ConnectionState.CONNECTED,
+            capabilities = capabilities,
+            confirmedConfiguration = setOf(fan, cooling),
+            coolingOn = true,
+        )
+        assertTrue(on.manualLevelEnabled)
+        assertFalse(on.copy(boostOn = true).manualLevelEnabled)
+    }
+
+    @Test
     fun `read-only switch is reported but cannot be written and still gates the fan`() {
         val capabilities = CoolerCapabilities.fromCharacteristics(setOf(fan, cooling), setOf(fan))
         assertTrue(capabilities.hasCoolingSwitch)
