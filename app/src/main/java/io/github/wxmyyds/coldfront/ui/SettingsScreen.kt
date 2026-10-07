@@ -16,7 +16,6 @@ import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -24,11 +23,9 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.wxmyyds.coldfront.data.AppSettings
-import io.github.wxmyyds.coldfront.ui.component.AnimatedRowIcon
 import io.github.wxmyyds.coldfront.ui.component.RowIcon
 import io.github.wxmyyds.coldfront.ui.component.PageScaffold
 import io.github.wxmyyds.coldfront.ui.component.SegmentedDropdownRow
@@ -135,7 +132,7 @@ fun SettingsScreen(vm: CoolerViewModel, settings: AppSettings, onAbout: () -> Un
                         optionLabel = { value ->
                             themeOptions.firstOrNull { it.first == value }?.second ?: value
                         },
-                        leadingContent = { AnimatedRowIcon(themeModeIcon(themeMode)) },
+                        leadingContent = { RowIcon(Icons.Filled.DarkMode) },
                     )
                 }
             }
@@ -206,11 +203,4 @@ fun SettingsScreen(vm: CoolerViewModel, settings: AppSettings, onAbout: () -> Un
         }
     }
 
-}
-
-/** 主题模式的行首图标跟着当前档位走，扫一眼就知道现在是什么模式 */
-private fun themeModeIcon(mode: String): ImageVector = when (mode) {
-    "light" -> Icons.Filled.LightMode
-    "dark" -> Icons.Filled.DarkMode
-    else -> Icons.Filled.AutoMode
 }
