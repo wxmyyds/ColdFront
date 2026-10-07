@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
@@ -275,17 +276,17 @@ private fun EmptyState(strings: AppStrings, modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.Center,
     ) {
         Surface(
-            shape = MaterialTheme.shapes.large,
+            shape = CircleShape,
             color = optionContainerColor(MaterialTheme.colorScheme),
         ) {
             Box(
-                modifier = Modifier.size(104.dp),
+                modifier = Modifier.size(112.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     painterResource(R.drawable.materialsymbols_ic_ac_unit_rounded_filled),
                     contentDescription = null,
-                    modifier = Modifier.size(52.dp),
+                    modifier = Modifier.size(56.dp),
                     tint = MaterialTheme.colorScheme.primary,
                 )
             }

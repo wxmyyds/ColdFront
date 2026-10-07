@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import androidx.core.net.toUri
 import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -13,19 +14,20 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Image
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.painterResource
 import io.github.wxmyyds.coldfront.BuildConfig
@@ -68,38 +70,35 @@ fun AboutScreen(onBack: () -> Unit) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 8.dp),
+                    .padding(horizontal = 24.dp, vertical = 32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Spacer(Modifier.height(16.dp))
-                Surface(
-                    shape = MaterialTheme.shapes.extraLarge,
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                    modifier = Modifier.size(80.dp),
+                // 仿 KernelSU MD3E 版 About 头部：80dp 白底 16dp 圆角块 + 彩色前景式 logo
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(80.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color.White),
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Image(
-                            painter = painterResource(R.drawable.ic_logo_foreground),
-                            contentDescription = null,
-                            modifier = Modifier.size(40.dp),
-                            colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSecondaryContainer),
-                        )
-                    }
+                    Image(
+                        painter = painterResource(R.drawable.ic_logo_foreground),
+                        contentDescription = null,
+                        modifier = Modifier.size(80.dp),
+                    )
                 }
-                Spacer(Modifier.height(28.dp))
                 Text(
-                    strings.appName,
-                    style = MaterialTheme.typography.headlineLarge,
-                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 12.dp),
+                    text = strings.appName,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = MaterialTheme.typography.headlineMedium.fontSize,
                 )
-                Spacer(Modifier.height(12.dp))
                 Text(
-                    "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
-                    style = MaterialTheme.typography.titleMedium,
+                    text = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
                 )
-                Spacer(Modifier.height(88.dp))
+                Spacer(Modifier.height(24.dp))
                 SegmentedGroup {
                     item(key = "report") {
                         SegmentedRow(

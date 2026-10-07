@@ -169,6 +169,17 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
                 )
             }
         },
+        actions = {
+            IconButton(
+                onClick = { rescan() },
+                enabled = resumed && !connecting,
+            ) {
+                Icon(
+                    painterResource(R.drawable.materialsymbols_ic_refresh_rounded_filled),
+                    contentDescription = strings.scanRescan,
+                )
+            }
+        },
     ) { inner ->
         LazyColumn(
             modifier = Modifier
@@ -255,19 +266,6 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
                 else -> itemsIndexed(devices, key = { _, device -> "device:${device.address}" }) { index, device ->
                     DeviceRow(strings, device, index, devices.size, enabled = canConnect) {
                         connect(ScanConnectionRequest(device.displayName) { vm.connect(device) })
-                    }
-                }
-            }
-            if (scanReady) {
-                item(key = "rescan") {
-                    OutlinedButton(
-                        onClick = { rescan() },
-                        enabled = resumed && !connecting,
-                        shapes = ButtonDefaults.shapes(),
-                    ) {
-                        Icon(painterResource(R.drawable.materialsymbols_ic_refresh_rounded_filled), contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(strings.scanRescan)
                     }
                 }
             }
