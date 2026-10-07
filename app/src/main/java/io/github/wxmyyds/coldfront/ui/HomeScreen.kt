@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -38,6 +39,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberSliderState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -169,8 +171,25 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
 
     TempHero(state)
 
-    if (state.powerLimited) {
-        PowerLimitedNotice(strings)
+    // 官方 Jacket8ProActivityV3.N4 只在限档变化时提示一次(重复上报不重复提示):
+    // 同一限档值只弹一次；限档变化,或解除限档后再次受限,才重新提示。
+    // 重连会换 connectionSessionId,随之重置已确认记录。
+    var acknowledgedLimit by remember(state.connectionSessionId) { mutableStateOf<Int?>(null) }
+    LaunchedEffect(state.connectionSessionId, state.powerLimited) {
+        if (!state.powerLimited) acknowledgedLimit = null
+    }
+    val limit = state.fanLimit
+    if (state.powerLimited && limit != null && acknowledgedLimit != limit) {
+        AlertDialog(
+            onDismissRequest = { acknowledgedLimit = limit },
+            title = { Text(strings.homePowerLimitedTitle) },
+            text = { Text(strings.homePowerLimitedHint) },
+            confirmButton = {
+                TextButton(onClick = { acknowledgedLimit = limit }) {
+                    Text(strings.homePowerLimitedConfirm)
+                }
+            },
+        )
     }
 
     if (state.capabilities.hasCoolingSwitch && state.hasConfirmedConfiguration(CoolerBleConstants.COOLING_SWITCH_UUID)) {
@@ -324,30 +343,6 @@ private fun MetricPill(icon: ImageVector, text: String, content: Color) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-        }
-    }
-}
-
-/**
- * 供电功率不足提示。官方 `Jacket8ProActivityV3.N4` 用 `R$string.fan_limit_tips` 的 Toast 提示，
- * 并只弹一次(重复上报不重复提示)；本应用改成常驻卡片，限档未解除前一直可见。
- */
-@Composable
-private fun PowerLimitedNotice(strings: AppStrings) {
-    Surface(
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.errorContainer,
-        contentColor = MaterialTheme.colorScheme.onErrorContainer,
-    ) {
-        Row(
-            Modifier.fillMaxWidth().padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Icon(Icons.Filled.Bolt, contentDescription = null, modifier = Modifier.size(20.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(strings.homePowerLimitedTitle, style = MaterialTheme.typography.titleMedium)
-                Text(strings.homePowerLimitedHint, style = MaterialTheme.typography.bodyMedium)
-            }
         }
     }
 }

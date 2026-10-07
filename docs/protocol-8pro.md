@@ -112,7 +112,7 @@ RSSI:   -43 dBm
 
 官方 `Jacket8ProActivityV3.l6/N4` 在限档值变化(且 < 8)时的动作,即本应用对齐的行为:
 
-1. 用 `R$string.fan_limit_tips` 提示(Toast 全局 1.5s 去重;本应用改为常驻提示卡片,更直观也不丢信息)。
+1. 用 `R$string.fan_limit_tips` 提示(Toast 全局 1.5s 去重;本应用改为一次性确认弹窗,同一限档值只弹一次,限档变化或解除限档后再次受限才重新提示)。
 2. **自动关闭破坏神**:若 `sw_super_mode`(`i0->N`)为开,调用 `CustomSwitchView.c()` 取消选中 → 写 `0x1017 = 0x00`。
 3. **限制档位**:`LimitedSeekBar.setMaxSelectableProgress(限档)` + `TickDividerView.setMaxSettableIndex(限档)`,滑条 `max` 仍是 8,超出上限的拖动会被 `LimitedSeekBar$a.onProgressChanged` 弹回并再次提示。
 4. **压低当前档位**:若当前 progress 超过限档,`setProgress(限档)` → 回调 `onProgressChanged` → `Jacket8ProActivityV3$b` 把 `e(限档)` 作为 raw 通过 `viewModel.y1(raw)` **实际下发**(不是只改 UI)。

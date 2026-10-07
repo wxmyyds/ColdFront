@@ -36,6 +36,7 @@ interface AppStrings {
     val telemetryDegradedHint: String
     val homePowerLimitedTitle: String
     val homePowerLimitedHint: String
+    val homePowerLimitedConfirm: String
     val homeSmart: String
     val homeSmartDesc: String
     val homeBoost: String
@@ -199,6 +200,7 @@ object ZhStrings : AppStrings {
     override val telemetryDegradedHint = "部分状态已停止更新，显示值可能已过期。请重新连接以恢复更新。"
     override val homePowerLimitedTitle = "充电器供电功率不足"
     override val homePowerLimitedHint = "散热器已限制制冷档位上限，并关闭了破坏神。请换用功率更大的充电器或供电口。"
+    override val homePowerLimitedConfirm = "知道了"
     override val homeSmart = "智能温控"
     override val homeSmartDesc = "由散热器根据温度自动调节档位"
     override val homeBoost = "破坏神"
@@ -353,6 +355,7 @@ object EnStrings : AppStrings {
     override val telemetryDegradedHint = "Some readings have stopped updating and may be out of date. Reconnect to restore updates."
     override val homePowerLimitedTitle = "Charger power is insufficient"
     override val homePowerLimitedHint = "The cooler capped the cooling level and turned Boost off. Use a higher-wattage charger or port."
+    override val homePowerLimitedConfirm = "Got it"
     override val homeSmart = "Smart temp control"
     override val homeSmartDesc = "The cooler adjusts its level by itself"
     override val homeBoost = "Boost (Destruction God)"
