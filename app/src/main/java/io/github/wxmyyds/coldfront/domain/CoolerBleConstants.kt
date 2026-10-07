@@ -57,8 +57,34 @@ object CoolerBleConstants {
     /** 背夹温度:通知。单字节有符号 °C;固件 8.4.7 为 [0x04, 温度] 多字节包 */
     val TEMPERATURE_NOTIFICATION_UUID: UUID = UUID.fromString("00001014-0000-1000-8000-00805f9b34fb")
 
-    /** 状态:通知。包格式 [tag, ...]:tag 0x08 → 后 2 字节大端转速;tag 0x09 → 后 1 字节功率 W */
+    /**
+     * 状态:通知。包格式 [tag, byte0, byte1, byte2](byte1 起为 3 字节数据,不足补 0):
+     * tag 0x04 → byte0 温度;tag 0x05 → 3 字节负载状态;tag 0x07 → byte0 功耗限档索引;
+     * tag 0x08 → byte0..1 大端转速;tag 0x09 → byte0 功率 W。
+     * 官方 `cn/nubia/device/bluetooth/jacket8pro/b.smali` 的 `j(...)` 按此分发。
+     */
     val STATUS_UUID: UUID = UUID.fromString("00001015-0000-1000-8000-00805f9b34fb")
+
+    /** 0x1015 状态包标签:温度(byte0 有符号 °C) */
+    const val STATUS_TAG_TEMPERATURE: Int = 0x04
+
+    /** 0x1015 状态包标签:负载状态(后 3 字节) */
+    const val STATUS_TAG_OUTPUT_LOAD: Int = 0x05
+
+    /** 0x1015 状态包标签:供电功率限档(byte0 = 官方档位索引,见 [fanLimitToRaw8Pro]) */
+    const val STATUS_TAG_FAN_LIMIT: Int = 0x07
+
+    /** 0x1015 状态包标签:风扇转速(byte0..1 大端 RPM) */
+    const val STATUS_TAG_FAN_RPM: Int = 0x08
+
+    /** 0x1015 状态包标签:功率(byte0 = W) */
+    const val STATUS_TAG_FAN_POWER: Int = 0x09
+
+    /**
+     * 官方 `Jacket8ProManagerV2$a.b()`(即静态字段 `r0`)的值:设备上报的功耗限档"不限"值。
+     * 限档等于该值表示供电充足;小于该值表示充电器供电功率不足。
+     */
+    const val FAN_LIMIT_UNLIMITED_8_PRO: Int = 8
 
     /** 智能温控(自动模式):写 0x01 开 / 0x00 关;通知 1=开 */
     val AUTO_MODE_CONTROL_UUID: UUID = UUID.fromString("00001018-0000-1000-8000-00805f9b34fb")
@@ -116,6 +142,35 @@ object CoolerBleConstants {
 
     fun gearToPercentage8Pro(gear: Int): Int =
         rawToPercentage(gearToRaw8Pro(gear), CoolerDeviceType.JACKET_8_PRO)
+
+    /**
+     * 官方 `Jacket8ProManagerV2$a.e(I)`:功耗限档索引(0–8)→ 该限档允许的最高风扇 raw。
+     * 索引 8 是"不限档"(raw 80);索引越界走官方 packed-switch 的默认分支,同样返回 80。
+     */
+    fun fanLimitToRaw8Pro(index: Int): Int = when (index) {
+        0 -> 40
+        1 -> 46
+        2 -> 52
+        3 -> 58
+        4 -> 64
+        5 -> 68
+        6 -> 72
+        7 -> 76
+        else -> 80
+    }
+
+    /**
+     * 功耗限档索引 → 本应用 UI 档位(1–8)上限。
+     *
+     * 官方的滑条本身就是 0–8 的档位索引,所以直接 `setMaxSelectableProgress(索引)` 即可;
+     * 本应用的档位是 1–8 且第 8 档代表 raw 80,与官方索引并非一一对应
+     * (官方索引 7 = raw 76 在 UI 上没有对应档位),因此按"raw 不超过限档 raw"取最高档位:
+     * 索引 7 → 档位 7(raw 72),索引 6 → 档位 7,索引 5 → 档位 6,……,索引 0 → 档位 1。
+     */
+    fun maxGearForFanLimit8Pro(index: Int): Int {
+        val maxRaw = fanLimitToRaw8Pro(index)
+        return (8 downTo 1).first { gearToRaw8Pro(it) <= maxRaw }
+    }
 
     /** 百分比(0–100)→ 该型号 raw */
     fun percentageToRaw(percentage: Int, type: CoolerDeviceType): Int {

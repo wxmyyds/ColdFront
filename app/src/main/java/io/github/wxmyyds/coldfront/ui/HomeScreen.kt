@@ -169,6 +169,10 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
 
     TempHero(state)
 
+    if (state.powerLimited) {
+        PowerLimitedNotice(strings)
+    }
+
     if (state.capabilities.hasCoolingSwitch && state.hasConfirmedConfiguration(CoolerBleConstants.COOLING_SWITCH_UUID)) {
         SegmentedSwitchRow(
             title = strings.homeCoolingSwitch,
@@ -189,7 +193,8 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
                 title = strings.homeSmart,
                 summary = strings.homeSmartDesc,
                 checked = state.smartOn,
-                enabled = state.isConnected && state.coolingAllowsControl,
+                // 官方 Jacket8ProActivityV3.m6:破坏神开启时温控开关被禁用(并强制取消选中)。
+                enabled = state.isConnected && state.coolingAllowsControl && !state.boostOn,
                 onCheckedChange = { vm.setSmart(it) },
                 leadingContent = { RowIcon(Icons.Filled.AutoMode) },
             )
@@ -199,7 +204,10 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
                 title = strings.homeBoost,
                 summary = strings.homeBoostDesc,
                 checked = state.boostOn,
-                enabled = state.isConnected && state.coolingAllowsControl,
+                // 官方 Jacket8ProActivityV3:破坏神与智能温控互斥(温控开启时禁用),
+                // 且供电功率不足时(u5)直接否决开启破坏神的请求。
+                enabled = state.isConnected && state.coolingAllowsControl &&
+                    !state.smartOn && !state.powerLimited,
                 onCheckedChange = { vm.setBoost(it) },
                 leadingContent = { RowIcon(Icons.Filled.Bolt) },
             )
@@ -320,6 +328,30 @@ private fun MetricPill(icon: ImageVector, text: String, content: Color) {
     }
 }
 
+/**
+ * 供电功率不足提示。官方 `Jacket8ProActivityV3.N4` 用 `R$string.fan_limit_tips` 的 Toast 提示，
+ * 并只弹一次(重复上报不重复提示)；本应用改成常驻卡片，限档未解除前一直可见。
+ */
+@Composable
+private fun PowerLimitedNotice(strings: AppStrings) {
+    Surface(
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(Icons.Filled.Bolt, contentDescription = null, modifier = Modifier.size(20.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(strings.homePowerLimitedTitle, style = MaterialTheme.typography.titleMedium)
+                Text(strings.homePowerLimitedHint, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+}
+
 /** 制冷档位:强调数字 + 滑条(8 Pro 为 1–8 离散档) */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -327,6 +359,9 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
     val isGear = state.deviceType?.generation == 8
     val displayedPercent = state.pendingFanPercent ?: state.fanPercent
     val displayedGear = state.fanGear ?: 1
+    // 官方把滑条的 maxSelectableProgress 设为功耗限档,超出的拖动会被弹回并提示
+    // (`LimitedSeekBar.a.onProgressChanged`)。这里同样保留整条 1–8 轨道,只把可选上限钳住。
+    val maxGear = state.fanGearLimit ?: 8
 
     if (state.isConnected && state.hasConfirmedConfiguration(CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID) && state.capabilities.fanControl && state.coolingAllowsControl && state.smartOn) {
         Surface(
@@ -402,8 +437,9 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
                     },
                     onValueChange = {
                         dragging = true
-                        gearSlider.value = it
-                        vm.setFanSpeed(CoolerBleConstants.gearToPercentage8Pro(it.roundToInt()))
+                        val capped = it.coerceAtMost(maxGear.toFloat())
+                        gearSlider.value = capped
+                        vm.setFanSpeed(CoolerBleConstants.gearToPercentage8Pro(capped.roundToInt()))
                     },
                     onValueChangeFinished = { dragging = false },
                     enabled = !state.smartOn,

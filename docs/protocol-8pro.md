@@ -40,7 +40,7 @@ RSSI:   -43 dBm
 | `00001012-...` | **风扇调速:单字节 raw(8 Pro 40–80 共 8 档)** | R/W |
 | `00001013-...` | **灯光状态/控制:[mode][R][G][B]**;官方 `queryLight` 通过 GATT 主动读取,不写查询字节 | R/W/Notify |
 | `00001014-...` | **背夹温度:单字节有符号 °C;固件 8.4.7 为 [0x04, 温度] 包。无 -6 偏移** | Notify |
-| `00001015-...` | **状态包:[tag,...]:tag 0x08 → 后2字节大端 RPM;tag 0x09 → 后1字节功率 W** | Notify |
+| `00001015-...` | **状态包:[tag, byte0, byte1, byte2]:tag 0x04 → 温度;0x05 → 负载;0x07 → 供电功率限档索引(见 3.5);0x08 → 大端 RPM;0x09 → 功率 W** | Notify |
 | `00001016-...` | LOGGER 日志(UTF-8) | R/Notify |
 | `00001017-...` | **Boost/破坏神(超频):写 0x01/0x00** | R/W |
 | `00001018-...` | **智能温控:写 0x01 开 / 0x00 关;通知 1=开** | R/W/Notify |
@@ -95,6 +95,45 @@ RSSI:   -43 dBm
 - 1013 使用 `queryLight` → `readCharacteristic`;1011 hall、1012 fan、1017 overclocking、1018 auto 与 101F 温度保护各自回读,不会用本地预设代替回读。
 - ColdFront 对特征不可读或返回无效数据时不伪造状态,相关控制项保持隐藏/未知。
 - 配置回读是解锁对应控制项的前置条件:连接时的首次回读超时不隔离该特征通道,由周期轮询重试确认;持续无响应的通道才会被隔离并提示「状态更新受限」,需重连恢复。
+
+### 3.5 供电功率限档(0x1015 标签 `0x7`)
+
+**官方 `Jacket8ProDataHandler`(`cn/nubia/device/bluetooth/jacket8pro/b.smali` 的 `j(...)`)**:0x1015 通知的包格式是 `[tag, byte0, byte1, byte2]`(tag = byte0,其后 3 字节不足补 0),标签 `0x7` 时调用 `onFanLimit(byte0)`。该字节是**官方档位索引(0–8)**,不是 raw:
+
+- "不限档"值 = **8**(`Jacket8ProManagerV2$Companion.b()`,即静态字段 `r0`);**小于 8 即充电器供电功率不足**。
+- 官方档位索引 → 允许的最高 raw(`Jacket8ProManagerV2$a.e(I)`):
+
+| 索引 | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|---|
+| raw | 40 | 46 | 52 | 58 | 64 | 68 | 72 | **76** | 80 |
+
+反向 `d(I)`(raw → 索引)的分桶边界为 40/43/49/55/61/67/71/74/78,故 raw 76 与 80 是两个不同档位。
+**本应用 UI 的 1–8 档没有对应 raw 76 的档位**(第 8 档代表 raw 80),因此限档索引换算成 UI 档位上限时按"raw 不超过限档 raw"取最高档位:索引 7 → 档位 7(raw 72),索引 6 → 档位 7,索引 5 → 档位 6,……,索引 0 → 档位 1。
+
+官方 `Jacket8ProActivityV3.l6/N4` 在限档值变化(且 < 8)时的动作,即本应用对齐的行为:
+
+1. 用 `R$string.fan_limit_tips` 提示(Toast 全局 1.5s 去重;本应用改为常驻提示卡片,更直观也不丢信息)。
+2. **自动关闭破坏神**:若 `sw_super_mode`(`i0->N`)为开,调用 `CustomSwitchView.c()` 取消选中 → 写 `0x1017 = 0x00`。
+3. **限制档位**:`LimitedSeekBar.setMaxSelectableProgress(限档)` + `TickDividerView.setMaxSettableIndex(限档)`,滑条 `max` 仍是 8,超出上限的拖动会被 `LimitedSeekBar$a.onProgressChanged` 弹回并再次提示。
+4. **压低当前档位**:若当前 progress 超过限档,`setProgress(限档)` → 回调 `onProgressChanged` → `Jacket8ProActivityV3$b` 把 `e(限档)` 作为 raw 通过 `viewModel.y1(raw)` **实际下发**(不是只改 UI)。
+5. **否决开启破坏神**:破坏神开关的 `OnBeforeCheckedChangeListener`(`u5`)在"开关当前是关"且 `限档 < 8` 时返回 false(同时提示)。
+
+**智能温控不参与该限制**:官方在限档路径里从不碰 `i0->O`(`sw_temp_control`,0x1018)。
+
+注:官方另有 `onOutputHasLoad`(标签 `0x5`)/ `refreshOutputHasLoad` 一条联动"输出带载"的路径(强制开温控 + 关破坏神 + `R$string.output_has_load_tips`),但该路径在 V3 上是死代码:其 LiveData(`Jacket8ProViewModel.u0()`)全仓无写入者,唯一入口 `C6(B)` 也无调用者。本应用不对应实现。
+
+### 3.6 智能温控(0x1018)与破坏神(0x1017)互斥
+
+官方两个开关(`i0->O` = `sw_temp_control`,`i0->N` = `sw_super_mode`)**是双向互斥**的,靠"禁用 + 强制取消选中对方"实现,不是靠点击前校验:
+
+| 方向 | 官方实现 | 结果 |
+|---|---|---|
+| 破坏神开 | `Jacket8ProActivityV3.n5`:先 `O.c()` + `switchAutoTempControl()`(写 `0x1018=0x00`),再 `o6(true)` → `b6(false)` 把温控开关禁用+取消选中,最后写 `0x1017=0x01` | 温控关且被禁用 |
+| 温控开 | 温控 LiveData 观察者 `G4` → `m6(!温控)` 把破坏神开关禁用+取消选中;`CustomSwitchView.setChecked(false)` 触发 `n5` 的 else 分支 → `E1()` 写 `0x1017=0x00` | 破坏神关且被禁用 |
+
+两条规则在 `j6`/`k6`/`refreshFanAutoControlUI` 等刷新路径上重复套用。唯一的"点击前校验"(`u5`)只用于供电限档,与互斥无关。
+
+另外 `sw_hall_new`(0x1011)与这两个开关之间**没有**任何联动。
 
 ## 4. 连接流程(官方)
 

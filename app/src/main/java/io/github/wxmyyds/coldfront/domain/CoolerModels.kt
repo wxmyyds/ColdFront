@@ -142,6 +142,11 @@ data class CoolerLiveState(
     val boostOn: Boolean = false,
     /** 过冷/冷凝保护(101F bit2) */
     val overcoldOn: Boolean = false,
+    /**
+     * 供电功率限档(0x1015 标签 0x7)。仅 8 Pro 上报该字段:取值是官方档位索引 0–8,
+     * 8(`CoolerBleConstants.FAN_LIMIT_UNLIMITED_8_PRO`)表示不限档。null = 尚未上报。
+     */
+    val fanLimit: Int? = null,
     /** Distinguish reconnects even when lifecycle collection skips intermediate states. */
     val connectionSessionId: Long = 0L,
     val capabilities: CoolerCapabilities = CoolerCapabilities(),
@@ -163,12 +168,31 @@ data class CoolerLiveState(
         get() = isConnected && hasConfirmedConfiguration(CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID) &&
             capabilities.fanControl && coolingAllowsControl && !smartOn
 
-    /** Pending intent wins until acknowledged; otherwise use the unrounded device byte. */
+    /** 设备上报了低于"不限档"的功耗限档 → 充电器供电功率不足。 */
+    val powerLimited: Boolean
+        get() = deviceType?.generation == 8 &&
+            (fanLimit ?: CoolerBleConstants.FAN_LIMIT_UNLIMITED_8_PRO) <
+            CoolerBleConstants.FAN_LIMIT_UNLIMITED_8_PRO
+
+    /** 供电功率不足时允许的最高风扇 raw;null = 不受限 */
+    val fanRawLimit: Int?
+        get() = fanLimit?.takeIf { powerLimited }?.let(CoolerBleConstants::fanLimitToRaw8Pro)
+
+    /** 供电功率不足时允许的最高档位(1–8);null = 不受限 */
+    val fanGearLimit: Int?
+        get() = fanLimit?.takeIf { powerLimited }?.let(CoolerBleConstants::maxGearForFanLimit8Pro)
+
+    /**
+     * Pending intent wins until acknowledged; otherwise use the unrounded device byte.
+     * 供电功率不足时钳到限档:官方把滑条压回 `maxSelectableProgress` 并下发该档位,
+     * 所以显示值与之后实际可选的档位保持一致。
+     */
     val fanGear: Int?
         get() {
             val type = deviceType?.takeIf { it.generation == 8 } ?: return null
             val raw = pendingFanPercent?.let { CoolerBleConstants.percentageToRaw(it, type) }
                 ?: fanRaw ?: CoolerBleConstants.percentageToRaw(fanPercent, type)
-            return CoolerBleConstants.rawToGear8Pro(raw)
+            val gear = CoolerBleConstants.rawToGear8Pro(raw)
+            return fanGearLimit?.let { minOf(gear, it) } ?: gear
         }
 }
