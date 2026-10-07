@@ -71,17 +71,17 @@ fun AboutScreen(onBack: () -> Unit) {
                     .padding(horizontal = 24.dp, vertical = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(16.dp))
                 Surface(
                     shape = MaterialTheme.shapes.extraLarge,
                     color = MaterialTheme.colorScheme.secondaryContainer,
-                    modifier = Modifier.size(112.dp),
+                    modifier = Modifier.size(80.dp),
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Image(
-                            painter = painterResource(R.drawable.ic_launcher),
+                            painter = painterResource(R.drawable.ic_logo_foreground),
                             contentDescription = null,
-                            modifier = Modifier.size(44.dp),
+                            modifier = Modifier.size(40.dp),
                             colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSecondaryContainer),
                         )
                     }
