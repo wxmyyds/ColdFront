@@ -166,7 +166,7 @@ data class CoolerLiveState(
 
     val manualLevelEnabled: Boolean
         get() = isConnected && hasConfirmedConfiguration(CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID) &&
-            capabilities.fanControl && coolingAllowsControl && !smartOn
+            capabilities.fanControl && coolingAllowsControl && !smartOn && !boostOn
 
     /** 设备上报了低于"不限档"的功耗限档 → 充电器供电功率不足。 */
     val powerLimited: Boolean

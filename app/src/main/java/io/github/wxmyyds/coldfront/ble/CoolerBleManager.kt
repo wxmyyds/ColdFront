@@ -843,7 +843,9 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             ?.let { CoolerBleConstants.percentageToRaw(it, type) }
             ?: state.fanRaw ?: return
         if (intendedRaw <= maxRaw) return
-        if (!state.manualLevelEnabled) return
+        // 破坏神已在上面关掉(状态随后回读确认),所以按破坏神关闭后的口径判断是否有手动档位可写;
+        // 否则限档上报那一刻正开着破坏神时会直接 return,边缘触发的这次压档就永远丢失了。
+        if (!state.copy(boostOn = false).manualLevelEnabled) return
         Log.i(TAG, "Power limit ${state.fanLimit} clamps fan raw $intendedRaw -> $maxRaw")
         setFanSpeed(CoolerBleConstants.rawToPercentage(maxRaw, type))
     }
