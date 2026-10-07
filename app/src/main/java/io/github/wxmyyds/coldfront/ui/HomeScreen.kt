@@ -275,47 +275,72 @@ private fun TempHero(state: CoolerLiveState) {
                     color = onContainer,
                 )
             }
+            // 单位与数值同行同字号(仅字重不同)后,固定开销是这行宽度的主要变数:
+            // 图标 16→14、内边距 10→8、图标间隔 6→4、胶囊间 8→6,固定开销
+            // 142dp→110dp,360dp 屏(可用 280dp)三个胶囊整体约 247dp,余量约 33dp。
             FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                MetricPill(Icons.Filled.Speed, "${state.fanRpm ?: "--"} RPM", onContainer)
-                MetricPill(Icons.Filled.Bolt, "${state.powerW ?: "--"} W", onContainer)
+                MetricPill(Icons.Filled.Speed, "${state.fanRpm ?: "--"}", "RPM", onContainer)
+                MetricPill(Icons.Filled.Bolt, "${state.powerW ?: "--"}", "W", onContainer)
                 state.rssi?.let { rssi ->
-                    MetricPill(Icons.Filled.Bluetooth, "$rssi dBm", onContainer)
+                    MetricPill(Icons.Filled.Bluetooth, "$rssi", "dBm", onContainer)
                 }
             }
         }
     }
 }
 
+/**
+ * 单个指标胶囊:图标 + 数值 + 单位,同处一行同一胶囊容器。
+ *
+ * 数值与单位同字号(12sp),只用字重拉开主次(数值 SemiBold / 单位 Medium)、间距 2dp:
+ * 胶囊宽度因此吃满行内空白,不会三个小胶囊挤在左侧、右边缘留出一大块。
+ *
+ * 注意:数值与单位仍是两个 Text——单位字号一降就会在行尾留下过宽的空白,
+ * 降字号不是这行腾宽度的手段(真正的手段是固定开销与换行策略)。
+ */
 @Composable
-private fun MetricPill(icon: ImageVector, text: String, content: Color) {
-    // 胶囊底是对 content 的装饰性淡色叠加：英雄卡容器会在 primaryContainer 与
-    // surfaceBright 之间过渡，没有单一角色色能同时适配，故保留 alpha 写法。
-    // 但文字与图标不再做 alpha（那直接影响对比度），一律用全强度 content。
+private fun MetricPill(icon: ImageVector, value: String, unit: String, content: Color) {
+    // 胶囊底是对 content 的装饰性淡色叠加:英雄卡容器会在 primaryContainer 与
+    // surfaceBright 之间过渡,没有单一角色色能同时适配,故保留 alpha 写法。
+    // 但文字与图标不再做 alpha(那直接影响对比度),一律用全强度 content。
     Surface(
         shape = CircleShape,
         color = content.copy(alpha = 0.12f),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Icon(
                 icon,
                 contentDescription = null,
                 tint = content,
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(14.dp),
             )
-            Text(
-                text,
-                style = MaterialTheme.typography.labelMedium,
-                color = content,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    value,
+                    // tnum:等宽数字,数值位数变化时字形宽度不抖。
+                    style = EmphasizedTypography.labelMedium.copy(fontFeatureSettings = "tnum"),
+                    color = content,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    unit,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = content,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
