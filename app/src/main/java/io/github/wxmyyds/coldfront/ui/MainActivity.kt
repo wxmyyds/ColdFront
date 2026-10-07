@@ -33,10 +33,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.ui.res.painterResource
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -55,13 +54,13 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.wxmyyds.coldfront.R
 import io.github.wxmyyds.coldfront.ble.BlePermissionManager
 import io.github.wxmyyds.coldfront.data.AppSettings
 import kotlinx.serialization.Serializable
@@ -274,6 +273,13 @@ private object TabRoutes {
     const val SETTINGS = "settings"
 }
 
+/** 底部导航/Rail 的 tab 项：图标按选中态 composable 绘制，支持选中/未选中两套图标。 */
+private data class TabItem(
+    val route: String,
+    val icon: @Composable (selected: Boolean) -> Unit,
+    val label: @Composable () -> String,
+)
+
 @Composable
 private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
     val nav = rememberNavController<AppRoute>(AppRoute.Main)
@@ -300,16 +306,33 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
         if (nav.backStack.lastOrNull() != route) nav.push(route)
     }
 
-    val items: List<Triple<String, ImageVector, () -> String>> = remember(strings) {
+    val items: List<TabItem> = remember(strings) {
         listOf(
-            Triple(TabRoutes.HOME, Icons.Filled.AcUnit) { strings.navHome },
-            Triple(TabRoutes.DEVICES, Icons.Filled.Bluetooth) { strings.navDevices },
-            Triple(TabRoutes.RGB, Icons.Filled.Palette) { strings.navRgb },
-            Triple(TabRoutes.SETTINGS, Icons.Filled.Settings) { strings.navSettings },
+            TabItem(
+                TabRoutes.HOME,
+                {
+                    Icon(
+                        painterResource(if (it) R.drawable.home_fill_24 else R.drawable.home_24),
+                        contentDescription = null,
+                    )
+                },
+            ) { strings.navHome },
+            TabItem(TabRoutes.DEVICES, { Icon(Icons.Filled.Bluetooth, contentDescription = null) }) { strings.navDevices },
+            TabItem(TabRoutes.RGB, { Icon(Icons.Filled.Palette, contentDescription = null) }) { strings.navRgb },
+            // 设置 tab 用 Rounded 齿轮：选中 Fill、未选中 outline，由 NavigationBar/Rail 的选中态驱动。
+            TabItem(
+                TabRoutes.SETTINGS,
+                {
+                    Icon(
+                        painterResource(if (it) R.drawable.settings_fill_24 else R.drawable.settings_24),
+                        contentDescription = null,
+                    )
+                },
+            ) { strings.navSettings },
         )
     }
     // The four tabs identify pages inside the pager, so they are not navigation destinations.
-    val tabRoutes = remember(items) { items.map { it.first } }
+    val tabRoutes = remember(items) { items.map { it.route } }
     // The four primary tabs are pages inside Main, not destinations of their own, so the selected
     // tab is its own state. It survives a push of a secondary page, which is what keeps the tab
     // strip showing the same page underneath after returning.
@@ -339,13 +362,14 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                             WindowInsets(left = 0.dp, top = 0.dp, right = 0.dp, bottom = 12.dp),
                         ),
                     ) {
-                        items.forEach { (route, icon, label) ->
+                        items.forEach { item ->
+                            val itemSelected = tabRoutes.getOrNull(selectedPage.intValue) == item.route
                             NavigationBarItem(
-                                selected = tabRoutes.getOrNull(selectedPage.intValue) == route,
-                                onClick = { navigateToTab(route) },
+                                selected = itemSelected,
+                                onClick = { navigateToTab(item.route) },
                                 // Label + native selectable semantics announce the destination once.
-                                icon = { Icon(icon, contentDescription = null) },
-                                label = { Text(label()) },
+                                icon = { item.icon(itemSelected) },
+                                label = { Text(item.label()) },
                             )
                         }
                     }
@@ -363,12 +387,13 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                         // Match NavigationRail's native spacing inside the scroll container.
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        items.forEach { (route, icon, label) ->
+                        items.forEach { item ->
+                            val itemSelected = tabRoutes.getOrNull(selectedPage.intValue) == item.route
                             NavigationRailItem(
-                                selected = tabRoutes.getOrNull(selectedPage.intValue) == route,
-                                onClick = { navigateToTab(route) },
-                                icon = { Icon(icon, contentDescription = null) },
-                                label = { Text(label()) },
+                                selected = itemSelected,
+                                onClick = { navigateToTab(item.route) },
+                                icon = { item.icon(itemSelected) },
+                                label = { Text(item.label()) },
                             )
                         }
                     }
