@@ -12,7 +12,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Palette
@@ -131,7 +130,7 @@ fun SettingsScreen(vm: CoolerViewModel, settings: AppSettings, onAbout: () -> Un
                         optionLabel = { value ->
                             themeOptions.firstOrNull { it.first == value }?.second ?: value
                         },
-                        leadingContent = { RowIcon(Icons.Filled.DarkMode) },
+                        leadingContent = { RowIcon(R.drawable.dark_mode_24) },
                     )
                 }
             }

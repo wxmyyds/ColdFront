@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Material Symbols Rounded "devices_other" 24dp outlined (Apache 2.0, © Google LLC) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/white"
+        android:fillType="nonZero"
+        android:pathData="M10,9.5ZM4,20Q3.18,20 2.59,19.41T2,18V6Q2,5.18 2.59,4.59T4,4H21q.43,0 .71,.29T22,5T21.71,5.71T21,6H4V18H5q.43,0 .71,.29T6,19T5.71,19.71T5,20H4ZM20,18V10H16v8h4Zm-4.5,2q-.63,0 -1.06,-.44T14,18.5v-9Q14,8.88 14.44,8.44T15.5,8h5q.63,0 1.06,.44T22,9.5v9q0,.63 -.44,1.06T20.5,20h-5ZM18,12.5q.32,0 .54,-.23t.21,-.52q0,-.33 -.21,-.54T18,11q-.3,0 -.52,.21q-.23,.21 -.23,.54q0,.3 .23,.52T18,12.5ZM8.3,19.27L8,18.25q-.47,-.43 -.74,-1T7,16T7.26,14.75T8,13.75L8.3,12.73Q8.4,12.4 8.65,12.2T9.25,12h1.5q.35,0 .6,.2t.35,.53L12,13.75q.48,.42 .74,1T13,16t-.26,1.25t-.74,1l-.3,1.02Q11.6,19.6 11.35,19.8T10.75,20H9.25Q8.9,20 8.65,19.8T8.3,19.27ZM10,17.5q.65,0 1.08,-.44T11.5,16T11.05,14.94T10,14.5T8.95,14.93T8.5,16t.43,1.07T10,17.5ZM18,14Z" />
+</vector>

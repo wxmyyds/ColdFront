@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Material Symbols Rounded "dark_mode" 24dp filled (Apache 2.0, © Google LLC) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/white"
+        android:fillType="nonZero"
+        android:pathData="M12,21Q8.23,21 5.61,18.39Q3,15.78 3,12Q3,8.55 5.25,6.01T11,3.05Q11.33,3 11.58,3.14t.4,.36q.15,.22 .16,.52T11.95,4.6Q11.53,5.25 11.31,5.97T11.1,7.5q0,2.25 1.57,3.82T16.5,12.9q.78,0 1.54,-.22T19.4,12.05q.27,-.17 .56,-.16t.51,.14q.25,.13 .39,.38T20.95,13q-.35,3.45 -2.94,5.73Q15.43,21 12,21Z" />
+</vector>

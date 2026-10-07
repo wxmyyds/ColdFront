@@ -167,7 +167,11 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
         title = strings.scanTitle,
         navigationIcon = {
             IconButton(onClick = onBack) {
-                Icon(painterResource(R.drawable.arrow_circle_left_24), contentDescription = strings.back)
+                Icon(
+                    painterResource(R.drawable.arrow_circle_left_24),
+                    contentDescription = strings.back,
+                    modifier = Modifier.size(28.dp),
+                )
             }
         },
     ) { inner ->
