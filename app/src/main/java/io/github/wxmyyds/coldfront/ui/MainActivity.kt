@@ -50,9 +50,11 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -286,14 +288,21 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
     // Include the session even if lifecycle collection skipped reconnect's intermediate states.
     // Never key on route: an already-connected user must still be able to open scan.
     val connectionKey = connectionNavigationKey(liveState)
+    // Compare against the restored observation, not an unconditional first-effect skip: a new
+    // connection may have succeeded during recreation, while the same session must keep Scan open.
+    var lastConnectionKey by rememberSaveable(stateSaver = ConnectionNavigationKeySaver) {
+        mutableStateOf(connectionKey)
+    }
     LaunchedEffect(connectionKey) {
         if (shouldLeaveScanOnConnection(
-                connectionKey,
+                previous = lastConnectionKey,
+                current = connectionKey,
                 isScanDestination = current == AppRoute.Scan,
             )
         ) {
             nav.popUntil { it == AppRoute.Main }
         }
+        lastConnectionKey = connectionKey
     }
 
     val open = { route: AppRoute ->

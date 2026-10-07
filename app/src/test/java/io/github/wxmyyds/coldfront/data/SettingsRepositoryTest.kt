@@ -31,10 +31,6 @@ class SettingsRepositoryTest {
     fun `empty preferences expose existing defaults`() = runTest {
         val repository = SettingsRepository(TestPreferencesStore())
         assertEquals(AppSettings(false, "system", "tonal_spot", true, "system"), repository.settings.first())
-        assertFalse(repository.dynamicColor.first())
-        assertTrue(repository.predictiveBack.first())
-        assertEquals("system", repository.darkMode.first())
-        assertEquals("tonal_spot", repository.palette.first())
         assertEquals("system", repository.appLanguage.first())
     }
 
@@ -47,8 +43,8 @@ class SettingsRepositoryTest {
         ).toPreferences()
         val store = TestPreferencesStore(initial)
         val repository = SettingsRepository(store)
-        assertEquals("system", repository.darkMode.first())
-        assertEquals("tonal_spot", repository.palette.first())
+        assertEquals("system", repository.settings.first().darkMode)
+        assertEquals("tonal_spot", repository.settings.first().palette)
         assertEquals("system", repository.appLanguage.first())
         assertEquals(initial, store.snapshot)
         assertTrue(store.commits.isEmpty())
@@ -60,12 +56,12 @@ class SettingsRepositoryTest {
         val repository = SettingsRepository(store)
         listOf("system", "light", "dark").forEach { mode ->
             repository.setDarkMode(mode)
-            assertEquals(mode, repository.darkMode.first())
+            assertEquals(mode, repository.settings.first().darkMode)
         }
         listOf("tonal_spot", "neutral", "vibrant", "expressive", "rainbow",
             "fruit_salad", "monochrome", "fidelity", "content").forEach { palette ->
             repository.setPalette(palette)
-            assertEquals(palette, repository.palette.first())
+            assertEquals(palette, repository.settings.first().palette)
         }
         listOf("system", "zh", "en").forEach { language ->
             repository.setAppLanguage(language)
@@ -81,8 +77,8 @@ class SettingsRepositoryTest {
         }
         repository.setDynamicColor(true)
         repository.setPredictiveBack(false)
-        assertTrue(repository.dynamicColor.first())
-        assertFalse(repository.predictiveBack.first())
+        assertTrue(repository.settings.first().dynamicColor)
+        assertFalse(repository.settings.first().predictiveBack)
         assertEquals(true, store.snapshot[booleanPreferencesKey("dynamic_color")])
         assertEquals(false, store.snapshot[booleanPreferencesKey("predictive_back")])
     }
@@ -111,17 +107,17 @@ class SettingsRepositoryTest {
         // A cold scripted flow ensures distinctness is tested without StateFlow conflation.
         val store = object : DataStore<Preferences> {
             override val data: Flow<Preferences> = flow {
-                emit(mutablePreferencesOf(darkModeKey to "dark"))
-                emit(mutablePreferencesOf(darkModeKey to "dark", paletteKey to "neutral"))
-                emit(mutablePreferencesOf(darkModeKey to "invalid"))
-                emit(mutablePreferencesOf(darkModeKey to "also_invalid"))
-                emit(mutablePreferencesOf(darkModeKey to "light"))
+                emit(mutablePreferencesOf(languageKey to "en"))
+                emit(mutablePreferencesOf(languageKey to "en", paletteKey to "neutral"))
+                emit(mutablePreferencesOf(languageKey to "invalid"))
+                emit(mutablePreferencesOf(languageKey to "also_invalid"))
+                emit(mutablePreferencesOf(languageKey to "zh"))
             }
             override suspend fun updateData(transform: suspend (Preferences) -> Preferences): Preferences =
                 error("No write expected")
         }
-        val observed = SettingsRepository(store).darkMode.toList()
-        assertEquals(listOf("dark", "system", "light"), observed)
+        val observed = SettingsRepository(store).appLanguage.toList()
+        assertEquals(listOf("en", "system", "zh"), observed)
     }
 
     @Test
@@ -176,10 +172,6 @@ class SettingsRepositoryTest {
             }
             val repository = SettingsRepository(store)
             assertSame(failure, expectFailure<Exception> { repository.settings.first() })
-            assertSame(failure, expectFailure<Exception> { repository.dynamicColor.first() })
-            assertSame(failure, expectFailure<Exception> { repository.darkMode.first() })
-            assertSame(failure, expectFailure<Exception> { repository.palette.first() })
-            assertSame(failure, expectFailure<Exception> { repository.predictiveBack.first() })
             assertSame(failure, expectFailure<Exception> { repository.appLanguage.first() })
             assertSame(failure, expectFailure<Exception> { repository.setDynamicColor(true) })
             assertSame(failure, expectFailure<Exception> { repository.setDarkMode("dark") })

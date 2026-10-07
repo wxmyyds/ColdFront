@@ -63,11 +63,6 @@ object BlePermissionManager {
         }.getOrDefault(true)
     }
 
-    fun notificationPermissionToRequest(): Array<String> =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            arrayOf(Manifest.permission.POST_NOTIFICATIONS)
-        } else emptyArray()
-
     private fun granted(context: Context, permission: String): Boolean =
         ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
 }

@@ -21,6 +21,18 @@ internal suspend fun Flow<CoolerProfile?>.collectTargetInvalidations(
     }
 }
 
+/** Identity captured by UI/tile actions before storage or Android's service queue can suspend them. */
+internal data class ManualControlTarget(val address: String, val sessionId: Long) {
+    fun matches(state: CoolerLiveState): Boolean = state.isConnected &&
+        sessionId == state.connectionSessionId && address.equals(state.deviceAddress, ignoreCase = true)
+
+    companion object {
+        fun from(state: CoolerLiveState): ManualControlTarget? =
+            if (state.isConnected) state.deviceAddress?.let { ManualControlTarget(it, state.connectionSessionId) }
+            else null
+    }
+}
+
 /** A tile click must not replace a newer connection or fall back to a different saved device. */
 internal fun tileStartProfile(
     requested: CoolerLiveState,

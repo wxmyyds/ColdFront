@@ -7,7 +7,6 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import io.github.wxmyyds.coldfront.ui.theme.PaletteStyles
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -28,11 +27,7 @@ class SettingsRepository internal constructor(private val dataStore: DataStore<P
         )
     }.distinctUntilChanged()
 
-    // Keep single-setting flows for non-UI consumers (e.g. service notification language).
-    val dynamicColor: Flow<Boolean> = settings.map { it.dynamicColor }.distinctUntilChanged()
-    val darkMode: Flow<String> = settings.map { it.darkMode }.distinctUntilChanged()
-    val palette: Flow<String> = settings.map { it.palette }.distinctUntilChanged()
-    val predictiveBack: Flow<Boolean> = settings.map { it.predictiveBack }.distinctUntilChanged()
+    // The service and tile only need the notification language, not the full UI snapshot.
     val appLanguage: Flow<String> = settings.map { it.appLanguage }.distinctUntilChanged()
 
     suspend fun setDynamicColor(enabled: Boolean) {
