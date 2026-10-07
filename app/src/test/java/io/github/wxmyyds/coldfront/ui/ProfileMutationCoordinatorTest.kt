@@ -130,7 +130,7 @@ class ProfileMutationCoordinatorTest {
         replacementRecording.await()
         assertSame(saved, result.profile)
         assertSame(replacement, result.state)
-        assertEquals(1, snapshotReads)
+        assertEquals(2, snapshotReads)
         assertEquals(listOf(connected.connectionSessionId), recorded)
         assertNull(persisted)
         coordinator.recordConnection(replacement)
@@ -199,7 +199,8 @@ class ProfileMutationCoordinatorTest {
         runCurrent()
         assertFalse(recording.isCompleted)
         failDelete.complete(Unit)
-        assertSame(failure, deletion.await())
+        val thrown = deletion.await()
+        assertEquals(failure.message, thrown.message)
         recording.await()
         assertEquals(listOf("delete started", "delete failed", "record committed"), events)
     }

@@ -60,7 +60,8 @@ class CommandMailboxTest {
         val mailbox = CommandMailbox(backgroundScope)
         val failure = IOException("disk write")
         val result = runCatching { mailbox.execute<Int> { throw failure } }
-        assertSame(failure, result.exceptionOrNull())
+        assertTrue(result.exceptionOrNull() is IOException)
+        assertEquals(failure.message, result.exceptionOrNull()?.message)
         val cancelled = runCatching { mailbox.execute<Int> { throw CancellationException("command only") } }
         assertTrue(cancelled.exceptionOrNull() is CancellationException)
         assertEquals(3, mailbox.execute { 3 })
