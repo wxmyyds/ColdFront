@@ -51,14 +51,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # 注意：grep 无匹配时退出 1，在 set -e 下会静默终结整步（本步骤曾因漏写文件参数而零输出失败），
+          # 故一律用 || true 兜住，改由下方显式校验并报出可读错误。
           if git rev-parse origin/release >/dev/null 2>&1; then
-            CUR=$(git show origin/release:app/build.gradle.kts | grep -oP 'versionName\s*=\s*"\K[0-9.]+')
-            CODE=$(git show origin/release:app/build.gradle.kts | grep -oP 'versionCode\s*=\s*\K[0-9]+')
+            CUR=$(git show origin/release:app/build.gradle.kts | grep -oP 'versionName\s*=\s*"\K[0-9.]+' || true)
+            CODE=$(git show origin/release:app/build.gradle.kts | grep -oP 'versionCode\s*=\s*\K[0-9]+' || true)
             echo "最近发布（release 分支）：v$CUR（versionCode $CODE）"
           else
-            CUR=$(grep -oP 'versionName\s*=\s*"\K[0-9.]+' app/build.gradle.kts)
-            CODE=$(grep -oP 'versionCode\s*=\s*\K[0-9]+')
+            CUR=$(grep -oP 'versionName\s*=\s*"\K[0-9.]+' app/build.gradle.kts || true)
+            CODE=$(grep -oP 'versionCode\s*=\s*\K[0-9]+' app/build.gradle.kts || true)
             echo "首次发布（尚无 release 分支）：main 版本 v$CUR（versionCode $CODE）"
+          fi
+          if [ -z "$CUR" ] || [ -z "$CODE" ]; then
+            echo "::error::无法解析版本号（CUR='$CUR' CODE='$CODE'），检查 app/build.gradle.kts 的 versionName/versionCode"
+            exit 1
           fi
           INPUT="${{ inputs.version }}"
           if [ -z "$INPUT" ]; then
