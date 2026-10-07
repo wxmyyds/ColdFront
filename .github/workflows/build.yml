@@ -59,8 +59,10 @@ jobs:
           name: ColdFront-debug
           path: app/build/outputs/apk/debug/app-debug.apk
 
+      # 校验构建不注入签名密钥（PR / fork 拿不到 Secrets），产出未签名 APK；
+      # 路径用通配符，日后若此流程也接上签名不会因文件名变化而失败
       - name: Upload release APK (unsigned)
         uses: actions/upload-artifact@v7
         with:
           name: ColdFront-release-unsigned
-          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          path: app/build/outputs/apk/release/*.apk
