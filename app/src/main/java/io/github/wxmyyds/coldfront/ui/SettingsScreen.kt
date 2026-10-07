@@ -79,7 +79,7 @@ fun SettingsScreen(vm: CoolerViewModel, settings: AppSettings, onAbout: () -> Un
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            SegmentedGroup(title = strings.settingsTheme) {
+            SegmentedGroup {
                 item(key = "dynamicColor") {
                     SegmentedSwitchRow(
                         title = strings.settingsDynamicColor,
@@ -130,7 +130,7 @@ fun SettingsScreen(vm: CoolerViewModel, settings: AppSettings, onAbout: () -> Un
                 }
             }
 
-            SegmentedGroup(title = strings.settingsInterface) {
+            SegmentedGroup {
                 item(key = "predictiveBack") {
                     SegmentedSwitchRow(
                         title = strings.settingsPredictiveBack,
@@ -142,7 +142,7 @@ fun SettingsScreen(vm: CoolerViewModel, settings: AppSettings, onAbout: () -> Un
                 }
             }
 
-            SegmentedGroup(title = strings.settingsConnection) {
+            SegmentedGroup {
                 // 档案文档读完前不渲染：未加载的值不能冒充「不自动连接」。
                 item(key = "defaultDevice", visible = defaultDeviceLoaded) {
                     SegmentedDropdownRow(

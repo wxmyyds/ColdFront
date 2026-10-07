@@ -58,7 +58,6 @@ interface AppStrings {
 
     // —— 设置页 ——
     val settingsTitle: String
-    val settingsTheme: String
     val settingsDynamicColor: String
     val settingsDynamicColorDesc: String
     val settingsThemeMode: String
@@ -72,10 +71,8 @@ interface AppStrings {
     val settingsPaletteMonochrome: String
     val settingsPaletteFidelity: String
     val settingsPaletteContent: String
-    val settingsInterface: String
     val settingsPredictiveBack: String
     val settingsPredictiveBackDesc: String
-    val settingsConnection: String
     val settingsDefaultDevice: String
     val settingsDefaultDeviceDesc: String
     val settingsDefaultDeviceOff: String
@@ -218,7 +215,6 @@ object ZhStrings : AppStrings {
     override val devicesLastSeen = "上次使用:%s"
 
     override val settingsTitle = "设置"
-    override val settingsTheme = "主题与配色"
     override val settingsDynamicColor = "动态取色"
     override val settingsDynamicColorDesc = "跟随系统壁纸配色"
     override val settingsThemeMode = "主题模式"
@@ -232,10 +228,8 @@ object ZhStrings : AppStrings {
     override val settingsPaletteMonochrome = "Monochrome"
     override val settingsPaletteFidelity = "Fidelity"
     override val settingsPaletteContent = "Content"
-    override val settingsInterface = "界面"
     override val settingsPredictiveBack = "预测性返回"
     override val settingsPredictiveBackDesc = "启用导航页面的系统返回过渡"
-    override val settingsConnection = "连接"
     override val settingsDefaultDevice = "默认连接的设备"
     override val settingsDefaultDeviceDesc = "应用启动时自动连接该设备"
     override val settingsDefaultDeviceOff = "关闭"
@@ -371,7 +365,6 @@ object EnStrings : AppStrings {
     override val devicesLastSeen = "Last used: %s"
 
     override val settingsTitle = "Settings"
-    override val settingsTheme = "Theme & colors"
     override val settingsDynamicColor = "Dynamic color"
     override val settingsDynamicColorDesc = "Follow system wallpaper"
     override val settingsThemeMode = "Theme mode"
@@ -385,10 +378,8 @@ object EnStrings : AppStrings {
     override val settingsPaletteMonochrome = "Monochrome"
     override val settingsPaletteFidelity = "Fidelity"
     override val settingsPaletteContent = "Content"
-    override val settingsInterface = "Interface"
     override val settingsPredictiveBack = "Predictive back"
     override val settingsPredictiveBackDesc = "Enable system back transitions for app navigation"
-    override val settingsConnection = "Connection"
     override val settingsDefaultDevice = "Default device"
     override val settingsDefaultDeviceDesc = "Connects automatically when the app starts"
     override val settingsDefaultDeviceOff = "Off"
