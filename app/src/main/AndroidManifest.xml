@@ -29,7 +29,8 @@
 
     <application
         android:allowBackup="true"
-        android:icon="@drawable/ic_launcher"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
         android:label="ColdFront"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
@@ -57,7 +58,7 @@
             android:name=".service.CoolerTileService"
             android:enabled="true"
             android:exported="true"
-            android:icon="@drawable/ic_launcher"
+            android:icon="@mipmap/ic_launcher"
             android:label="ColdFront"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>

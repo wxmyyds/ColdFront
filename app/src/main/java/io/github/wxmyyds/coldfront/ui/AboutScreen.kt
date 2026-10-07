@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Image
 import androidx.compose.material3.Icon
@@ -73,15 +73,14 @@ fun AboutScreen(onBack: () -> Unit) {
                     .padding(horizontal = 24.dp, vertical = 32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                // 仿 KernelSU MD3E 版 About 头部观感（仅借鉴设计参数：80dp 白底、16dp 圆角、
-                // 彩色前景式 logo；实现用 MD3 Surface 惯用法，结构独立）
+                // 关于页图标：圆形紫灰底（与应用图标同色）+ 白色雪花，圆形呈现。
                 Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = Color.White,
+                    shape = CircleShape,
+                    color = Color(0xFF5A5A8B),
                     modifier = Modifier.size(80.dp),
                 ) {
                     Image(
-                        painter = painterResource(R.drawable.ic_logo_foreground),
+                        painter = painterResource(R.drawable.ic_launcher_foreground),
                         contentDescription = null,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Fit,
