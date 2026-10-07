@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.foundation.Image
@@ -55,7 +54,7 @@ fun AboutScreen(onBack: () -> Unit) {
         navigationIcon = {
             IconButton(onClick = onBack) {
                 Icon(
-                    painterResource(R.drawable.arrow_circle_left_24),
+                    painterResource(R.drawable.arrow_back_24),
                     contentDescription = strings.back,
                     modifier = Modifier.size(28.dp),
                 )
@@ -108,7 +107,7 @@ fun AboutScreen(onBack: () -> Unit) {
                             title = strings.settingsAboutReport,
                             leadingContent = { Icon(Icons.Filled.BugReport, contentDescription = null) },
                             trailingContent = {
-                                Icon(Icons.Filled.ChevronRight, contentDescription = null)
+                                Icon(painterResource(R.drawable.chevron_right_24), contentDescription = null)
                             },
                             onClick = {
                                 openLink("https://github.com/wxmyyds/ColdFront/issues/new")
@@ -120,7 +119,7 @@ fun AboutScreen(onBack: () -> Unit) {
                             title = strings.settingsAboutProject,
                             leadingContent = { Icon(Icons.Filled.Public, contentDescription = null) },
                             trailingContent = {
-                                Icon(Icons.Filled.ChevronRight, contentDescription = null)
+                                Icon(painterResource(R.drawable.chevron_right_24), contentDescription = null)
                             },
                             onClick = {
                                 openLink("https://github.com/wxmyyds/ColdFront")

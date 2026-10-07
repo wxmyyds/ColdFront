@@ -12,8 +12,10 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MotionScheme
+import androidx.annotation.DrawableRes
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.IntOffset
 
 internal object AppMotion {
@@ -47,5 +49,21 @@ fun AnimatedRowIcon(
         label = "rowIconState",
     ) { icon ->
         Icon(imageVector = icon, contentDescription = contentDescription)
+    }
+}
+
+/** Drawable-resource variant of [AnimatedRowIcon], for icons shipped as vector drawables. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun AnimatedRowIcon(
+    @DrawableRes resId: Int,
+    contentDescription: String? = null,
+) {
+    Crossfade(
+        targetState = resId,
+        animationSpec = MaterialTheme.motionScheme.fastEffectsSpec<Float>(),
+        label = "rowIconState",
+    ) { id ->
+        Icon(painter = painterResource(id), contentDescription = contentDescription)
     }
 }

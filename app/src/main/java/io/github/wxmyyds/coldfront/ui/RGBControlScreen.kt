@@ -69,6 +69,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.wxmyyds.coldfront.R
 import io.github.wxmyyds.coldfront.domain.LightEffect
 import io.github.wxmyyds.coldfront.domain.RGBConfig
 import io.github.wxmyyds.coldfront.domain.RgbWriteStatus
@@ -224,7 +225,11 @@ fun RGBControlScreen(vm: CoolerViewModel, isPageActive: Boolean, onConnect: () -
                                     )
                                 },
                                 optionLabel = { effectLabel(it, strings) },
-                                leadingContent = { AnimatedRowIcon(effectIcon(effect)) },
+                                leadingContent = {
+                                    // 炫彩用 Rounded 实心动画图标（drawable 版 crossfade），其余沿用矢量映射。
+                                    if (effect == LightEffect.COLORFUL) AnimatedRowIcon(R.drawable.animation_24)
+                                    else AnimatedRowIcon(effectIcon(effect))
+                                },
                             )
                         }
                         // 「呼吸」底下挂一个子选项：单色（0x03，带颜色字节） / 全彩（0x02，不带）
@@ -403,7 +408,11 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.glow(color: Color, 
 
 // ───────────────────────── 灯效选择 ─────────────────────────
 
-/** 灯效图标：行首跟着当前灯效走，菜单里不重复放图标。 */
+/** 灯效图标：行首跟着当前灯效走，菜单里不重复放图标。
+ *
+ * 炫彩（COLORFUL）不在此处映射——调用方直接用 R.drawable.animation_24 的重载；
+ * 这里保留分支只是为了 when 穷尽，实际走不到。
+ */
 private fun effectIcon(e: LightEffect): ImageVector = when (e) {
     LightEffect.ALWAYS_BRIGHT -> Icons.Filled.LightMode
     // 合并后的「呼吸」（包括设备回报的单色呼吸）统一用波纹图标

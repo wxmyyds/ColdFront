@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Material Symbols Rounded "chevron_right" 24dp filled (Apache 2.0, © Google LLC) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/white"
+        android:fillType="nonZero"
+        android:pathData="M12.6,12L8.7,8.1Q8.43,7.82 8.43,7.4T8.7,6.7T9.4,6.43T10.1,6.7l4.6,4.6q.15,.15 .21,.33T14.98,12t-.06,.38T14.7,12.7l-4.6,4.6Q9.83,17.58 9.4,17.58T8.7,17.3Q8.43,17.02 8.43,16.6T8.7,15.9L12.6,12Z" />
+</vector>

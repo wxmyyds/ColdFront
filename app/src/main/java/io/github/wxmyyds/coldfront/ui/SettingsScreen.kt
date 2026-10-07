@@ -14,7 +14,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.Composable
@@ -98,7 +97,7 @@ fun SettingsScreen(vm: CoolerViewModel, settings: AppSettings, onAbout: () -> Un
                         checked = supportsDynamicColor && dynamicColor,
                         enabled = supportsDynamicColor,
                         onCheckedChange = { if (supportsDynamicColor) vm.setDynamicColor(it) },
-                        leadingContent = { RowIcon(Icons.Filled.Palette) },
+                        leadingContent = { RowIcon(R.drawable.invert_colors_24) },
                     )
                 }
                 item(key = "palette") {
@@ -187,7 +186,7 @@ fun SettingsScreen(vm: CoolerViewModel, settings: AppSettings, onAbout: () -> Un
                     SegmentedRow(
                         title = strings.settingsAbout,
                         leadingContent = { RowIcon(Icons.Filled.Info) },
-                        trailingContent = { RowIcon(R.drawable.expand_circle_right_24) },
+                        trailingContent = { RowIcon(R.drawable.chevron_right_24) },
                         onClick = onAbout,
                     )
                 }

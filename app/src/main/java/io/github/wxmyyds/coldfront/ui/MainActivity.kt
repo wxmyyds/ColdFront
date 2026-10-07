@@ -32,8 +32,6 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Palette
 import androidx.compose.ui.res.painterResource
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -325,7 +323,15 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                     )
                 },
             ) { strings.navDevices },
-            TabItem(TabRoutes.RGB, { Icon(Icons.Filled.Palette, contentDescription = null) }) { strings.navRgb },
+            TabItem(
+                TabRoutes.RGB,
+                {
+                    Icon(
+                        painterResource(if (it) R.drawable.palette_fill_24 else R.drawable.palette_24),
+                        contentDescription = null,
+                    )
+                },
+            ) { strings.navRgb },
             // 设置 tab 用 Rounded 齿轮：选中 Fill、未选中 outline，由 NavigationBar/Rail 的选中态驱动。
             TabItem(
                 TabRoutes.SETTINGS,
