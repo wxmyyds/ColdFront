@@ -25,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.wxmyyds.coldfront.R
 import io.github.wxmyyds.coldfront.data.AppSettings
 import io.github.wxmyyds.coldfront.ui.component.RowIcon
 import io.github.wxmyyds.coldfront.ui.component.PageScaffold
@@ -120,7 +121,7 @@ fun SettingsScreen(vm: CoolerViewModel, settings: AppSettings, onAbout: () -> Un
                             PaletteStyles.CONTENT -> strings.settingsPaletteContent
                             else -> strings.settingsPaletteTonalSpot
                         } },
-                        leadingContent = { RowIcon(Icons.Filled.Palette) },
+                        leadingContent = { RowIcon(R.drawable.style_24) },
                     )
                 }
                 item(key = "themeMode") {

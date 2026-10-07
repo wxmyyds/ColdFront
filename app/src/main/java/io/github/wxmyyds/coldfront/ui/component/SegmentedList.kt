@@ -57,7 +57,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.annotation.DrawableRes
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -208,6 +210,16 @@ internal fun segmentedGroupPressMorph(itemCount: Int): Boolean = itemCount >= 2
 fun RowIcon(icon: ImageVector, modifier: Modifier = Modifier) {
     Icon(
         imageVector = icon,
+        contentDescription = null,
+        modifier = modifier.size(24.dp),
+    )
+}
+
+/** 行首图标（drawable 资源版）：与 [RowIcon] 同规格，用于 @drawable/style_24 这类矢量资源。 */
+@Composable
+fun RowIcon(@DrawableRes resId: Int, modifier: Modifier = Modifier) {
+    Icon(
+        painter = painterResource(resId),
         contentDescription = null,
         modifier = modifier.size(24.dp),
     )
