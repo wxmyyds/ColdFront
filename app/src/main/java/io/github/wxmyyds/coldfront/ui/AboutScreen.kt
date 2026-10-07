@@ -14,9 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BugReport
-import androidx.compose.material.icons.filled.Public
 import androidx.compose.foundation.Image
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -54,7 +51,7 @@ fun AboutScreen(onBack: () -> Unit) {
         navigationIcon = {
             IconButton(onClick = onBack) {
                 Icon(
-                    painterResource(R.drawable.arrow_back_24),
+                    painterResource(R.drawable.materialsymbols_ic_arrow_back_rounded_filled),
                     contentDescription = strings.back,
                     modifier = Modifier.size(28.dp),
                 )
@@ -105,9 +102,9 @@ fun AboutScreen(onBack: () -> Unit) {
                     item(key = "report") {
                         SegmentedRow(
                             title = strings.settingsAboutReport,
-                            leadingContent = { Icon(Icons.Filled.BugReport, contentDescription = null) },
+                            leadingContent = { Icon(painterResource(R.drawable.materialsymbols_ic_bug_report_rounded_filled), contentDescription = null) },
                             trailingContent = {
-                                Icon(painterResource(R.drawable.chevron_right_24), contentDescription = null)
+                                Icon(painterResource(R.drawable.materialsymbols_ic_chevron_right_rounded_filled), contentDescription = null)
                             },
                             onClick = {
                                 openLink("https://github.com/wxmyyds/ColdFront/issues/new")
@@ -117,9 +114,9 @@ fun AboutScreen(onBack: () -> Unit) {
                     item(key = "project") {
                         SegmentedRow(
                             title = strings.settingsAboutProject,
-                            leadingContent = { Icon(Icons.Filled.Public, contentDescription = null) },
+                            leadingContent = { Icon(painterResource(R.drawable.materialsymbols_ic_public_rounded_filled), contentDescription = null) },
                             trailingContent = {
-                                Icon(painterResource(R.drawable.chevron_right_24), contentDescription = null)
+                                Icon(painterResource(R.drawable.materialsymbols_ic_chevron_right_rounded_filled), contentDescription = null)
                             },
                             onClick = {
                                 openLink("https://github.com/wxmyyds/ColdFront")

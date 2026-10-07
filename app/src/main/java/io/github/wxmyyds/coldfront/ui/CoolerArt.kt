@@ -2,8 +2,6 @@ package io.github.wxmyyds.coldfront.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -47,7 +45,7 @@ fun CoolerArt(
         )
     } else {
         Icon(
-            Icons.Filled.AcUnit,
+            painterResource(R.drawable.materialsymbols_ic_ac_unit_rounded_filled),
             contentDescription = null,
             tint = iconTint,
             modifier = modifier,

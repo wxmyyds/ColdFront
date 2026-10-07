@@ -16,15 +16,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AcUnit
-import androidx.compose.material.icons.filled.AutoMode
-import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -49,15 +43,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.wxmyyds.coldfront.R
 import io.github.wxmyyds.coldfront.domain.CoolerBleConstants
 import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.domain.CoolerLiveState
@@ -200,7 +195,7 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
             enabled = state.isConnected && state.capabilities.coolingControl,
             shapes = staticStandaloneRowShapes(),
             onCheckedChange = vm::setCooling,
-            leadingContent = { RowIcon(Icons.Filled.AcUnit) },
+            leadingContent = { RowIcon(R.drawable.materialsymbols_ic_ac_unit_rounded_filled) },
         )
     }
 
@@ -215,7 +210,7 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
                 // 官方 Jacket8ProActivityV3.m6:破坏神开启时温控开关被禁用(并强制取消选中)。
                 enabled = state.isConnected && state.coolingAllowsControl && !state.boostOn,
                 onCheckedChange = { vm.setSmart(it) },
-                leadingContent = { RowIcon(Icons.Filled.AutoMode) },
+                leadingContent = { RowIcon(R.drawable.materialsymbols_ic_auto_mode_rounded_filled) },
             )
         }
         item(key = "boost", visible = state.hasConfirmedConfiguration(CoolerBleConstants.BOOST_CONTROL_UUID) && state.capabilities.boostControl) {
@@ -228,7 +223,7 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
                 enabled = state.isConnected && state.coolingAllowsControl &&
                     !state.smartOn && !state.powerLimited,
                 onCheckedChange = { vm.setBoost(it) },
-                leadingContent = { RowIcon(Icons.Filled.Bolt) },
+                leadingContent = { RowIcon(R.drawable.materialsymbols_ic_bolt_rounded_filled) },
             )
         }
         item(key = "overcold", visible = state.hasConfirmedConfiguration(CoolerBleConstants.PROTECTION_UUID) && state.capabilities.protectionControl) {
@@ -237,7 +232,7 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
                 summary = strings.homeOvercoldDesc,
                 checked = state.overcoldOn,
                 onCheckedChange = { vm.setOvercoldProtection(it) },
-                leadingContent = { RowIcon(Icons.Filled.Shield) },
+                leadingContent = { RowIcon(R.drawable.materialsymbols_ic_shield_rounded_filled) },
             )
         }
     }
@@ -309,10 +304,10 @@ private fun TempHero(state: CoolerLiveState) {
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                MetricPill(Icons.Filled.Speed, "${state.fanRpm ?: "--"}", "RPM", onContainer)
-                MetricPill(Icons.Filled.Bolt, "${state.powerW ?: "--"}", "W", onContainer)
+                MetricPill(R.drawable.materialsymbols_ic_speed_rounded_filled, "${state.fanRpm ?: "--"}", "RPM", onContainer)
+                MetricPill(R.drawable.materialsymbols_ic_bolt_rounded_filled, "${state.powerW ?: "--"}", "W", onContainer)
                 state.rssi?.let { rssi ->
-                    MetricPill(Icons.Filled.Bluetooth, "$rssi", "dBm", onContainer)
+                    MetricPill(R.drawable.materialsymbols_ic_bluetooth_connected_rounded_filled, "$rssi", "dBm", onContainer)
                 }
             }
         }
@@ -329,7 +324,24 @@ private fun TempHero(state: CoolerLiveState) {
  * 降字号不是这行腾宽度的手段(真正的手段是固定开销与换行策略)。
  */
 @Composable
-private fun MetricPill(icon: ImageVector, value: String, unit: String, content: Color) {
+private fun MetricPill(@DrawableRes resId: Int, value: String, unit: String, content: Color) {
+    MetricPillContent(
+        icon = {
+            Icon(
+                painterResource(resId),
+                contentDescription = null,
+                tint = content,
+                modifier = Modifier.size(14.dp),
+            )
+        },
+        value = value,
+        unit = unit,
+        content = content,
+    )
+}
+
+@Composable
+private fun MetricPillContent(icon: @Composable () -> Unit, value: String, unit: String, content: Color) {
     // 胶囊底是对 content 的装饰性淡色叠加:英雄卡容器会在 primaryContainer 与
     // surfaceBright 之间过渡,没有单一角色色能同时适配,故保留 alpha 写法。
     // 但文字与图标不再做 alpha(那直接影响对比度),一律用全强度 content。
@@ -342,12 +354,7 @@ private fun MetricPill(icon: ImageVector, value: String, unit: String, content: 
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = content,
-                modifier = Modifier.size(14.dp),
-            )
+            icon()
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -395,7 +402,7 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Icon(
-                    Icons.Filled.AutoMode,
+                    painterResource(R.drawable.materialsymbols_ic_auto_mode_rounded_filled),
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onTertiaryContainer,
                 )
@@ -429,7 +436,7 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 itemVerticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Filled.Speed, contentDescription = null)
+                Icon(painterResource(R.drawable.materialsymbols_ic_speed_rounded_filled), contentDescription = null)
                 Text(strings.homeLevel, style = MaterialTheme.typography.titleMedium)
                 // 设备档位可能随实时回读更新，保持数值即时，避免每次遥测都重启动效。
                 Text(
@@ -505,7 +512,7 @@ private fun FailedContent(strings: AppStrings, onAddDevice: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Icon(
-            Icons.Filled.AcUnit,
+            painterResource(R.drawable.materialsymbols_ic_ac_unit_rounded_filled),
             contentDescription = null,
             modifier = Modifier.size(64.dp),
             tint = MaterialTheme.colorScheme.error,
@@ -542,7 +549,7 @@ private fun NotConnectedContent(strings: AppStrings, onAddDevice: () -> Unit) {
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    Icons.Filled.AcUnit,
+                    painterResource(R.drawable.materialsymbols_ic_ac_unit_rounded_filled),
                     contentDescription = null,
                     modifier = Modifier.size(56.dp),
                     tint = MaterialTheme.colorScheme.primary,

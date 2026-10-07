@@ -28,12 +28,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AcUnit
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.LightMode
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.Waves
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -62,7 +56,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -225,11 +219,7 @@ fun RGBControlScreen(vm: CoolerViewModel, isPageActive: Boolean, onConnect: () -
                                     )
                                 },
                                 optionLabel = { effectLabel(it, strings) },
-                                leadingContent = {
-                                    // 炫彩用 Rounded 实心动画图标（drawable 版 crossfade），其余沿用矢量映射。
-                                    if (effect == LightEffect.COLORFUL) AnimatedRowIcon(R.drawable.animation_24)
-                                    else AnimatedRowIcon(effectIcon(effect))
-                                },
+                                leadingContent = { AnimatedRowIcon(effectIcon(effect)) },
                             )
                         }
                         // 「呼吸」底下挂一个子选项：单色（0x03，带颜色字节） / 全彩（0x02，不带）
@@ -294,7 +284,7 @@ fun RGBControlScreen(vm: CoolerViewModel, isPageActive: Boolean, onConnect: () -
                             RgbWriteStatus.WRITING -> Text(strings.rgbWriting)
                             RgbWriteStatus.SENT -> {
                                 if (applied) {
-                                    Icon(Icons.Filled.Check, contentDescription = null)
+                                    Icon(painterResource(R.drawable.materialsymbols_ic_check_rounded_filled), contentDescription = null)
                                     Spacer(Modifier.width(8.dp))
                                 }
                                 Text(strings.rgbSent)
@@ -408,17 +398,13 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.glow(color: Color, 
 
 // ───────────────────────── 灯效选择 ─────────────────────────
 
-/** 灯效图标：行首跟着当前灯效走，菜单里不重复放图标。
- *
- * 炫彩（COLORFUL）不在此处映射——调用方直接用 R.drawable.animation_24 的重载；
- * 这里保留分支只是为了 when 穷尽，实际走不到。
- */
-private fun effectIcon(e: LightEffect): ImageVector = when (e) {
-    LightEffect.ALWAYS_BRIGHT -> Icons.Filled.LightMode
+/** 灯效图标资源：行首跟着当前灯效走，菜单里不重复放图标。 */
+private fun effectIcon(e: LightEffect): Int = when (e) {
+    LightEffect.ALWAYS_BRIGHT -> R.drawable.materialsymbols_ic_light_mode_rounded_filled
     // 合并后的「呼吸」（包括设备回报的单色呼吸）统一用波纹图标
-    LightEffect.BREATH_FULLCOLOR, LightEffect.BREATH_SINGLE -> Icons.Filled.Waves
-    LightEffect.COLORFUL -> Icons.Filled.Palette
-    LightEffect.OFF -> Icons.Filled.AcUnit
+    LightEffect.BREATH_FULLCOLOR, LightEffect.BREATH_SINGLE -> R.drawable.materialsymbols_ic_waves_rounded_filled
+    LightEffect.COLORFUL -> R.drawable.materialsymbols_ic_animation_rounded_filled
+    LightEffect.OFF -> R.drawable.materialsymbols_ic_ac_unit_rounded_filled
 }
 
 private fun effectLabel(e: LightEffect, s: io.github.wxmyyds.coldfront.ui.i18n.AppStrings): String =
@@ -549,7 +535,7 @@ private fun NotConnectedCard(strings: io.github.wxmyyds.coldfront.ui.i18n.AppStr
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Icon(
-                Icons.Filled.Palette,
+                painterResource(R.drawable.materialsymbols_ic_palette_rounded_filled),
                 contentDescription = null,
                 modifier = Modifier.size(64.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -588,7 +574,7 @@ private fun NotSupportedCard(strings: io.github.wxmyyds.coldfront.ui.i18n.AppStr
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Icon(
-                Icons.Filled.AcUnit,
+                painterResource(R.drawable.materialsymbols_ic_ac_unit_rounded_filled),
                 contentDescription = null,
                 modifier = Modifier.size(64.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,

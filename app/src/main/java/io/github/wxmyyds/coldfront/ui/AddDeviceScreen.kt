@@ -24,14 +24,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.filled.BluetoothDisabled
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -168,7 +163,7 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
         navigationIcon = {
             IconButton(onClick = onBack) {
                 Icon(
-                    painterResource(R.drawable.arrow_back_24),
+                    painterResource(R.drawable.materialsymbols_ic_arrow_back_rounded_filled),
                     contentDescription = strings.back,
                     modifier = Modifier.size(28.dp),
                 )
@@ -270,7 +265,7 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
                         enabled = resumed && !connecting,
                         shapes = ButtonDefaults.shapes(),
                     ) {
-                        Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(painterResource(R.drawable.materialsymbols_ic_refresh_rounded_filled), contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text(strings.scanRescan)
                     }
@@ -603,7 +598,7 @@ private fun BluetoothOffState(strings: AppStrings) {
     Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Icon(
-                Icons.Filled.BluetoothDisabled,
+                painterResource(R.drawable.materialsymbols_ic_bluetooth_disabled_rounded_filled),
                 contentDescription = null,
                 modifier = Modifier.size(64.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -632,7 +627,7 @@ private fun ScanningEmptyState(strings: AppStrings, scanning: Boolean) {
                 Text(strings.scanScanning, style = MaterialTheme.typography.titleMedium)
             } else {
                 Icon(
-                    Icons.Filled.Bluetooth,
+                    painterResource(R.drawable.materialsymbols_ic_bluetooth_rounded_filled),
                     contentDescription = null,
                     modifier = Modifier.size(64.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -673,7 +668,7 @@ private fun DeviceRow(
         },
         trailingContent = {
             Icon(
-                Icons.AutoMirrored.Filled.ArrowForward,
+                painterResource(R.drawable.materialsymbols_ic_arrow_forward_rounded_filled),
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )

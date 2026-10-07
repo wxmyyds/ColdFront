@@ -24,9 +24,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.DropdownMenuGroup
 import androidx.compose.material3.DropdownMenuPopup
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -58,7 +55,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.annotation.DrawableRes
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -79,8 +75,8 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
 import kotlinx.coroutines.flow.collect
+import io.github.wxmyyds.coldfront.R
 import io.github.wxmyyds.coldfront.ui.theme.optionContainerColor
-
 /**
  * MD3E 分段选项列表 —— ColdFront 自有实现。
  *
@@ -205,17 +201,7 @@ private fun currentRowShapes(explicit: ListItemShapes?): ListItemShapes =
  */
 internal fun segmentedGroupPressMorph(itemCount: Int): Boolean = itemCount >= 2
 
-/** 行首图标：24dp + onSurfaceVariant（M3E 列表 leading icon 规格）。 */
-@Composable
-fun RowIcon(icon: ImageVector, modifier: Modifier = Modifier) {
-    Icon(
-        imageVector = icon,
-        contentDescription = null,
-        modifier = modifier.size(24.dp),
-    )
-}
-
-/** 行首图标（drawable 资源版）：与 [RowIcon] 同规格，用于 @drawable/style_24 这类矢量资源。 */
+/** 行首图标：24dp + onSurfaceVariant（M3E 列表 leading icon 规格），传 drawable 资源 ID。 */
 @Composable
 fun RowIcon(@DrawableRes resId: Int, modifier: Modifier = Modifier) {
     Icon(
@@ -473,7 +459,10 @@ fun SegmentedSwitchRow(
                 enabled = enabled,
                 thumbContent = {
                     Icon(
-                        imageVector = if (checked) Icons.Filled.Check else Icons.Filled.Close,
+                        painter = painterResource(
+                            if (checked) R.drawable.materialsymbols_ic_check_rounded_filled
+                            else R.drawable.materialsymbols_ic_close_rounded_filled
+                        ),
                         contentDescription = null,
                         modifier = Modifier.size(SwitchDefaults.IconSize),
                     )
@@ -710,7 +699,7 @@ private fun <T> SingleChoiceDropdownMenu(
                     // 选中勾选图标：组件自带 expandHorizontally + fadeIn 动画
                     selectedLeadingIcon = {
                         Icon(
-                            imageVector = Icons.Filled.Check,
+                            painter = painterResource(R.drawable.materialsymbols_ic_check_rounded_filled),
                             contentDescription = null,
                             modifier = Modifier.size(MenuDefaults.LeadingIconSize),
                         )

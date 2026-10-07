@@ -309,7 +309,7 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                 TabRoutes.HOME,
                 {
                     Icon(
-                        painterResource(if (it) R.drawable.home_fill_24 else R.drawable.home_24),
+                        painterResource(if (it) R.drawable.materialsymbols_ic_home_rounded_filled else R.drawable.materialsymbols_ic_home_rounded),
                         contentDescription = null,
                     )
                 },
@@ -318,7 +318,7 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                 TabRoutes.DEVICES,
                 {
                     Icon(
-                        painterResource(if (it) R.drawable.devices_fill_24 else R.drawable.devices_24),
+                        painterResource(if (it) R.drawable.materialsymbols_ic_devices_other_rounded_filled else R.drawable.materialsymbols_ic_devices_other_rounded),
                         contentDescription = null,
                     )
                 },
@@ -327,7 +327,7 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                 TabRoutes.RGB,
                 {
                     Icon(
-                        painterResource(if (it) R.drawable.palette_fill_24 else R.drawable.palette_24),
+                        painterResource(if (it) R.drawable.materialsymbols_ic_palette_rounded_filled else R.drawable.materialsymbols_ic_palette_rounded),
                         contentDescription = null,
                     )
                 },
@@ -337,7 +337,7 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                 TabRoutes.SETTINGS,
                 {
                     Icon(
-                        painterResource(if (it) R.drawable.settings_fill_24 else R.drawable.settings_24),
+                        painterResource(if (it) R.drawable.materialsymbols_ic_settings_rounded_filled else R.drawable.materialsymbols_ic_settings_rounded),
                         contentDescription = null,
                     )
                 },

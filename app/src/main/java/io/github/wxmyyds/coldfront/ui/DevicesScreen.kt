@@ -20,10 +20,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AcUnit
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -44,10 +40,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.wxmyyds.coldfront.R
 import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.domain.CoolerLiveState
 import io.github.wxmyyds.coldfront.domain.CoolerProfile
@@ -85,7 +83,7 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 text = { Text(strings.devicesAdd) },
-                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                icon = { Icon(painterResource(R.drawable.materialsymbols_ic_add_rounded_filled), contentDescription = null) },
                 onClick = onAddDevice,
             )
         },
@@ -244,7 +242,7 @@ private fun SavedDeviceCard(
             ) {
                 IconButton(onClick = onDelete) {
                     Icon(
-                        Icons.Filled.Delete,
+                        painterResource(R.drawable.materialsymbols_ic_delete_rounded_filled),
                         contentDescription = strings.devicesDelete,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -285,7 +283,7 @@ private fun EmptyState(strings: AppStrings, modifier: Modifier = Modifier) {
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    Icons.Filled.AcUnit,
+                    painterResource(R.drawable.materialsymbols_ic_ac_unit_rounded_filled),
                     contentDescription = null,
                     modifier = Modifier.size(52.dp),
                     tint = MaterialTheme.colorScheme.primary,
