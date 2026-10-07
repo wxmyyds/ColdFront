@@ -45,7 +45,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
@@ -57,7 +56,7 @@ private const val READ_TIMEOUT_MS = 2500L
 private const val CONNECT_TIMEOUT_MS = 15000L
 private const val DISCOVERY_TIMEOUT_MS = 10000L
 private const val INIT_TIMEOUT_MS = 30000L
-/** 灯效未读到前的 read 重试间隔:大于 READ_TIMEOUT_MS,避免慢设备每次 read 都被超时打断 */
+/** 灯效未知时的 read 重试限流；通道何时可安全重用由队列回调状态决定，而非这段间隔。 */
 private const val LIGHT_READ_RETRY_MS = 4000L
 /** 下发默认灯(官方未知模式兑底)的最小间隔,避免设备持续返回未知值时写入风暴 */
 private const val LIGHT_DEFAULT_MIN_INTERVAL_MS = 3000L
@@ -85,24 +84,26 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
     private val bluetoothAdapter: BluetoothAdapter? =
         (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
 
-    private class Session(val id: Long) {
+    private class Session(val id: Long, scope: CoroutineScope) {
         var gatt: BluetoothGatt? = null
         val characteristics = mutableMapOf<UUID, BluetoothGattCharacteristic>()
         val generations = mutableMapOf<Control, Long>()
-        val modeCommands = ModeCommandCoordinator()
-        var discoveryJob: Job? = null
+        val modeCommands = ModeCommandCoordinator(scope)
         var initJob: Job? = null
         var timeoutJob: Job? = null
         var pollJob: Job? = null
         var rssiJob: Job? = null
         var discoveryRequested = false
         var initializing = false
-        var controls = 0
+        val controls = MutableStateFlow(0)
+        val telemetryChanges = MutableStateFlow(0L)
         // Readable configuration characteristics to read back after connecting.
         // Best-effort: a failed or unparsed read must not block CONNECTED.
         var requiredConfiguration = emptySet<UUID>()
-        var lastTempUpdateMs = 0L
-        var lastLightReadMs = 0L
+        var temperatureWatchStartedAtMs = 0L
+        var lastTempUpdateMs: Long? = null
+        var lastTemperatureRecoveryAttemptMs: Long? = null
+        var lastLightReadMs: Long? = null
         var lastLightDefaultMs = 0L
         var lightDefaultAttempts = 0
     }
@@ -296,7 +297,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         // before calling here; explicit entries clear theirs on the Main entry above.
         stopScanInternal()
         disconnectInternal()
-        val s = Session(++nextSessionId)
+        val s = Session(++nextSessionId, scope)
         session = s
         val normalizedAddress = address.trim().uppercase(java.util.Locale.ROOT)
         _state.value = CoolerLiveState(
@@ -375,10 +376,10 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         pendingRgb = null
         _rgbWriteState.value = null
         if (old == null) return
+        old.modeCommands.close()
         val oldGatt = old.gatt
         old.gatt = null
         if (oldGatt != null) operations.abort(oldGatt)
-        old.discoveryJob?.cancel()
         old.initJob?.cancel()
         old.timeoutJob?.cancel()
         old.pollJob?.cancel()
@@ -442,13 +443,9 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                     if (_state.value.connection != ConnectionState.CONNECTING) return@dispatch
                     _state.update { it.copy(connection = ConnectionState.DISCOVERING) }
                     armTimeout(s, DISCOVERY_TIMEOUT_MS, "Service discovery timed out")
-                    s.discoveryJob = scope.launch {
-                        delay(300)
-                        if (!owns(s)) return@launch
-                        s.discoveryRequested = true
-                        if (!runCatching { g.discoverServices() }.getOrDefault(false)) {
-                            fail(s, "Service discovery rejected")
-                        }
+                    s.discoveryRequested = true
+                    if (!runCatching { g.discoverServices() }.getOrDefault(false)) {
+                        fail(s, "Service discovery rejected")
                     }
                 }
             }
@@ -578,10 +575,8 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         for (uuid in s.requiredConfiguration) {
             if (!owns(s)) return
             val ch = s.characteristics[uuid] ?: continue
-            // A slow startup reply may be drained before the periodic retry. Until that
-            // callback arrives, the queue keeps this exact lane blocked so it cannot be
-            // mistaken for a new read. A still-blocked periodic read promotes quarantine
-            // and exposes degraded telemetry instead of silently retrying forever.
+            // A timed-out lane stays blocked until its old callback drains. The poller
+            // waits for that availability event rather than probing/promoting the marker.
             val ok = readIfReadable(s, ch, poisonOnTimeout = false, quarantineOnTimeout = false)
             if (!owns(s)) return
             if (!ok) Log.w(TAG, "Initial configuration read unavailable: $uuid")
@@ -589,7 +584,13 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         if (!owns(s)) return
         s.timeoutJob?.cancel()
         val beforeConnected = _state.value
-        _state.update { it.copy(connection = ConnectionState.CONNECTED) }
+        _state.update {
+            it.copy(
+                connection = ConnectionState.CONNECTED,
+                // Startup timeouts happened before onQuarantined could publish a warning.
+                telemetryDegraded = it.telemetryDegraded || s.gatt?.let(operations::hasTimedOut) == true,
+            )
+        }
         if (!ready(s)) return
         if (powerLimitNeedsEnforcement(beforeConnected, _state.value)) enforcePowerLimit()
         val rgb = pendingRgb
@@ -663,6 +664,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         fresh: () -> Boolean = { true },
         poisonOnTimeout: Boolean = true,
         quarantineOnTimeout: Boolean = true,
+        beforeRead: () -> Unit = {},
     ): Boolean {
         val g = s.gatt ?: return false
         if (!owns(s) || !fresh()) return false
@@ -671,7 +673,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         if (ch.properties and BluetoothGattCharacteristic.PROPERTY_READ == 0) return true
         return operations.execute(g, ch, GattOperationQueue.Kind.READ, READ_TIMEOUT_MS,
             isCurrent = { owns(s) && s.characteristics[ch.uuid] === ch && fresh() },
-            start = { g.readCharacteristic(ch) },
+            start = { beforeRead(); g.readCharacteristic(ch) },
             poisonOnTimeout = poisonOnTimeout,
             quarantineOnTimeout = quarantineOnTimeout,
         ).success
@@ -681,6 +683,8 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         s: Session,
         ch: BluetoothGattCharacteristic,
         poisonOnTimeout: Boolean = true,
+        fresh: () -> Boolean = { true },
+        beforeSubscribe: () -> Unit = {},
     ): Boolean {
         val g = s.gatt ?: return false
         if (!owns(s)) return false
@@ -689,8 +693,9 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         if (!notify && !indicate) return true
         val descriptor = ch.getDescriptor(CCC_DESCRIPTOR_UUID) ?: return false
         return operations.execute(g, descriptor, GattOperationQueue.Kind.DESCRIPTOR, OP_TIMEOUT_MS,
-            isCurrent = { owns(s) && s.characteristics[ch.uuid] === ch },
+            isCurrent = { owns(s) && s.characteristics[ch.uuid] === ch && fresh() },
             start = {
+                beforeSubscribe()
                 if (!g.setCharacteristicNotification(ch, true)) false else {
                     @Suppress("DEPRECATION")
                     descriptor.value = if (indicate) BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
@@ -703,84 +708,127 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         ).success
     }
 
+    private fun canPollRead(s: Session, ch: BluetoothGattCharacteristic): Boolean {
+        val g = s.gatt ?: return false
+        return ready(s) && s.controls.value == 0 && readable(ch) &&
+            operations.isAvailable(g, ch, GattOperationQueue.Kind.READ) &&
+            (ch.uuid != CoolerBleConstants.LIGHT_CONTROL_UUID || _state.value.rgb == null)
+    }
+
+    private fun canRecoverSubscription(s: Session, ch: BluetoothGattCharacteristic): Boolean {
+        val g = s.gatt ?: return false
+        if (!ready(s) || s.controls.value != 0 ||
+            ch.properties and (BluetoothGattCharacteristic.PROPERTY_NOTIFY or BluetoothGattCharacteristic.PROPERTY_INDICATE) == 0
+        ) return false
+        val descriptor = ch.getDescriptor(CCC_DESCRIPTOR_UUID) ?: return false
+        return operations.isAvailable(g, descriptor, GattOperationQueue.Kind.DESCRIPTOR)
+    }
+
+    private fun temperatureStale(s: Session): Boolean =
+        SystemClock.elapsedRealtime() - (s.lastTempUpdateMs ?: s.temperatureWatchStartedAtMs) >= 6000L
+
     private fun startPollLoop(s: Session) {
         if (!ready(s)) return
-        s.lastTempUpdateMs = SystemClock.elapsedRealtime()
-        // Background polling cadence: frequent state costs a wake plus radio time on every
-        // accepted read. Notification-capable telemetry already arrives on its own; reduce
-        // the steady-state read volume so Doze/background scheduling cannot starve — and
-        // then poison — the session with backlog timeouts.
-        var degradedPollCycles = 0
+        // This is the first-report grace period, not an invented temperature report.
+        s.temperatureWatchStartedAtMs = SystemClock.elapsedRealtime()
+        val targets = telemetryUuids.mapNotNull { s.characteristics[it] }
+        val temperatures = listOf(CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID, CoolerBleConstants.STATUS_UUID)
+            .mapNotNull { s.characteristics[it] }
         s.pollJob = scope.launch {
-            while (isActive && ready(s)) {
-                if (s.controls == 0) {
-                    val polled = pollTelemetryOnce(s)
-                    if (!ready(s)) return@launch
-                    // Back-to-back fully skipped passes mean every read was rejected or
-                    // non-readable: do not spin at foreground cadence while in background.
-                    degradedPollCycles = if (polled) 0 else degradedPollCycles + 1
-                } else {
-                    degradedPollCycles = 0
-                }
-                delay(if (degradedPollCycles >= 3) 4000 else 500)
-            }
+            runTelemetrySchedule(
+                controls = s.controls,
+                availabilityChanges = operations.availabilityChanges,
+                reportChanges = s.telemetryChanges,
+                isCurrent = { ready(s) },
+                nowMs = SystemClock::elapsedRealtime,
+                nextReadableAt = {
+                    // READ-only and READ+Notify retain exactly the same sampling policy.
+                    targets.filter { canPollRead(s, it) }.minOfOrNull { ch ->
+                        if (ch.uuid == CoolerBleConstants.LIGHT_CONTROL_UUID) {
+                            s.lastLightReadMs?.plus(LIGHT_READ_RETRY_MS) ?: 0L
+                        } else 0L
+                    }
+                },
+                nextRecoveryAt = {
+                    if (temperatures.any { canPollRead(s, it) || canRecoverSubscription(s, it) }) {
+                        temperatureRecoveryAt(s.temperatureWatchStartedAtMs, s.lastTempUpdateMs,
+                            s.lastTemperatureRecoveryAttemptMs)
+                    } else null
+                },
+                poll = { readDue, recoveryDue ->
+                    pollTelemetryOnce(s, targets, temperatures, readDue, recoveryDue)
+                },
+            )
         }
         s.rssiJob = scope.launch {
-            // RSSI is best-effort UI telemetry: its loss never invalidates the session and
-            // its success clears only a UI null, never protocol state.
-            while (isActive && ready(s)) {
-                val g = s.gatt ?: return@launch
-                val result = operations.execute(g, g, GattOperationQueue.Kind.RSSI, READ_TIMEOUT_MS,
-                    isCurrent = { ready(s) }, start = { g.readRemoteRssi() }, poisonOnTimeout = false)
-                if (!ready(s)) return@launch
-                if (!result.success) _state.update { it.copy(rssi = null) }
-                delay(2000)
-            }
+            // RSSI remains best-effort 2 s sampling, independent of configuration reads.
+            runRssiSchedule(
+                availabilityChanges = operations.availabilityChanges,
+                isCurrent = { ready(s) },
+                isAvailable = {
+                    s.gatt?.let { operations.isAvailable(it, it, GattOperationQueue.Kind.RSSI) } == true
+                },
+                nowMs = SystemClock::elapsedRealtime,
+                sample = {
+                    val g = s.gatt
+                    if (g != null && ready(s)) {
+                        val result = operations.execute(g, g, GattOperationQueue.Kind.RSSI, READ_TIMEOUT_MS,
+                            isCurrent = { ready(s) && operations.isAvailable(g, g, GattOperationQueue.Kind.RSSI) },
+                            start = { g.readRemoteRssi() }, poisonOnTimeout = false)
+                        if (ready(s) && !result.success) _state.update { it.copy(rssi = null) }
+                    }
+                },
+            )
         }
     }
 
-    /**
-     * One background-tolerant telemetry pass. Returns true when at least one readable
-     * characteristic completed successfully. Setup/control paths retain skip-as-success
-     * and poisoning defaults; periodic reads cannot invalidate an otherwise healthy session.
-     */
-    private suspend fun pollTelemetryOnce(s: Session): Boolean {
-        // Keep unknown light state in the periodic pass. A timeout retains a drainable
-        // marker: retry is safe only after the old callback is consumed, otherwise the
-        // degraded warning offers reconnection. Throttling avoids excess read traffic.
-        val lightPending = _state.value.rgb == null
-        val light = s.characteristics[CoolerBleConstants.LIGHT_CONTROL_UUID]
-        val targets = buildList {
-            addAll(
-                telemetryUuids.filterNot { it == CoolerBleConstants.LIGHT_CONTROL_UUID }
-                    .mapNotNull { s.characteristics[it] }
+    /** Due work only: blocked lanes await a queue event, throttled light reads their deadline. */
+    private suspend fun pollTelemetryOnce(
+        s: Session,
+        targets: List<BluetoothGattCharacteristic>,
+        temperatures: List<BluetoothGattCharacteristic>,
+        readDue: Boolean,
+        recoveryDue: Boolean,
+    ): TelemetryPollResult = pollTelemetry(
+        targets = if (readDue) targets else emptyList(),
+        temperatureTargets = if (recoveryDue) temperatures else emptyList(),
+        isCurrent = { ready(s) && s.controls.value == 0 },
+        isReadable = { ch ->
+            canPollRead(s, ch) && (ch.uuid != CoolerBleConstants.LIGHT_CONTROL_UUID ||
+                s.lastLightReadMs?.let { SystemClock.elapsedRealtime() - it >= LIGHT_READ_RETRY_MS } != false)
+        },
+        read = { ch, recovery ->
+            var started = false
+            val light = ch.uuid == CoolerBleConstants.LIGHT_CONTROL_UUID
+            val success = readIfReadable(s, ch,
+                // A queued passive read may be superseded, but an accepted read is never
+                // cancelled to make room for control. Freshness is checked before dispatch.
+                fresh = { canPollRead(s, ch) && (!recovery || temperatureStale(s)) },
+                poisonOnTimeout = false, quarantineOnTimeout = !light,
+                beforeRead = {
+                    started = true
+                    if (light) s.lastLightReadMs = SystemClock.elapsedRealtime()
+                },
             )
-            if (lightPending && light != null && readable(light)) add(light)
-        }
-        val polled = pollTelemetry(
-            targets = targets,
-            temperatureTargets = listOf(CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID, CoolerBleConstants.STATUS_UUID)
-                .mapNotNull { s.characteristics[it] },
-            isCurrent = { ready(s) },
-            isReadable = { it.properties and BluetoothGattCharacteristic.PROPERTY_READ != 0 },
-            read = { ch ->
-                if (ch.uuid == CoolerBleConstants.LIGHT_CONTROL_UUID) {
-                    val now = SystemClock.elapsedRealtime()
-                    if (now - s.lastLightReadMs < LIGHT_READ_RETRY_MS) {
-                        return@pollTelemetry false
-                    }
-                    s.lastLightReadMs = now
-                    readIfReadable(s, ch, poisonOnTimeout = false, quarantineOnTimeout = false)
-                } else {
-                    readIfReadable(s, ch, poisonOnTimeout = false)
-                }
-            },
-            temperatureStale = { SystemClock.elapsedRealtime() - s.lastTempUpdateMs > 6000 },
-            subscribe = { enableNotification(s, it, poisonOnTimeout = false) },
-            onTemperatureRecovery = { s.lastTempUpdateMs = SystemClock.elapsedRealtime() - 4000 },
-        )
-        return polled
-    }
+            if (started && ready(s) && s.controls.value == 0 &&
+                (!light || _state.value.rgb == null) && (!recovery || temperatureStale(s))
+            ) {
+                success
+            } else null
+        },
+        temperatureStale = { temperatureStale(s) },
+        isSubscribable = { canRecoverSubscription(s, it) },
+        subscribe = { ch ->
+            var started = false
+            val success = enableNotification(s, ch, poisonOnTimeout = false,
+                fresh = { canRecoverSubscription(s, ch) && temperatureStale(s) },
+                beforeSubscribe = { started = true })
+            if (started) success else null
+        },
+        onTemperatureRecoveryAttempt = {
+            s.lastTemperatureRecoveryAttemptMs = SystemClock.elapsedRealtime()
+        },
+    )
 
     private fun handleData(s: Session, uuid: UUID, value: ByteArray) {
         if (!owns(s)) return
@@ -800,6 +848,10 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         if (update?.temperatureReported == true) s.lastTempUpdateMs = SystemClock.elapsedRealtime()
         val committed = confirmedConfigurationState(previous, uuid, update)
         _state.value = committed
+        if (update?.temperatureReported == true || uuid == CoolerBleConstants.LIGHT_CONTROL_UUID) {
+            // Even an identical temperature report changes the watchdog deadline.
+            s.telemetryChanges.value++
+        }
         // Repeat limits stay quiet, but a limit received before readiness must not be lost.
         if (powerLimitNeedsEnforcement(previous, committed)) enforcePowerLimit()
     }
@@ -878,7 +930,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
     ): Boolean {
         val s = command.session
         val compositeFresh = { fresh(command) && additionalFresh() }
-        s.controls++
+        s.controls.value++
         try {
             if (debounceMs > 0) delay(debounceMs)
             return executeFreshCommand(
@@ -892,7 +944,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                 },
             )
         } finally {
-            s.controls--
+            s.controls.value--
         }
     }
 

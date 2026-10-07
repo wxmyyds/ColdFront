@@ -152,7 +152,7 @@ class RgbEditorStateTest {
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
-    fun `post write notification during GATT spacing releases draft even if readback fails`() = runTest {
+    fun `notification before write coroutine resumes releases draft even if readback fails`() = runTest {
         val old = device(revision = 1L)
         val config = RGBConfig(LightEffect.ALWAYS_BRIGHT, 10, 20, 30)
         var write = RgbWriteState(1, config, RgbWriteStatus.WRITING)
@@ -175,7 +175,8 @@ class RgbEditorStateTest {
         }
         runCurrent()
         assertTrue(queue.complete(owner, target, GattOperationQueue.Kind.WRITE, GattOperationQueue.Result(true)))
-        runCurrent() // The command still owns its 60ms post-callback gap.
+        // Notification arrives after delivery, before the suspended command consumes its result.
+        // Model the event ordering directly, without depending on an artificial GATT sleep.
         assertFalse(result.isCompleted)
         val notified = old.copy(rgb = config, rgbRevision = 2L)
         advanceUntilIdle()

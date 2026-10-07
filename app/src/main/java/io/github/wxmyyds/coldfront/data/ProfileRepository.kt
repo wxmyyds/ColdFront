@@ -11,7 +11,6 @@ import io.github.wxmyyds.coldfront.domain.CoolerProfile
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import java.io.IOException
 
 private val Context.profileDataStore by preferencesDataStore(name = "cooler_profiles")
@@ -20,19 +19,32 @@ private val Context.profileDataStore by preferencesDataStore(name = "cooler_prof
 class ProfileRepository internal constructor(private val dataStore: DataStore<Preferences>) {
     constructor(context: Context) : this(context.applicationContext.profileDataStore)
 
-    val profiles: Flow<List<CoolerProfile>> = dataStore.data.map { prefs ->
-        ProfileJson.parse(prefs[KEY_PROFILES]).profiles
-    }.distinctUntilChanged()
+    /** Strict reads still fail on corrupt data; observers opt into per-snapshot recovery below. */
+    val profiles: Flow<List<CoolerProfile>> = observeProfiles { throw it }
 
     /** Explicit service intent only: old active profiles never implicitly enable auto service. */
-    val serviceProfile: Flow<CoolerProfile?> = dataStore.data.map { prefs ->
-        referencedProfile(prefs, KEY_SERVICE)
-    }.distinctUntilChanged()
+    val serviceProfile: Flow<CoolerProfile?> = observeServiceProfile { throw it }
 
     /** Startup default only: the most recently connected profile never becomes an implicit target. */
-    val defaultProfile: Flow<CoolerProfile?> = dataStore.data.map { prefs ->
-        referencedProfile(prefs, KEY_DEFAULT)
-    }.distinctUntilChanged()
+    val defaultProfile: Flow<CoolerProfile?> = observeDefaultProfile { throw it }
+
+    /** Retain the last good list on decode failure and wait for the next DataStore snapshot. */
+    fun observeProfiles(reportError: (IOException) -> Unit): Flow<List<CoolerProfile>> =
+        dataStore.data.decodeStorageSnapshots(reportError) { prefs ->
+            ProfileJson.parse(prefs[KEY_PROFILES]).profiles
+        }.distinctUntilChanged()
+
+    /** Decode failures are not OFF; explicitly clearing the reference still emits null at once. */
+    fun observeServiceProfile(reportError: (IOException) -> Unit): Flow<CoolerProfile?> =
+        dataStore.data.decodeStorageSnapshots(reportError) { prefs ->
+            referencedProfile(prefs, KEY_SERVICE)
+        }.distinctUntilChanged()
+
+    /** Missing references are independent of the profile document, including a corrupt document. */
+    fun observeDefaultProfile(reportError: (IOException) -> Unit): Flow<CoolerProfile?> =
+        dataStore.data.decodeStorageSnapshots(reportError) { prefs ->
+            referencedProfile(prefs, KEY_DEFAULT)
+        }.distinctUntilChanged()
 
     /**
      * Call once per successful connection session, regardless of normal/raw/saved connection path.
@@ -87,9 +99,11 @@ class ProfileRepository internal constructor(private val dataStore: DataStore<Pr
         return recorded
     }
 
-    suspend fun delete(id: String) {
+    suspend fun delete(id: String): CoolerProfile? {
+        var removed: CoolerProfile? = null
         dataStore.edit { prefs ->
             val document = ProfileJson.parse(prefs[KEY_PROFILES])
+            removed = document.profiles.firstOrNull { it.id == id }
             prefs[KEY_PROFILES] = ProfileJson.Document(
                 document.entries.filterNot { it.profile?.id == id },
             ).toJson()
@@ -97,6 +111,7 @@ class ProfileRepository internal constructor(private val dataStore: DataStore<Pr
             if (prefs[KEY_SERVICE] == id) prefs.remove(KEY_SERVICE)
             if (prefs[KEY_DEFAULT] == id) prefs.remove(KEY_DEFAULT)
         }
+        return removed
     }
 
     /** Read both the selected ID and the profile array from exactly one preferences snapshot. */

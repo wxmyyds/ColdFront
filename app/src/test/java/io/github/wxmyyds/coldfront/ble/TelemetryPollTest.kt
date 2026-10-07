@@ -1,11 +1,16 @@
 package io.github.wxmyyds.coldfront.ble
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class TelemetryPollTest {
     private data class Target(val name: String, val readable: Boolean, val success: Boolean = true)
 
@@ -18,6 +23,7 @@ class TelemetryPollTest {
         var recoveries = 0
         val reads = mutableListOf<Target>()
         val subscriptions = mutableListOf<Target>()
+        var subscribable = true
         var onRead: (Target) -> Unit = {}
         var onSubscribe: (Target) -> Unit = {}
 
@@ -27,18 +33,19 @@ class TelemetryPollTest {
             isCurrent = { current },
             isReadable = { it.readable },
             // Non-readable targets deliberately return true, like setup's readIfReadable.
-            read = { reads += it; onRead(it); it.success },
+            read = { target, _ -> reads += target; onRead(target); target.success },
             temperatureStale = { stale },
-            subscribe = { subscriptions += it; onSubscribe(it) },
-            onTemperatureRecovery = { recoveries++ },
-        )
+            isSubscribable = { subscribable },
+            subscribe = { subscriptions += it; onSubscribe(it); true },
+            onTemperatureRecoveryAttempt = { recoveries++ },
+        ).successfulReads > 0
     }
 
     @Test
     fun `notify and write only targets do not count as successful polling`() = runTest {
         val targets = listOf(Target("notify-only", false), Target("write-only", false))
         val poll = Poll(targets)
-        // Every pass remains failed, allowing the production loop's failure backoff to accrue.
+        // Empty passes are distinguishable from genuine failed read attempts.
         repeat(4) { assertFalse(poll.once()) }
         assertTrue(poll.reads.isEmpty())
         assertTrue(poll.subscriptions.isEmpty())
@@ -140,6 +147,83 @@ class TelemetryPollTest {
         assertFalse(poll.once())
         assertEquals(listOf(temperature), poll.subscriptions)
         assertTrue(poll.reads.isEmpty())
+        assertEquals(1, poll.recoveries) // The subscription was attempted, not a recovered sample.
+    }
+
+    @Test
+    fun `no executable recovery target does not record an attempt`() = runTest {
+        val poll = Poll(emptyList(), listOf(Target("write-only", false)))
+        poll.stale = true
+        poll.subscribable = false
+        assertFalse(poll.once())
         assertEquals(0, poll.recoveries)
+        assertTrue(poll.subscriptions.isEmpty())
+        val empty = Poll(emptyList())
+        empty.stale = true
+        assertFalse(empty.once())
+        assertEquals(0, empty.recoveries)
+    }
+
+    @Test
+    fun `a report during resubscription stops remaining recovery work`() = runTest {
+        val first = Target("1014", true)
+        val poll = Poll(emptyList(), listOf(first, Target("1015", true)))
+        poll.stale = true
+        poll.onSubscribe = { poll.stale = false }
+        assertFalse(poll.once())
+        assertEquals(listOf(first), poll.subscriptions)
+        assertTrue(poll.reads.isEmpty())
+        assertEquals(1, poll.recoveries)
+    }
+
+    @Test
+    fun `skipped dispatches do not count as failed reads`() = runTest {
+        val result = pollTelemetry(
+            targets = listOf("blocked-before-dispatch"), temperatureTargets = emptyList(),
+            isCurrent = { true }, isReadable = { true }, read = { _, _ -> null },
+            temperatureStale = { false }, isSubscribable = { false }, subscribe = { null },
+            onTemperatureRecoveryAttempt = { error("Not a recovery") },
+        )
+        assertEquals(TelemetryPollResult(), result)
+    }
+
+    @Test
+    fun `recovery dispatch skipped after eligibility check does not record an attempt`() = runTest {
+        var attempts = 0
+        val result = pollTelemetry(
+            targets = emptyList(), temperatureTargets = listOf("became-unavailable"),
+            isCurrent = { true }, isReadable = { true }, read = { _, _ -> null },
+            temperatureStale = { true }, isSubscribable = { true }, subscribe = { null },
+            onTemperatureRecoveryAttempt = { attempts++ },
+        )
+        assertEquals(TelemetryPollResult(), result)
+        assertEquals(0, attempts)
+    }
+
+    @Test
+    fun `control starts during accepted read without cancelling it or adding another read`() = runTest {
+        var idle = true
+        val finishRead = CompletableDeferred<Unit>()
+        val reads = mutableListOf<String>()
+        var result: TelemetryPollResult? = null
+        val job = launch {
+            result = pollTelemetry(
+                targets = listOf("first", "second"), temperatureTargets = listOf("temperature"),
+                isCurrent = { idle }, isReadable = { true },
+                read = { target, _ -> reads += target; finishRead.await(); true },
+                temperatureStale = { true }, isSubscribable = { true },
+                subscribe = { error("Control must stop recovery") },
+                onTemperatureRecoveryAttempt = { error("Control must stop recovery") },
+            )
+        }
+        runCurrent()
+        idle = false
+        runCurrent()
+        assertTrue(job.isActive)
+        assertEquals(listOf("first"), reads)
+        finishRead.complete(Unit)
+        job.join()
+        assertEquals(listOf("first"), reads)
+        assertEquals(TelemetryPollResult(1, 1), result)
     }
 }

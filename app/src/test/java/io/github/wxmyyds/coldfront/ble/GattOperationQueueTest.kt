@@ -60,9 +60,10 @@ class GattOperationQueueTest {
         }
         runCurrent()
         assertEquals(listOf(first), starts)
+        val callbackTime = testScheduler.currentTime
         assertTrue(queue.complete(owner, first, GattOperationQueue.Kind.WRITE, success))
-        advanceTimeBy(60)
         runCurrent()
+        assertEquals(callbackTime, testScheduler.currentTime)
         assertEquals(listOf(first, second), starts)
         assertFalse(queue.complete(owner, first, GattOperationQueue.Kind.WRITE, success))
         assertTrue(queue.complete(owner, second, GattOperationQueue.Kind.WRITE, success))
@@ -89,7 +90,6 @@ class GattOperationQueueTest {
         assertTrue(managerCommand.isActive)
         assertFalse(committed)
         assertTrue(queue.complete(owner, target, GattOperationQueue.Kind.WRITE, success))
-        advanceTimeBy(60)
         runCurrent()
         assertTrue(managerCommand.await())
         assertTrue(committed)
@@ -598,8 +598,6 @@ class GattOperationQueueTest {
         assertEquals(listOf(1), startedGenerations)
         queue.complete(owner, target, GattOperationQueue.Kind.WRITE, GattOperationQueue.Result(false))
         runCurrent()
-        advanceTimeBy(60)
-        runCurrent()
         assertEquals(listOf(1, 3), startedGenerations)
         queue.complete(owner, target, GattOperationQueue.Kind.WRITE, success)
         advanceUntilIdle()
@@ -625,6 +623,37 @@ class GattOperationQueueTest {
     }
 
     @Test
+    fun `lane availability changes only on timeout drain or teardown not elapsed time`() = runTest {
+        for (permanent in listOf(false, true)) {
+            val owner = Any()
+            val target = Any()
+            val queue = GattOperationQueue(onTimeout = { error("Unexpected fatal timeout") })
+            val before = queue.availabilityChanges.value
+            assertTrue(queue.isAvailable(owner, target, GattOperationQueue.Kind.READ))
+            assertFalse(queue.hasTimedOut(owner))
+            val result = async {
+                queue.execute(owner, target, GattOperationQueue.Kind.READ, 100, { true },
+                    poisonOnTimeout = false, quarantineOnTimeout = permanent) { true }
+            }
+            advanceUntilIdle()
+            assertFalse(result.await().success)
+            val blocked = queue.availabilityChanges.value
+            assertTrue(blocked > before)
+            assertFalse(queue.isAvailable(owner, target, GattOperationQueue.Kind.READ))
+            assertTrue(queue.isAvailable(owner, target, GattOperationQueue.Kind.WRITE))
+            assertTrue(queue.hasTimedOut(owner))
+            advanceTimeBy(60_000)
+            assertEquals(blocked, queue.availabilityChanges.value)
+            assertFalse(queue.complete(owner, target, GattOperationQueue.Kind.READ, success))
+            assertEquals(!permanent, queue.isAvailable(owner, target, GattOperationQueue.Kind.READ))
+            assertEquals(!permanent, queue.availabilityChanges.value > blocked)
+            queue.abort(owner)
+            assertTrue(queue.isAvailable(owner, target, GattOperationQueue.Kind.READ))
+            assertFalse(queue.hasTimedOut(owner))
+        }
+    }
+
+    @Test
     fun `old abort and callback cannot complete a replacement session operation`() = runTest {
         val old = Any()
         val replacement = Any()
@@ -640,8 +669,6 @@ class GattOperationQueueTest {
         val next = async {
             queue.execute(replacement, target, GattOperationQueue.Kind.RSSI, 1000, { current === replacement }) { true }
         }
-        runCurrent()
-        advanceTimeBy(60)
         runCurrent()
         queue.abort(old)
         assertFalse(queue.complete(old, target, GattOperationQueue.Kind.RSSI, success))

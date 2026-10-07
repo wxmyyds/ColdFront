@@ -2,6 +2,7 @@ package io.github.wxmyyds.coldfront.ble
 
 import io.github.wxmyyds.coldfront.ble.ModeCommandCoordinator.Mode
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
@@ -22,8 +23,10 @@ class ModeCommandCoordinatorTest {
      * No Android state or optimistic read-back. Gates model queued/accepted transport
      * operations; both transport callbacks use the production command completion helper.
      */
-    private class Commands {
-        val coordinator = ModeCommandCoordinator()
+    private fun TestScope.Commands() = Commands(backgroundScope)
+
+    private class Commands(scope: CoroutineScope) {
+        val coordinator = ModeCommandCoordinator(scope)
         var current = true
         var controlFresh = true
         var powerLimited = false
@@ -122,7 +125,7 @@ class ModeCommandCoordinatorTest {
         val latestResult = async { commands.execute(latest) }
         runCurrent()
         assertFalse(commands.coordinator.isFresh(old))
-        // The mode mutex retains the sequence while the old ON is accepted and pending.
+        // The consumer retains the sequence while the old ON is accepted and pending.
         assertEquals(listOf(Write(from, true)), commands.writes)
         callback.complete(true)
         runCurrent()
@@ -222,7 +225,7 @@ class ModeCommandCoordinatorTest {
     }
 
     @Test
-    fun `stale or disconnected mutex waiter performs no followup writes`() = runTest {
+    fun `stale or disconnected queued event performs no followup writes`() = runTest {
         for (disconnect in listOf(false, true)) {
             val commands = Commands()
             val completion = CompletableDeferred<Unit>()
@@ -348,7 +351,7 @@ class ModeCommandCoordinatorTest {
     @Test
     fun `production completion returns false when replaced or disconnected during readback`() = runTest {
         for (disconnect in listOf(false, true)) {
-            val coordinator = ModeCommandCoordinator()
+            val coordinator = ModeCommandCoordinator(backgroundScope)
             val ticket = coordinator.request(Mode.SMART, true)
             var connected = true
             val compositeFresh = { connected && coordinator.isFresh(ticket) }
@@ -375,7 +378,7 @@ class ModeCommandCoordinatorTest {
     @Test
     fun `nonmode controls keep independent generation and ignore mode requests`() = runTest {
         for (supersedeOwnControl in listOf(false, true)) {
-            val coordinator = ModeCommandCoordinator()
+            val coordinator = ModeCommandCoordinator(backgroundScope)
             var controlGeneration = 1L
             val generation = controlGeneration
             val read = CompletableDeferred<Unit>()
@@ -398,7 +401,7 @@ class ModeCommandCoordinatorTest {
 
     @Test
     fun `safety OFF handles accepted Boost ON even before the device reports ON`() = runTest {
-        val coordinator = ModeCommandCoordinator()
+        val coordinator = ModeCommandCoordinator(backgroundScope)
         var limited = false
         val callback = CompletableDeferred<Unit>()
         val writes = mutableListOf<Write>()
@@ -429,7 +432,7 @@ class ModeCommandCoordinatorTest {
 
     @Test
     fun `safety enforcement preserves Smart intent while its attached Boost OFF is pending`() = runTest {
-        val coordinator = ModeCommandCoordinator()
+        val coordinator = ModeCommandCoordinator(backgroundScope)
         var boostOn = true
         val callback = CompletableDeferred<Unit>()
         val writes = mutableListOf<Write>()
@@ -459,6 +462,26 @@ class ModeCommandCoordinatorTest {
         assertTrue(enabling.await())
         assertTrue(safety.await())
         assertEquals(listOf(Write(Mode.BOOST, false), Write(Mode.SMART, true)), writes)
+    }
+
+    @Test
+    fun `closing session invalidates active and queued events without starting followup writes`() = runTest {
+        val commands = Commands()
+        val callback = CompletableDeferred<Unit>()
+        commands.afterWrite = { callback.await(); true }
+        val boost = commands.request(Mode.BOOST, true)
+        val active = async { commands.execute(boost) }
+        runCurrent()
+        val smart = commands.request(Mode.SMART, true)
+        val queued = async { commands.execute(smart) }
+        runCurrent()
+        commands.coordinator.close()
+        assertFalse(commands.coordinator.isFresh(smart))
+        assertFalse(commands.execute(commands.request(Mode.SMART, false)))
+        callback.complete(Unit)
+        assertFalse(active.await())
+        assertFalse(queued.await())
+        assertEquals(listOf(Write(Mode.BOOST, true)), commands.writes)
     }
 
     @Test

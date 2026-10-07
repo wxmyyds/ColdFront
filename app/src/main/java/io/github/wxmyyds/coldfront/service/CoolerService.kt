@@ -18,6 +18,7 @@ import io.github.wxmyyds.coldfront.ble.BlePermissionManager
 import io.github.wxmyyds.coldfront.ble.CoolerBleManager
 import io.github.wxmyyds.coldfront.data.ProfileRepository
 import io.github.wxmyyds.coldfront.data.SettingsRepository
+import io.github.wxmyyds.coldfront.data.retryStorageReads
 import io.github.wxmyyds.coldfront.domain.CoolerProfile
 import io.github.wxmyyds.coldfront.ui.i18n.AppStrings
 import io.github.wxmyyds.coldfront.ui.i18n.stringsFor
@@ -29,11 +30,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.launch
 
 private const val CHANNEL_ID = "cooler_service_channel"
@@ -228,14 +227,11 @@ class CoolerService : Service() {
         scope.launch {
             combine(
                 ble.state,
-                SettingsRepository(applicationContext).appLanguage,
-            ) { state, language -> state to stringsFor(Locale.getDefault(), language) }
-                .retryWhen { cause, _ ->
-                    if (cause !is IOException) return@retryWhen false
+                SettingsRepository(applicationContext).appLanguage.recoverNotificationLanguage { cause ->
                     Log.e(TAG, "Cannot read notification language", cause)
-                    delay(2_000)
-                    true
-                }.collect { (state, localized) ->
+                },
+            ) { state, language -> state to stringsFor(Locale.getDefault(), language) }
+                .collect { (state, localized) ->
                     if (strings !== localized) {
                         strings = localized
                         lastNotification = null
@@ -245,11 +241,10 @@ class CoolerService : Service() {
                 }
         }
         scope.launch {
-            profiles.serviceProfile.retryWhen { cause, _ ->
-                if (cause !is IOException) return@retryWhen false
+            profiles.observeServiceProfile { cause ->
+                Log.e(TAG, "Cannot decode service target", cause)
+            }.retryStorageReads { cause ->
                 Log.e(TAG, "Cannot observe service target", cause)
-                delay(2_000)
-                true
             }.collectTargetInvalidations(latestStartId = { latestStartId }) { startId ->
                 // Never discard deletion while target is still being loaded. The queued
                 // validator runs after startup/manual commands and re-reads persisted intent.

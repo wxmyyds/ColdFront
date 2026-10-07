@@ -22,7 +22,8 @@ import kotlinx.coroutines.flow.first
 /** Quick Settings auto-mode toggle; state follows the service, not an optimistic local flag. */
 class CoolerTileService : TileService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val ble by lazy { BleManagerHolder.get(applicationContext) }
+    // Tile callbacks and this scope both run on Main, matching the holder's checked contract.
+    private val ble by lazy(LazyThreadSafetyMode.NONE) { BleManagerHolder.get(applicationContext) }
     private var listening: Job? = null
     private var click: Job? = null
 

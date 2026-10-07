@@ -3,6 +3,8 @@ package io.github.wxmyyds.coldfront.ble
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -22,7 +24,8 @@ import kotlinx.coroutines.withTimeoutOrNull
  */
 internal class GattOperationQueue(
     private val onTimeout: (owner: Any) -> Unit,
-    private val spacingMs: Long = 60,
+    // A single bounded retry backs off only after explicit platform rejection/failure.
+    // It is not evidence of completion; accepted requests still require their callback.
     private val retryDelayMs: Long = 120,
     private val onQuarantined: (owner: Any) -> Unit = {},
 ) {
@@ -40,10 +43,21 @@ internal class GattOperationQueue(
 
     private enum class TimeoutDisposition { DRAINABLE, PERMANENT }
 
+    // Android permits only one callback-bearing GATT operation in flight. This transport
+    // lane is the remaining coroutine mutex: cancellation cannot release accepted work.
+    // Business-level transactions use single-consumer mailboxes instead.
     private val mutex = Mutex()
     private var pending: Pending? = null
     private val timedOut =
         java.util.IdentityHashMap<Any, java.util.IdentityHashMap<Any, MutableMap<Kind, TimeoutDisposition>>>()
+    private val _availabilityChanges = MutableStateFlow(0L)
+    val availabilityChanges = _availabilityChanges.asStateFlow()
+
+    /** Eligibility only: the transport lane still serializes actual platform dispatch. */
+    fun isAvailable(owner: Any, target: Any, kind: Kind): Boolean =
+        timeoutDisposition(owner, target, kind) == null
+
+    fun hasTimedOut(owner: Any): Boolean = timedOut[owner]?.isNotEmpty() == true
 
     private fun timeoutDisposition(owner: Any, target: Any, kind: Kind): TimeoutDisposition? =
         timedOut[owner]?.get(target)?.get(kind)
@@ -51,6 +65,7 @@ internal class GattOperationQueue(
     private fun markTimedOut(owner: Any, target: Any, kind: Kind, disposition: TimeoutDisposition) {
         val targets = timedOut.getOrPut(owner) { java.util.IdentityHashMap() }
         targets.getOrPut(target) { mutableMapOf() }[kind] = disposition
+        _availabilityChanges.value++
     }
 
     private fun removeTimedOut(owner: Any, target: Any, kind: Kind) {
@@ -59,6 +74,7 @@ internal class GattOperationQueue(
         kinds.remove(kind)
         if (kinds.isEmpty()) targets.remove(target)
         if (targets.isEmpty()) timedOut.remove(owner)
+        _availabilityChanges.value++
     }
 
     /**
@@ -80,7 +96,7 @@ internal class GattOperationQueue(
 
     /** Call only after invalidating the owner, before closing its transport. */
     fun abort(owner: Any) {
-        timedOut.remove(owner)
+        if (timedOut.remove(owner) != null) _availabilityChanges.value++
         val operation = pending ?: return
         if (operation.owner !== owner) return
         clear(operation)
@@ -155,15 +171,11 @@ internal class GattOperationQueue(
                     clear(operation)
                     result = Result(false)
                 }
-                if (!isCurrent()) {
-                    // Even superseded commands retain the firmware's inter-operation gap.
-                    delay(spacingMs)
-                    return@withContext Result(false)
-                }
+                if (!isCurrent()) return@withContext Result(false)
                 if (result.success) break
                 if (attempt == 0) delay(retryDelayMs)
             }
-            delay(spacingMs)
+            // The callback, not an arbitrary post-callback sleep, releases this operation.
             if (isCurrent()) result else Result(false)
         }
     }

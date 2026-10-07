@@ -29,8 +29,6 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 /** UI state bridge. Transport lifetime and successful-connection bookkeeping have explicit owners. */
 class CoolerViewModel(app: Application) : AndroidViewModel(app) {
@@ -38,8 +36,11 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
     private val profileRepo = ProfileRepository(app)
     private val settingsRepo = SettingsRepository(app)
     private val storageErrors = Channel<Unit>(Channel.CONFLATED)
-    private val profileMutations = Mutex()
-    private val ignoredSessions = mutableSetOf<Long>()
+    private val profileMutations = ProfileMutationCoordinator(
+        scope = viewModelScope,
+        record = { profileRepo.recordConnection(it) },
+        delete = profileRepo::delete,
+    )
     val errors: Flow<Unit> = storageErrors.receiveAsFlow()
 
     val liveState = ble.state
@@ -57,13 +58,13 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _profilesLoaded = MutableStateFlow(false)
     val profilesLoaded: StateFlow<Boolean> = _profilesLoaded.asStateFlow()
-    val profiles = profileRepo.profiles
+    val profiles = profileRepo.observeProfiles(::reportStorageError)
         .onEach { _profilesLoaded.value = true }
         .uiState(emptyList())
     // null is a real value here ("no startup default"), so readiness is reported separately.
     private val _defaultDeviceLoaded = MutableStateFlow(false)
     val defaultDeviceLoaded: StateFlow<Boolean> = _defaultDeviceLoaded.asStateFlow()
-    val defaultDevice: StateFlow<CoolerProfile?> = profileRepo.defaultProfile
+    val defaultDevice: StateFlow<CoolerProfile?> = profileRepo.observeDefaultProfile(::reportStorageError)
         .onEach { _defaultDeviceLoaded.value = true }
         .uiState<CoolerProfile?>(null)
     private val backgroundResume = BackgroundResume(
@@ -98,9 +99,7 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
                     // All connection entry points share this commit-on-success path. No profile
                     // is created by a failed attempt, and metadata is retained on reconnect.
                     try {
-                        profileMutations.withLock {
-                            if (state.connectionSessionId !in ignoredSessions) profileRepo.recordConnection(state)
-                        }
+                        profileMutations.recordConnection(state)
                     } catch (e: IOException) {
                         reportStorageError(e)
                     }
@@ -176,20 +175,18 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
     fun setOvercoldProtection(on: Boolean) = ble.setOvercoldProtection(on)
     fun setRGB(config: RGBConfig) = ble.setRGB(config)
     fun deleteProfile(id: String) = saveSetting {
-        profileMutations.withLock {
-            val removed = profiles.value.firstOrNull { it.id == id }
-            val state = liveState.value
-            profileRepo.delete(id)
-            if (removed != null && removed.macAddress.equals(state.deviceAddress, ignoreCase = true)) {
-                ignoredSessions.add(state.connectionSessionId)
-                if (!state.isConnected && liveState.value.connectionSessionId == state.connectionSessionId) {
-                    ble.disconnect()
-                }
+        val deletion = profileMutations.deleteProfile(id) { liveState.value }
+        val removed = deletion.profile
+        val state = deletion.state
+        if (removed != null && removed.macAddress.equals(state.deviceAddress, ignoreCase = true)) {
+            if (!state.isConnected && liveState.value.connectionSessionId == state.connectionSessionId) {
+                ble.disconnect()
             }
         }
     }
 
     override fun onCleared() {
+        profileMutations.close()
         backgroundResume.detach()
         BleManagerHolder.release(this)
         storageErrors.close()
