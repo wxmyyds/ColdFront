@@ -284,7 +284,7 @@ fun RGBControlScreen(vm: CoolerViewModel, isPageActive: Boolean, onConnect: () -
                             RgbWriteStatus.WRITING -> Text(strings.rgbWriting)
                             RgbWriteStatus.SENT -> {
                                 if (applied) {
-                                    Icon(painterResource(R.drawable.materialsymbols_ic_check_rounded_filled), contentDescription = null)
+                                    Icon(painterResource(R.drawable.materialsymbols_ic_task_alt_rounded_filled), contentDescription = null)
                                     Spacer(Modifier.width(8.dp))
                                 }
                                 Text(strings.rgbSent)

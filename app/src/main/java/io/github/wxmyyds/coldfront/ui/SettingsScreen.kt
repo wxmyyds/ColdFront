@@ -113,7 +113,7 @@ fun SettingsScreen(vm: CoolerViewModel, settings: AppSettings, onAbout: () -> Un
                             PaletteStyles.CONTENT -> strings.settingsPaletteContent
                             else -> strings.settingsPaletteTonalSpot
                         } },
-                        leadingContent = { RowIcon(R.drawable.materialsymbols_ic_style_rounded_filled) },
+                        leadingContent = { RowIcon(R.drawable.materialsymbols_ic_palette_rounded_filled) },
                     )
                 }
                 item(key = "themeMode") {
