@@ -6,6 +6,9 @@ plugins {
 
 android {
     namespace = "io.github.wxmyyds.coldfront"
+    // composables Material Symbols 库的 drawable 走 app 的 R（与官方 README 用法一致）；
+    // AGP 8+ 默认 nonTransitiveRClass=true，库资源不进 app R，需显式关掉。
+    nonTransitiveRClass = false
     compileSdk {
         // Compose 1.13-alpha（compose-bom-alpha）要求 compileSdk ≥ 37.1
         version = release(37) {
