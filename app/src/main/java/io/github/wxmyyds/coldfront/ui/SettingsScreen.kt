@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Info
@@ -145,7 +144,7 @@ fun SettingsScreen(vm: CoolerViewModel, settings: AppSettings, onAbout: () -> Un
                         summary = strings.settingsPredictiveBackDesc,
                         checked = predictiveBack,
                         onCheckedChange = vm::setPredictiveBack,
-                        leadingContent = { RowIcon(Icons.Filled.AutoMode) },
+                        leadingContent = { RowIcon(R.drawable.swipe_24) },
                     )
                 }
             }
