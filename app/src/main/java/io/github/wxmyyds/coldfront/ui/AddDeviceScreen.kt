@@ -24,15 +24,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.filled.BluetoothDisabled
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -54,12 +48,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.wxmyyds.coldfront.R
 import io.github.wxmyyds.coldfront.ble.BlePermissionManager
 import io.github.wxmyyds.coldfront.ble.BleScanDiagnostic
 import io.github.wxmyyds.coldfront.domain.ConnectionState
@@ -166,7 +162,22 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
         title = strings.scanTitle,
         navigationIcon = {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = strings.back)
+                Icon(
+                    painterResource(R.drawable.ms_arrow_back_fill1_24),
+                    contentDescription = strings.back,
+                    modifier = Modifier.size(28.dp),
+                )
+            }
+        },
+        actions = {
+            IconButton(
+                onClick = { rescan() },
+                enabled = resumed && !connecting,
+            ) {
+                Icon(
+                    painterResource(R.drawable.materialsymbols_ic_refresh_rounded_filled),
+                    contentDescription = strings.scanRescan,
+                )
             }
         },
     ) { inner ->
@@ -255,19 +266,6 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
                 else -> itemsIndexed(devices, key = { _, device -> "device:${device.address}" }) { index, device ->
                     DeviceRow(strings, device, index, devices.size, enabled = canConnect) {
                         connect(ScanConnectionRequest(device.displayName) { vm.connect(device) })
-                    }
-                }
-            }
-            if (scanReady) {
-                item(key = "rescan") {
-                    OutlinedButton(
-                        onClick = { rescan() },
-                        enabled = resumed && !connecting,
-                        shapes = ButtonDefaults.shapes(),
-                    ) {
-                        Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(strings.scanRescan)
                     }
                 }
             }
@@ -598,7 +596,7 @@ private fun BluetoothOffState(strings: AppStrings) {
     Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Icon(
-                Icons.Filled.BluetoothDisabled,
+                painterResource(R.drawable.materialsymbols_ic_bluetooth_disabled_rounded_filled),
                 contentDescription = null,
                 modifier = Modifier.size(64.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -627,7 +625,7 @@ private fun ScanningEmptyState(strings: AppStrings, scanning: Boolean) {
                 Text(strings.scanScanning, style = MaterialTheme.typography.titleMedium)
             } else {
                 Icon(
-                    Icons.Filled.Bluetooth,
+                    painterResource(R.drawable.materialsymbols_ic_bluetooth_rounded_filled),
                     contentDescription = null,
                     modifier = Modifier.size(64.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -668,7 +666,7 @@ private fun DeviceRow(
         },
         trailingContent = {
             Icon(
-                Icons.AutoMirrored.Filled.ArrowForward,
+                painterResource(R.drawable.materialsymbols_ic_arrow_forward_rounded_filled),
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )

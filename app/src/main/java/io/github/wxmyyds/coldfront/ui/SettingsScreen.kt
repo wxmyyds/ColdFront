@@ -10,25 +10,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoMode
-import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.LightMode
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.wxmyyds.coldfront.R
 import io.github.wxmyyds.coldfront.data.AppSettings
-import io.github.wxmyyds.coldfront.ui.component.AnimatedRowIcon
 import io.github.wxmyyds.coldfront.ui.component.RowIcon
 import io.github.wxmyyds.coldfront.ui.component.PageScaffold
 import io.github.wxmyyds.coldfront.ui.component.SegmentedDropdownRow
@@ -89,7 +79,7 @@ fun SettingsScreen(vm: CoolerViewModel, settings: AppSettings, onAbout: () -> Un
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            SegmentedGroup(title = strings.settingsTheme) {
+            SegmentedGroup {
                 item(key = "dynamicColor") {
                     SegmentedSwitchRow(
                         title = strings.settingsDynamicColor,
@@ -103,7 +93,7 @@ fun SettingsScreen(vm: CoolerViewModel, settings: AppSettings, onAbout: () -> Un
                         checked = supportsDynamicColor && dynamicColor,
                         enabled = supportsDynamicColor,
                         onCheckedChange = { if (supportsDynamicColor) vm.setDynamicColor(it) },
-                        leadingContent = { RowIcon(Icons.Filled.Palette) },
+                        leadingContent = { RowIcon(R.drawable.materialsymbols_ic_invert_colors_rounded_filled) },
                     )
                 }
                 item(key = "palette") {
@@ -123,7 +113,7 @@ fun SettingsScreen(vm: CoolerViewModel, settings: AppSettings, onAbout: () -> Un
                             PaletteStyles.CONTENT -> strings.settingsPaletteContent
                             else -> strings.settingsPaletteTonalSpot
                         } },
-                        leadingContent = { RowIcon(Icons.Filled.Palette) },
+                        leadingContent = { RowIcon(R.drawable.ms_style_fill1_24) },
                     )
                 }
                 item(key = "themeMode") {
@@ -135,24 +125,24 @@ fun SettingsScreen(vm: CoolerViewModel, settings: AppSettings, onAbout: () -> Un
                         optionLabel = { value ->
                             themeOptions.firstOrNull { it.first == value }?.second ?: value
                         },
-                        leadingContent = { AnimatedRowIcon(themeModeIcon(themeMode)) },
+                        leadingContent = { RowIcon(R.drawable.materialsymbols_ic_dark_mode_rounded_filled) },
                     )
                 }
             }
 
-            SegmentedGroup(title = strings.settingsInterface) {
+            SegmentedGroup {
                 item(key = "predictiveBack") {
                     SegmentedSwitchRow(
                         title = strings.settingsPredictiveBack,
                         summary = strings.settingsPredictiveBackDesc,
                         checked = predictiveBack,
                         onCheckedChange = vm::setPredictiveBack,
-                        leadingContent = { RowIcon(Icons.Filled.AutoMode) },
+                        leadingContent = { RowIcon(R.drawable.materialsymbols_ic_swipe_rounded_filled) },
                     )
                 }
             }
 
-            SegmentedGroup(title = strings.settingsConnection) {
+            SegmentedGroup {
                 // 档案文档读完前不渲染：未加载的值不能冒充「不自动连接」。
                 item(key = "defaultDevice", visible = defaultDeviceLoaded) {
                     SegmentedDropdownRow(
@@ -167,7 +157,7 @@ fun SettingsScreen(vm: CoolerViewModel, settings: AppSettings, onAbout: () -> Un
                                 profiles.firstOrNull { it.id == profileId }?.displayName
                             } ?: strings.settingsDefaultDeviceOff
                         },
-                        leadingContent = { RowIcon(Icons.Filled.Bluetooth) },
+                        leadingContent = { RowIcon(R.drawable.materialsymbols_ic_bluetooth_rounded_filled) },
                     )
                 }
             }
@@ -182,7 +172,7 @@ fun SettingsScreen(vm: CoolerViewModel, settings: AppSettings, onAbout: () -> Un
                         optionLabel = { value ->
                             languageOptions.firstOrNull { it.first == value }?.second ?: value
                         },
-                        leadingContent = { RowIcon(Icons.Filled.Language) },
+                        leadingContent = { RowIcon(R.drawable.materialsymbols_ic_language_rounded_filled) },
                     )
                 }
             }
@@ -191,13 +181,8 @@ fun SettingsScreen(vm: CoolerViewModel, settings: AppSettings, onAbout: () -> Un
                 item(key = "about") {
                     SegmentedRow(
                         title = strings.settingsAbout,
-                        leadingContent = { RowIcon(Icons.Filled.Info) },
-                        trailingContent = {
-                            androidx.compose.material3.Icon(
-                                Icons.Filled.ChevronRight,
-                                contentDescription = null,
-                            )
-                        },
+                        leadingContent = { RowIcon(R.drawable.materialsymbols_ic_info_rounded_filled) },
+                        trailingContent = { RowIcon(R.drawable.materialsymbols_ic_chevron_right_rounded_filled) },
                         onClick = onAbout,
                     )
                 }
@@ -206,11 +191,4 @@ fun SettingsScreen(vm: CoolerViewModel, settings: AppSettings, onAbout: () -> Un
         }
     }
 
-}
-
-/** 主题模式的行首图标跟着当前档位走，扫一眼就知道现在是什么模式 */
-private fun themeModeIcon(mode: String): ImageVector = when (mode) {
-    "light" -> Icons.Filled.LightMode
-    "dark" -> Icons.Filled.DarkMode
-    else -> Icons.Filled.AutoMode
 }

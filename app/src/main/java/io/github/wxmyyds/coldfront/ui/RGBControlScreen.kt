@@ -28,12 +28,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AcUnit
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.LightMode
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.Waves
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -44,6 +38,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.rememberSliderState
@@ -62,13 +57,14 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.wxmyyds.coldfront.R
 import io.github.wxmyyds.coldfront.domain.LightEffect
 import io.github.wxmyyds.coldfront.domain.RGBConfig
 import io.github.wxmyyds.coldfront.domain.RgbWriteStatus
@@ -79,6 +75,7 @@ import io.github.wxmyyds.coldfront.ui.component.SegmentedContainer
 import io.github.wxmyyds.coldfront.ui.component.SegmentedDropdownRow
 import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
+import io.github.wxmyyds.coldfront.ui.theme.EmphasizedTypography
 import io.github.wxmyyds.coldfront.ui.theme.optionContainerColor
 
 /**
@@ -143,163 +140,178 @@ fun RGBControlScreen(vm: CoolerViewModel, isPageActive: Boolean, onConnect: () -
     val contentScrollState = rememberScrollState()
 
     PageScaffold(title = strings.rgbTitle) { inner ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(inner)
-                .verticalScroll(contentScrollState)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-
-            // The editor works from its own draft, so the page stays usable while the device
-            // light state is still unknown; report that as an additive notice (the same
-            // convention as HomeScreen's degraded banner) instead of replacing the page.
-            if (state.isConnected && state.deviceType?.supportsRgb != false && state.rgb == null) {
-                SyncingNotice(strings)
+        if (!state.isConnected) {
+            // 未连接空状态：与 Home 页一致——全屏居中（图标圆章 + 背景上的文字 + 按钮），
+            // 文字和按钮不放进任何卡片/容器。
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(inner)
+                    .padding(horizontal = 24.dp)
+                    .verticalScroll(contentScrollState)
+                    .padding(vertical = 24.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                NotConnectedContent(strings, onConnect)
             }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(inner)
+                    .verticalScroll(contentScrollState)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
 
-            when {
-                !state.isConnected -> NotConnectedCard(strings, onConnect)
-                state.deviceType?.supportsRgb == false -> NotSupportedCard(strings)
-                else -> {
-                    // ── 动态预览卡 ──
-                    // extraLarge(28dp) 是全应用唯一的强调形状（战术 1：故意打破周围形状语言），
-                    // 其余卡片走默认 medium(12dp)、列表行 large(16dp)，不再出现第三种圆角。
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = MaterialTheme.shapes.extraLarge,
-                        colors = CardDefaults.cardColors(
-                            containerColor = optionContainerColor(MaterialTheme.colorScheme),
-                            contentColor = MaterialTheme.colorScheme.onSurface,
-                        ),
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                // The editor works from its own draft, so the page stays usable while the device
+                // light state is still unknown; report that as an additive notice (the same
+                // convention as HomeScreen's degraded banner) instead of replacing the page.
+                if (state.deviceType?.supportsRgb != false && state.rgb == null) {
+                    SyncingNotice(strings)
+                }
+
+                when {
+                    state.deviceType?.supportsRgb == false -> NotSupportedCard(strings)
+                    else -> {
+                        // ── 动态预览卡 ──
+                        // extraLarge(28dp) 是全应用唯一的强调形状（战术 1：故意打破周围形状语言），
+                        // 其余卡片走默认 medium(12dp)、列表行 large(16dp)，不再出现第三种圆角。
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = MaterialTheme.shapes.extraLarge,
+                            colors = CardDefaults.cardColors(
+                                containerColor = optionContainerColor(MaterialTheme.colorScheme),
+                                contentColor = MaterialTheme.colorScheme.onSurface,
+                            ),
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                CoolerArt(
-                                    state.deviceType,
-                                    modifier = Modifier.size(64.dp),
-                                    iconTint = MaterialTheme.colorScheme.onSurface,
-                                )
-                                Spacer(Modifier.width(16.dp))
-                                Text(
-                                    effectLabel(effect, strings),
-                                    modifier = Modifier.weight(1f),
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                )
-                            }
-                            LightPreview(
-                                effect,
-                                r,
-                                g,
-                                b,
-                                Modifier.fillMaxWidth().height(112.dp),
-                                active = isRgbPreviewActive(isPageActive, resumed),
-                            )
-                        }
-                    }
-
-                    // ── 灯效选择(即点即发) ──
-                    // 选「呼吸」时沿用当前的呼吸变体；从别的灯效切过来默认全彩。
-                    val breathVariant =
-                        if (effect == LightEffect.BREATH_SINGLE) LightEffect.BREATH_SINGLE
-                        else LightEffect.BREATH_FULLCOLOR
-                    val applyEffect: (LightEffect) -> Unit = { e ->
-                        sendConfig(draftConfig.copy(effect = e), false)
-                    }
-                    SegmentedGroup {
-                        item(key = "effect") {
-                            SegmentedDropdownRow(
-                                title = strings.rgbEffect,
-                                options = LightEffect.selectable,
-                                // 下拉里呼吸只有一个入口（BREATH_FULLCOLOR），具体变体由下一行决定
-                                selected = effect.uiEffect,
-                                onSelect = { e ->
-                                    applyEffect(
-                                        if (e == LightEffect.BREATH_FULLCOLOR) breathVariant else e
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    CoolerArt(
+                                        state.deviceType,
+                                        modifier = Modifier.size(64.dp),
+                                        iconTint = MaterialTheme.colorScheme.onSurface,
                                     )
-                                },
-                                optionLabel = { effectLabel(it, strings) },
-                                leadingContent = { AnimatedRowIcon(effectIcon(effect)) },
-                            )
+                                    Spacer(Modifier.width(16.dp))
+                                    Text(
+                                        effectLabel(effect, strings),
+                                        modifier = Modifier.weight(1f),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                }
+                                LightPreview(
+                                    effect,
+                                    r,
+                                    g,
+                                    b,
+                                    Modifier.fillMaxWidth().height(112.dp),
+                                    active = isRgbPreviewActive(isPageActive, resumed),
+                                )
+                            }
                         }
-                        // 「呼吸」底下挂一个子选项：单色（0x03，带颜色字节） / 全彩（0x02，不带）
-                        item(
-                            key = "breathMode",
-                            visible = effect.uiEffect == LightEffect.BREATH_FULLCOLOR,
+
+                        // ── 灯效选择(即点即发) ──
+                        // 选「呼吸」时沿用当前的呼吸变体；从别的灯效切过来默认全彩。
+                        val breathVariant =
+                            if (effect == LightEffect.BREATH_SINGLE) LightEffect.BREATH_SINGLE
+                            else LightEffect.BREATH_FULLCOLOR
+                        val applyEffect: (LightEffect) -> Unit = { e ->
+                            sendConfig(draftConfig.copy(effect = e), false)
+                        }
+                        SegmentedGroup {
+                            item(key = "effect") {
+                                SegmentedDropdownRow(
+                                    title = strings.rgbEffect,
+                                    options = LightEffect.selectable,
+                                    // 下拉里呼吸只有一个入口（BREATH_FULLCOLOR），具体变体由下一行决定
+                                    selected = effect.uiEffect,
+                                    onSelect = { e ->
+                                        applyEffect(
+                                            if (e == LightEffect.BREATH_FULLCOLOR) breathVariant else e
+                                        )
+                                    },
+                                    optionLabel = { effectLabel(it, strings) },
+                                    leadingContent = { AnimatedRowIcon(effectIcon(effect)) },
+                                )
+                            }
+                            // 「呼吸」底下挂一个子选项：单色（0x03，带颜色字节） / 全彩（0x02，不带）
+                            item(
+                                key = "breathMode",
+                                visible = effect.uiEffect == LightEffect.BREATH_FULLCOLOR,
+                            ) {
+                                SegmentedDropdownRow(
+                                    title = strings.rgbBreathMode,
+                                    options = listOf(
+                                        LightEffect.BREATH_SINGLE,
+                                        LightEffect.BREATH_FULLCOLOR,
+                                    ),
+                                    selected = effect,
+                                    onSelect = applyEffect,
+                                    optionLabel = {
+                                        if (it == LightEffect.BREATH_SINGLE) strings.rgbBreathSingle
+                                        else strings.rgbBreathFull
+                                    },
+                                )
+                            }
+                        }
+                        // ── 颜色(单色呼吸与常亮才带颜色字节；全彩呼吸/炫彩/关闭按协议置零) ──
+                        if (effect == LightEffect.BREATH_SINGLE || effect == LightEffect.ALWAYS_BRIGHT) {
+                            SegmentedGroup(title = strings.rgbPalette) {
+                                item(key = "palette") {
+                                    SegmentedContainer {
+                                        PaletteRow(r, g, b) { pr, pg, pb ->
+                                            savedEditor = editor.edit(draftConfig.copy(red = pr, green = pg, blue = pb))
+                                        }
+                                    }
+                                }
+                            }
+
+                            SegmentedGroup(title = strings.rgbCustomColor) {
+                                item(key = "sliders") {
+                                    SegmentedContainer {
+                                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                            ColorSlider(strings.rgbRed, r, Color.Red) {
+                                                savedEditor = editor.edit(draftConfig.copy(red = it))
+                                            }
+                                            ColorSlider(strings.rgbGreen, g, Color.Green) {
+                                                savedEditor = editor.edit(draftConfig.copy(green = it))
+                                            }
+                                            ColorSlider(strings.rgbBlue, b, Color.Blue) {
+                                                savedEditor = editor.edit(draftConfig.copy(blue = it))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 即使当前灯效没有颜色面板，也保留写入失败的重试入口。
+                        Button(
+                            onClick = { sendConfig(draftConfig, true) },
+                            enabled = currentWriteStatus != RgbWriteStatus.WRITING,
+                            shapes = ButtonDefaults.shapes(),
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
                         ) {
-                            SegmentedDropdownRow(
-                                title = strings.rgbBreathMode,
-                                options = listOf(
-                                    LightEffect.BREATH_SINGLE,
-                                    LightEffect.BREATH_FULLCOLOR,
-                                ),
-                                selected = effect,
-                                onSelect = applyEffect,
-                                optionLabel = {
-                                    if (it == LightEffect.BREATH_SINGLE) strings.rgbBreathSingle
-                                    else strings.rgbBreathFull
-                                },
-                            )
-                        }
-                    }
-                    // ── 颜色(单色呼吸与常亮才带颜色字节；全彩呼吸/炫彩/关闭按协议置零) ──
-                    if (effect == LightEffect.BREATH_SINGLE || effect == LightEffect.ALWAYS_BRIGHT) {
-                        SegmentedGroup(title = strings.rgbPalette) {
-                            item(key = "palette") {
-                                SegmentedContainer {
-                                    PaletteRow(r, g, b) { pr, pg, pb ->
-                                        savedEditor = editor.edit(draftConfig.copy(red = pr, green = pg, blue = pb))
+                            when (currentWriteStatus) {
+                                RgbWriteStatus.WRITING -> Text(strings.rgbWriting)
+                                RgbWriteStatus.SENT -> {
+                                    if (applied) {
+                                        Icon(painterResource(R.drawable.ms_check_fill1_24), contentDescription = null)
+                                        Spacer(Modifier.width(8.dp))
                                     }
+                                    Text(strings.rgbSent)
                                 }
+                                RgbWriteStatus.FAILED -> Text(strings.rgbWriteFailed)
+                                null -> Text(strings.rgbApply)
                             }
                         }
-
-                        SegmentedGroup(title = strings.rgbCustomColor) {
-                            item(key = "sliders") {
-                                SegmentedContainer {
-                                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        ColorSlider(strings.rgbRed, r, Color.Red) {
-                                            savedEditor = editor.edit(draftConfig.copy(red = it))
-                                        }
-                                        ColorSlider(strings.rgbGreen, g, Color.Green) {
-                                            savedEditor = editor.edit(draftConfig.copy(green = it))
-                                        }
-                                        ColorSlider(strings.rgbBlue, b, Color.Blue) {
-                                            savedEditor = editor.edit(draftConfig.copy(blue = it))
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // 即使当前灯效没有颜色面板，也保留写入失败的重试入口。
-                    Button(
-                        onClick = { sendConfig(draftConfig, true) },
-                        enabled = currentWriteStatus != RgbWriteStatus.WRITING,
-                        shapes = ButtonDefaults.shapes(),
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
-                    ) {
-                        when (currentWriteStatus) {
-                            RgbWriteStatus.WRITING -> Text(strings.rgbWriting)
-                            RgbWriteStatus.SENT -> {
-                                if (applied) {
-                                    Icon(Icons.Filled.Check, contentDescription = null)
-                                    Spacer(Modifier.width(8.dp))
-                                }
-                                Text(strings.rgbSent)
-                            }
-                            RgbWriteStatus.FAILED -> Text(strings.rgbWriteFailed)
-                            null -> Text(strings.rgbApply)
-                        }
-                    }
                 }
             }
+        }
         }
     }
 }
@@ -403,13 +415,13 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.glow(color: Color, 
 
 // ───────────────────────── 灯效选择 ─────────────────────────
 
-/** 灯效图标：行首跟着当前灯效走，菜单里不重复放图标。 */
-private fun effectIcon(e: LightEffect): ImageVector = when (e) {
-    LightEffect.ALWAYS_BRIGHT -> Icons.Filled.LightMode
+/** 灯效图标资源：行首跟着当前灯效走，菜单里不重复放图标。 */
+private fun effectIcon(e: LightEffect): Int = when (e) {
+    LightEffect.ALWAYS_BRIGHT -> R.drawable.materialsymbols_ic_light_mode_rounded_filled
     // 合并后的「呼吸」（包括设备回报的单色呼吸）统一用波纹图标
-    LightEffect.BREATH_FULLCOLOR, LightEffect.BREATH_SINGLE -> Icons.Filled.Waves
-    LightEffect.COLORFUL -> Icons.Filled.Palette
-    LightEffect.OFF -> Icons.Filled.AcUnit
+    LightEffect.BREATH_FULLCOLOR, LightEffect.BREATH_SINGLE -> R.drawable.materialsymbols_ic_waves_rounded_filled
+    LightEffect.COLORFUL -> R.drawable.materialsymbols_ic_animation_rounded_filled
+    LightEffect.OFF -> R.drawable.materialsymbols_ic_ac_unit_rounded_filled
 }
 
 private fun effectLabel(e: LightEffect, s: io.github.wxmyyds.coldfront.ui.i18n.AppStrings): String =
@@ -527,26 +539,33 @@ private fun ColorSlider(label: String, value: Int, trackColor: Color, onChange: 
 // ───────────────────────── 空状态 ─────────────────────────
 
 @Composable
-private fun NotConnectedCard(strings: io.github.wxmyyds.coldfront.ui.i18n.AppStrings, onConnect: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = optionContainerColor(MaterialTheme.colorScheme),
-        ),
+private fun NotConnectedContent(strings: io.github.wxmyyds.coldfront.ui.i18n.AppStrings, onConnect: () -> Unit) {
+    // 与 Home 页空状态同一套结构：圆底图标章 + 背景上的标题/按钮，无卡片。
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Column(
-            Modifier.padding(32.dp).fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+        Surface(
+            shape = CircleShape,
+            color = optionContainerColor(MaterialTheme.colorScheme),
         ) {
-            Icon(
-                Icons.Filled.Palette,
-                contentDescription = null,
-                modifier = Modifier.size(64.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(strings.rgbConnectFirst, style = MaterialTheme.typography.titleMedium)
-            Button(onClick = onConnect, shapes = ButtonDefaults.shapes()) { Text(strings.rgbGoConnect) }
+            Box(
+                modifier = Modifier.size(112.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    painterResource(R.drawable.materialsymbols_ic_palette_rounded_filled),
+                    contentDescription = null,
+                    modifier = Modifier.size(56.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(strings.rgbConnectFirst, style = EmphasizedTypography.headlineSmall)
+        Spacer(Modifier.height(8.dp))
+        Button(onClick = onConnect, shapes = ButtonDefaults.shapes()) {
+            Text(strings.rgbGoConnect)
         }
     }
 }
@@ -579,7 +598,7 @@ private fun NotSupportedCard(strings: io.github.wxmyyds.coldfront.ui.i18n.AppStr
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Icon(
-                Icons.Filled.AcUnit,
+                painterResource(R.drawable.materialsymbols_ic_ac_unit_rounded_filled),
                 contentDescription = null,
                 modifier = Modifier.size(64.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,

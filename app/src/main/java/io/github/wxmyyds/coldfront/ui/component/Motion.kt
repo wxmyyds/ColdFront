@@ -12,8 +12,9 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MotionScheme
+import androidx.annotation.DrawableRes
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.IntOffset
 
 internal object AppMotion {
@@ -34,18 +35,18 @@ internal object AppMotion {
                 slideOutVertically(animationSpec = spatialSpec) { -it / 24 })
 }
 
-/** Crossfade a changing row icon without adding arbitrary rotation or scale to state semantics. */
+/** Crossfade a changing row icon (drawable resource) without adding arbitrary rotation or scale to state semantics. */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun AnimatedRowIcon(
-    imageVector: ImageVector,
+    @DrawableRes resId: Int,
     contentDescription: String? = null,
 ) {
     Crossfade(
-        targetState = imageVector,
+        targetState = resId,
         animationSpec = MaterialTheme.motionScheme.fastEffectsSpec<Float>(),
         label = "rowIconState",
-    ) { icon ->
-        Icon(imageVector = icon, contentDescription = contentDescription)
+    ) { id ->
+        Icon(painter = painterResource(id), contentDescription = contentDescription)
     }
 }

@@ -13,12 +13,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.BugReport
-import androidx.compose.material.icons.filled.Public
 import androidx.compose.foundation.Image
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -28,8 +24,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.painterResource
 import io.github.wxmyyds.coldfront.BuildConfig
@@ -55,7 +53,11 @@ fun AboutScreen(onBack: () -> Unit) {
         title = strings.settingsAbout,
         navigationIcon = {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = strings.back)
+                Icon(
+                    painterResource(R.drawable.ms_arrow_back_fill1_24),
+                    contentDescription = strings.back,
+                    modifier = Modifier.size(28.dp),
+                )
             }
         },
     ) { inner ->
@@ -68,44 +70,42 @@ fun AboutScreen(onBack: () -> Unit) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 8.dp),
+                    .padding(horizontal = 24.dp, vertical = 32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Spacer(Modifier.height(32.dp))
+                // 仿 KernelSU MD3E 版 About 头部观感（仅借鉴设计参数：80dp 白底、16dp 圆角、
+                // 彩色前景式 logo；实现用 MD3 Surface 惯用法，结构独立）
                 Surface(
-                    shape = MaterialTheme.shapes.extraLarge,
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                    modifier = Modifier.size(168.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color.White,
+                    modifier = Modifier.size(80.dp),
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Image(
-                            painter = painterResource(R.drawable.ic_launcher),
-                            contentDescription = null,
-                            modifier = Modifier.size(56.dp),
-                        )
-                    }
+                    Image(
+                        painter = painterResource(R.drawable.ic_logo_foreground),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit,
+                    )
                 }
-                Spacer(Modifier.height(28.dp))
                 Text(
-                    strings.appName,
-                    style = MaterialTheme.typography.headlineLarge,
-                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 12.dp),
+                    text = strings.appName,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = MaterialTheme.typography.headlineMedium.fontSize,
                 )
-                Spacer(Modifier.height(12.dp))
                 Text(
-                    "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
-                    style = MaterialTheme.typography.titleMedium,
+                    text = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
                 )
-                Spacer(Modifier.height(88.dp))
+                Spacer(Modifier.height(24.dp))
                 SegmentedGroup {
                     item(key = "report") {
                         SegmentedRow(
                             title = strings.settingsAboutReport,
-                            leadingContent = { Icon(Icons.Filled.BugReport, contentDescription = null) },
+                            leadingContent = { Icon(painterResource(R.drawable.materialsymbols_ic_bug_report_rounded_filled), contentDescription = null) },
                             trailingContent = {
-                                Icon(Icons.Filled.ChevronRight, contentDescription = null)
+                                Icon(painterResource(R.drawable.materialsymbols_ic_chevron_right_rounded_filled), contentDescription = null)
                             },
                             onClick = {
                                 openLink("https://github.com/wxmyyds/ColdFront/issues/new")
@@ -115,9 +115,9 @@ fun AboutScreen(onBack: () -> Unit) {
                     item(key = "project") {
                         SegmentedRow(
                             title = strings.settingsAboutProject,
-                            leadingContent = { Icon(Icons.Filled.Public, contentDescription = null) },
+                            leadingContent = { Icon(painterResource(R.drawable.materialsymbols_ic_public_rounded_filled), contentDescription = null) },
                             trailingContent = {
-                                Icon(Icons.Filled.ChevronRight, contentDescription = null)
+                                Icon(painterResource(R.drawable.materialsymbols_ic_chevron_right_rounded_filled), contentDescription = null)
                             },
                             onClick = {
                                 openLink("https://github.com/wxmyyds/ColdFront")

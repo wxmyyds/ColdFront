@@ -15,6 +15,7 @@ datastore = "1.2.1"
 # material-kolor 传递依赖 material-color-utilities，提供 dynamicColorScheme 高层 API
 materialKolor = "5.0.1"
 junit = "4.13.2"
+composablesIcons = "2.2.1"
 json = "20250517"
 
 [libraries]
@@ -37,8 +38,8 @@ androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-toolin
 androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
 androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
-androidx-compose-material-icons-core = { group = "androidx.compose.material", name = "material-icons-core" }
-androidx-compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
+composables-icons-symbols-rounded = { group = "com.composables", name = "icons-material-symbols-rounded-android", version.ref = "composablesIcons" }
+composables-icons-symbols-rounded-filled = { group = "com.composables", name = "icons-material-symbols-rounded-filled-android", version.ref = "composablesIcons" }
 
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "kotlinxCoroutines" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }

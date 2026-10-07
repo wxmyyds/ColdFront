@@ -70,6 +70,17 @@ cd ColdFront
 >
 > MD3E 完整 API 需要 material3 alpha 线（已在 `gradle/libs.versions.toml` 配置 `compose-bom-alpha`）。
 
+## 已知问题：图标库部分矢量坐标损坏
+
+图标来自 [`com.composables` Material Symbols](https://github.com/composablehorizons/compose-icons)（`icons-material-symbols-rounded[-filled]`，当前 2.2.1）。**该库有未修复的上游 bug：部分图标的 path 坐标生成错误——Y 整体偏移出 viewport，渲染时图形缺失/越界/错位**，只在个别图标上出现，不代表全部。
+
+- 上游 open issues：#25 Strange icons behavior、#13/#16/#17 同类、#15 Settings icon is distorted、#27 Solid icons fill inner cutouts（均为 open，2.2.1 已是 Maven Central 最新版）
+- 已确认受害的图标（含上游用户报告）：`arrow_back`、`check`/`done`/`check_circle`/`check_small`/`verified`（对勾系全家）、`style`、`arrow_back_ios`、`keyboard_arrow_left`、`chevron_left`、`navigate_before`、`turn_left`、`chat_bubble`、`energy_savings_leaf`、`disabled_by_default`、`tag` 及部分 outlined 变体
+
+**根因**：composables 搬运 Google Symbols 素材时，把部分图标的 path Y 坐标整体减了 960（图形被移出 960 viewport，渲染时缺失/越界），官方仓库 `google/material-design-icons → symbols/android/*/materialsymbolsrounded/*_fill1_24px.xml` 里同一图标的坐标是正常的。
+
+**规避策略**：新增图标前先用脚本检查 path 是否出界（任何绝对坐标落在 0–960 viewport 之外即判定损坏）；遇损坏的直接采用 **Google 官方仓库同图标 XML**（`res/drawable/ms_*.xml`），仅去掉 `android:tint=?attr/colorControlNormal` 一行（AppCompat-free 项目，由 Icon composable 着色），坐标保持官方原样。本项目当前实际用到的 35 个库图标中 3 个损坏，均以官方 XML 替代：`arrow_back`→`ms_arrow_back_fill1_24`（保留官方 `autoMirrored`，顺带修复 RTL）、开关/下拉对勾 `check`→`ms_check_fill1_24`、设置页调色板 `style`→`ms_style_fill1_24`。
+
 ## 目录结构
 
 ```
