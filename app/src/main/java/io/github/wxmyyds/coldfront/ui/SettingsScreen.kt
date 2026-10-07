@@ -26,7 +26,7 @@ import io.github.wxmyyds.coldfront.ui.component.SegmentedGroup
 import io.github.wxmyyds.coldfront.ui.component.SegmentedRow
 import io.github.wxmyyds.coldfront.ui.component.SegmentedSwitchRow
 import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
-import io.github.wxmyyds.coldfront.ui.theme.PaletteStyles
+import io.github.wxmyyds.coldfront.data.PaletteStyles
 
 /**
  * 设置页(MD3E 分段选项列表):

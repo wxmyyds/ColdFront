@@ -19,8 +19,6 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "1.0.0"
-
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -90,10 +88,5 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     // Real JSON implementation for repository tests; Android's mockable JAR only has stubs.
     testImplementation(libs.org.json)
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
-    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

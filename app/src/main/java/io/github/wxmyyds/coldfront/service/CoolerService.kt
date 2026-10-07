@@ -18,6 +18,7 @@ import io.github.wxmyyds.coldfront.ble.BlePermissionManager
 import io.github.wxmyyds.coldfront.ble.CoolerBleManager
 import io.github.wxmyyds.coldfront.data.ProfileRepository
 import io.github.wxmyyds.coldfront.data.SettingsRepository
+import io.github.wxmyyds.coldfront.data.retryStorageReads
 import io.github.wxmyyds.coldfront.domain.CoolerProfile
 import io.github.wxmyyds.coldfront.ui.i18n.AppStrings
 import io.github.wxmyyds.coldfront.ui.i18n.stringsFor
@@ -29,11 +30,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.launch
 
 private const val CHANNEL_ID = "cooler_service_channel"
@@ -47,7 +46,8 @@ class CoolerService : Service() {
         const val ACTION_STOP = "io.github.wxmyyds.coldfront.STOP"
         const val ACTION_SWITCH_TO_MANUAL = "io.github.wxmyyds.coldfront.SWITCH_TO_MANUAL"
         const val ACTION_RECONNECT = "io.github.wxmyyds.coldfront.RECONNECT"
-        internal const val EXTRA_CONTROL_ADDRESS = "control_address"
+        private const val EXTRA_CONTROL_ADDRESS = "control_address"
+        private const val EXTRA_CONTROL_SESSION = "control_session"
         private const val EXTRA_PROFILE_ID = "profile_id"
         private const val ACTION_VALIDATE_TARGET = "io.github.wxmyyds.coldfront.VALIDATE_TARGET"
 
@@ -55,6 +55,21 @@ class CoolerService : Service() {
             start(context, Intent(context, CoolerService::class.java).apply {
                 action = ACTION_START_AUTO
                 putExtra(EXTRA_PROFILE_ID, profile.id)
+            })
+        }
+
+        internal fun switchToManual(context: Context, target: ManualControlTarget) =
+            sendControl(context, target, ACTION_SWITCH_TO_MANUAL)
+
+        /** Stop background recovery only; the BLE mode coordinator owns the actual Boost transition. */
+        internal fun stopForTarget(context: Context, target: ManualControlTarget) =
+            sendControl(context, target, ACTION_STOP)
+
+        private fun sendControl(context: Context, target: ManualControlTarget, action: String) {
+            start(context, Intent(context, CoolerService::class.java).apply {
+                this.action = action
+                putExtra(EXTRA_CONTROL_ADDRESS, target.address)
+                putExtra(EXTRA_CONTROL_SESSION, target.sessionId)
             })
         }
 
@@ -138,6 +153,18 @@ class CoolerService : Service() {
                 activate(profile)
             }
             ACTION_STOP, ACTION_SWITCH_TO_MANUAL -> {
+                val controlTarget = if (intent.hasExtra(EXTRA_CONTROL_SESSION)) {
+                    ManualControlTarget(
+                        intent.getStringExtra(EXTRA_CONTROL_ADDRESS).orEmpty(),
+                        intent.getLongExtra(EXTRA_CONTROL_SESSION, -1L),
+                    )
+                } else null // Notification actions intentionally address the service's current target.
+                if (controlTarget != null && !controlTarget.matches(ble.state.value)) {
+                    // A delayed UI/tile action must not clear a newer service target or control
+                    // a replacement connection, including a reconnect to the very same address.
+                    if (target == null) stopSelfSafely()
+                    return
+                }
                 // Persist explicit opt-out before shutdown, so boot/sticky restart cannot
                 // silently re-enable the device. Notification Close keeps device mode intact.
                 val intendedAddress = intent.getStringExtra(EXTRA_CONTROL_ADDRESS)
@@ -150,6 +177,7 @@ class CoolerService : Service() {
                     val state = ble.state.value
                     val sent = intendedAddress != null && state.isConnected &&
                         intendedAddress.equals(state.deviceAddress, ignoreCase = true) &&
+                        (controlTarget == null || controlTarget.matches(state)) &&
                         ble.setSmartAndAwait(false)
                     if (!sent) showControlFailure()
                 }
@@ -199,14 +227,11 @@ class CoolerService : Service() {
         scope.launch {
             combine(
                 ble.state,
-                SettingsRepository(applicationContext).appLanguage,
-            ) { state, language -> state to stringsFor(Locale.getDefault(), language) }
-                .retryWhen { cause, _ ->
-                    if (cause !is IOException) return@retryWhen false
+                SettingsRepository(applicationContext).appLanguage.recoverNotificationLanguage { cause ->
                     Log.e(TAG, "Cannot read notification language", cause)
-                    delay(2_000)
-                    true
-                }.collect { (state, localized) ->
+                },
+            ) { state, language -> state to stringsFor(Locale.getDefault(), language) }
+                .collect { (state, localized) ->
                     if (strings !== localized) {
                         strings = localized
                         lastNotification = null
@@ -216,11 +241,10 @@ class CoolerService : Service() {
                 }
         }
         scope.launch {
-            profiles.serviceProfile.retryWhen { cause, _ ->
-                if (cause !is IOException) return@retryWhen false
+            profiles.observeServiceProfile { cause ->
+                Log.e(TAG, "Cannot decode service target", cause)
+            }.retryStorageReads { cause ->
                 Log.e(TAG, "Cannot observe service target", cause)
-                delay(2_000)
-                true
             }.collectTargetInvalidations(latestStartId = { latestStartId }) { startId ->
                 // Never discard deletion while target is still being loaded. The queued
                 // validator runs after startup/manual commands and re-reads persisted intent.

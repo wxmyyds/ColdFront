@@ -1,6 +1,5 @@
 package io.github.wxmyyds.coldfront.service
 
-import android.content.Intent
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.util.Log
@@ -23,7 +22,8 @@ import kotlinx.coroutines.flow.first
 /** Quick Settings auto-mode toggle; state follows the service, not an optimistic local flag. */
 class CoolerTileService : TileService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val ble by lazy { BleManagerHolder.get(applicationContext) }
+    // Tile callbacks and this scope both run on Main, matching the holder's checked contract.
+    private val ble by lazy(LazyThreadSafetyMode.NONE) { BleManagerHolder.get(applicationContext) }
     private var listening: Job? = null
     private var click: Job? = null
 
@@ -56,10 +56,8 @@ class CoolerTileService : TileService() {
                 val current = ble.state.value
                 if (current.isConnected && current.smartOn) {
                     // Unlike notification Close, this is advertised as auto-mode OFF.
-                    CoolerService.start(this@CoolerTileService, Intent(this@CoolerTileService, CoolerService::class.java).apply {
-                        action = CoolerService.ACTION_SWITCH_TO_MANUAL
-                        putExtra(CoolerService.EXTRA_CONTROL_ADDRESS, current.deviceAddress)
-                    })
+                    val target = ManualControlTarget.from(current) ?: return@launch
+                    CoolerService.switchToManual(this@CoolerTileService, target)
                 } else {
                     val active = ProfileRepository(applicationContext).loadActiveProfile()
                     // Reading storage suspends: both the selected device and the connection

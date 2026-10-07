@@ -6,6 +6,13 @@ import io.github.wxmyyds.coldfront.domain.LightEffect
 import io.github.wxmyyds.coldfront.domain.RGBConfig
 import io.github.wxmyyds.coldfront.domain.RgbWriteState
 import io.github.wxmyyds.coldfront.domain.RgbWriteStatus
+import io.github.wxmyyds.coldfront.ble.GattOperationQueue
+import io.github.wxmyyds.coldfront.ble.executeFreshCommand
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -21,11 +28,13 @@ class RgbEditorStateTest {
     private fun device(
         rgb: RGBConfig? = RGBConfig(LightEffect.BREATH_SINGLE, 255, 0, 0),
         connected: Boolean = true,
+        revision: Long = 0L,
     ): CoolerLiveState = CoolerLiveState(
         connection = if (connected) ConnectionState.CONNECTED else ConnectionState.DISCONNECTED,
         deviceAddress = addr,
         connectionSessionId = sessionId,
         rgb = rgb,
+        rgbRevision = revision,
     )
 
     @Test
@@ -88,7 +97,7 @@ class RgbEditorStateTest {
 
         // 写入完成且设备状态已与草稿一致：释放保护，恢复跟随回读
         val sent = request.copy(status = RgbWriteStatus.SENT)
-        val released = draft.receive(device(rgb = draftConfig), sent)
+        val released = draft.receive(device(rgb = draftConfig, revision = 1L), sent)
         assertEquals(draftConfig, released.config)
         assertFalse(released.dirty)
     }
@@ -101,12 +110,81 @@ class RgbEditorStateTest {
         val latestConfig = RGBConfig(LightEffect.OFF, 0, 0, 0)
 
         // No receive(device(draftConfig), SENT) call: lifecycle/StateFlow skipped that emission.
-        val released = draft.receive(device(rgb = latestConfig), request.copy(status = RgbWriteStatus.SENT))
+        val released = draft.receive(device(rgb = latestConfig, revision = 2L), request.copy(status = RgbWriteStatus.SENT))
         assertFalse(released.dirty)
         assertEquals(latestConfig, released.config)
         assertNull(released.submittedRequestId)
         assertNull(released.explicitApplyRequestId)
         assertEquals(device().rgb, released.receive(device(), request.copy(status = RgbWriteStatus.SENT)).config)
+    }
+
+    @Test
+    fun `sent draft survives failed readback until a new device report actually arrives`() {
+        val oldDevice = device(revision = 5L)
+        val config = RGBConfig(LightEffect.ALWAYS_BRIGHT, 10, 20, 30)
+        val sent = RgbWriteState(1, config, RgbWriteStatus.SENT, readbackRevisionAtWrite = 5L)
+        val draft = RgbEditorState.fromDevice(oldDevice).submit(sent, explicitApply = true)
+        val stillDraft = draft.receive(oldDevice, sent)
+        assertEquals(draft, stillDraft)
+        assertEquals(config, stillDraft.config)
+        assertEquals(RgbWriteStatus.SENT, stillDraft.currentWrite(sent)?.status)
+        // Identical old colour is now a real post-write report, so it may take ownership.
+        val reported = stillDraft.receive(oldDevice.copy(rgbRevision = 6L), sent)
+        assertFalse(reported.dirty)
+        assertEquals(oldDevice.rgb, reported.config)
+        assertNull(reported.submittedRequestId)
+    }
+
+    @Test
+    fun `prewrite telemetry cannot release draft even when it arrived after submission`() {
+        val initial = device(revision = 1L)
+        val config = RGBConfig(LightEffect.ALWAYS_BRIGHT, 10, 20, 30)
+        val writing = RgbWriteState(1, config, RgbWriteStatus.WRITING)
+        val draft = RgbEditorState.fromDevice(initial).submit(writing, explicitApply = true)
+        val queuedTelemetry = initial.copy(rgbRevision = 2L)
+        // BLE records revision at write dispatch, not at submit time.
+        val sent = writing.copy(status = RgbWriteStatus.SENT, readbackRevisionAtWrite = 2L)
+        assertEquals(draft, draft.receive(queuedTelemetry, sent))
+        val confirmed = draft.receive(queuedTelemetry.copy(rgb = config, rgbRevision = 3L), sent)
+        assertFalse(confirmed.dirty)
+        assertEquals(RgbWriteStatus.SENT, confirmed.currentWrite(sent)?.status)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `notification before write coroutine resumes releases draft even if readback fails`() = runTest {
+        val old = device(revision = 1L)
+        val config = RGBConfig(LightEffect.ALWAYS_BRIGHT, 10, 20, 30)
+        var write = RgbWriteState(1, config, RgbWriteStatus.WRITING)
+        val draft = RgbEditorState.fromDevice(old).submit(write, explicitApply = true)
+        val queue = GattOperationQueue(onTimeout = { error("Unexpected timeout") })
+        val owner = Any()
+        val target = Any()
+        val result = async {
+            executeFreshCommand(
+                compositeFresh = { true },
+                write = { fresh ->
+                    queue.execute(owner, target, GattOperationQueue.Kind.WRITE, 100, fresh) {
+                        // Same dispatch boundary as CoolerBleManager.enqueueWrite.beforeWrite.
+                        write = write.copy(readbackRevisionAtWrite = old.rgbRevision)
+                        true
+                    }.success
+                },
+                readBack = { /* Failed read: no additional configuration report. */ },
+            )
+        }
+        runCurrent()
+        assertTrue(queue.complete(owner, target, GattOperationQueue.Kind.WRITE, GattOperationQueue.Result(true)))
+        // Notification arrives after delivery, before the suspended command consumes its result.
+        // Model the event ordering directly, without depending on an artificial GATT sleep.
+        assertFalse(result.isCompleted)
+        val notified = old.copy(rgb = config, rgbRevision = 2L)
+        advanceUntilIdle()
+        write = write.completed(write.requestId, result.await())
+        val released = draft.receive(notified, write)
+        assertFalse(released.dirty)
+        assertEquals(config, released.config)
+        assertEquals(RgbWriteStatus.SENT, released.currentWrite(write)?.status)
     }
 
     @Test

@@ -4,10 +4,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 class CoolerDeviceTest {
-    private val device = CoolerDevice("AA:BB:CC:DD:EE:FF", "Magcooler", CoolerDeviceType.JACKET_3, -80, 123L)
+    private val device = CoolerDevice("AA:BB:CC:DD:EE:FF", "Magcooler", CoolerDeviceType.JACKET_3, -80)
 
     @Test
     fun `device equality includes advertisement values not just address`() {
@@ -17,7 +18,14 @@ class CoolerDeviceTest {
         assertNotEquals(device, device.copy(bleName = "Magcooler 6"))
         assertNotEquals(device, device.copy(deviceType = CoolerDeviceType.JACKET_6))
         assertNotEquals(device, device.copy(matchedByName = true))
-        assertNotEquals(device, device.copy(scanTimeNanos = 124L))
+    }
+
+    @Test
+    fun `identical scan events do not force state changes via a clock field`() {
+        val initial = listOf(device)
+        val devices = MutableStateFlow(initial)
+        devices.value = listOf(CoolerDevice("AA:BB:CC:DD:EE:FF", "Magcooler", CoolerDeviceType.JACKET_3, -80))
+        assertSame(initial, devices.value)
     }
 
     @Test

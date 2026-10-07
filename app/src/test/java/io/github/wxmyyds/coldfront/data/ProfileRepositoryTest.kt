@@ -355,7 +355,7 @@ class ProfileRepositoryTest {
     fun `corrupt document rejects reads and profile mutations without replacing stored data`() = runTest {
         listOf("", " ", "{}", "null", "[", "[{\"id\":", "[] trailing", "[] []").forEach { corrupt ->
             val initial = mutablePreferencesOf(
-                profilesKey to corrupt, activeKey to "saved", serviceKey to "saved",
+                profilesKey to corrupt, activeKey to "saved", serviceKey to "saved", defaultKey to "saved",
             ).toPreferences()
             val store = TestPreferencesStore(initial)
             val repository = ProfileRepository(store)
@@ -363,6 +363,8 @@ class ProfileRepositoryTest {
             expectFailure<IOException> { repository.loadActiveProfile() }
             expectFailure<IOException> { repository.loadServiceProfile() }
             expectFailure<IOException> { repository.serviceProfile.first() }
+            expectFailure<IOException> { repository.loadDefaultProfile() }
+            expectFailure<IOException> { repository.defaultProfile.first() }
             expectFailure<IOException> { repository.recordConnection(connected()) }
             expectFailure<IOException> { repository.delete("saved") }
             expectFailure<IOException> { repository.setServiceProfile("saved") }
@@ -373,7 +375,30 @@ class ProfileRepositoryTest {
             assertEquals(corrupt, store.snapshot[profilesKey])
             assertEquals("saved", store.snapshot[activeKey])
             assertNull(store.snapshot[serviceKey])
+            assertNull(repository.loadServiceProfile())
+            assertNull(repository.serviceProfile.first())
+            // The remaining reference still requires the corrupt document and must report it.
+            expectFailure<IOException> { repository.loadDefaultProfile() }
+            repository.setDefaultProfile(null)
+            assertNull(repository.loadDefaultProfile())
+            assertNull(repository.defaultProfile.first())
+            assertEquals(corrupt, store.snapshot[profilesKey])
+            expectFailure<IOException> { repository.loadActiveProfile() }
         }
+    }
+
+    @Test
+    fun `absent references are OFF even when the unrelated profile document is corrupt`() = runTest {
+        val store = TestPreferencesStore(mutablePreferencesOf(profilesKey to "["))
+        val repository = ProfileRepository(store)
+        assertNull(repository.loadActiveProfile())
+        assertNull(repository.loadServiceProfile())
+        assertNull(repository.serviceProfile.first())
+        assertNull(repository.loadDefaultProfile())
+        assertNull(repository.defaultProfile.first())
+        expectFailure<IOException> { repository.profiles.first() }
+        assertEquals("[", store.snapshot[profilesKey])
+        assertTrue(store.commits.isEmpty())
     }
 
     @Test

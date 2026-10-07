@@ -40,6 +40,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -168,19 +169,23 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
 
     // 官方 Jacket8ProActivityV3.N4 只在限档变化时提示一次(重复上报不重复提示):
     // 同一限档值只弹一次；限档变化,或解除限档后再次受限,才重新提示。
-    // 重连会换 connectionSessionId,随之重置已确认记录。
-    var acknowledgedLimit by remember(state.connectionSessionId) { mutableStateOf<Int?>(null) }
-    LaunchedEffect(state.connectionSessionId, state.powerLimited) {
-        if (!state.powerLimited) acknowledgedLimit = null
+    // 重连会换 connectionSessionId,随之重置已确认记录；同会话旋转保留确认。
+    var savedNotice by rememberSaveable(stateSaver = PowerLimitNoticeStateSaver) {
+        mutableStateOf(PowerLimitNoticeState(state.connectionSessionId))
     }
     val limit = state.fanLimit
-    if (state.powerLimited && limit != null && acknowledgedLimit != limit) {
+    val notice = savedNotice.normalized(state.connectionSessionId, state.powerLimited, limit)
+    // Validate before rendering; persist resets without mutating state during composition.
+    LaunchedEffect(state.connectionSessionId, state.powerLimited, limit) {
+        savedNotice = savedNotice.normalized(state.connectionSessionId, state.powerLimited, limit)
+    }
+    if (notice.shouldShow(state.powerLimited, limit)) {
         AlertDialog(
-            onDismissRequest = { acknowledgedLimit = limit },
+            onDismissRequest = { savedNotice = notice.copy(acknowledgedLimit = limit) },
             title = { Text(strings.homePowerLimitedTitle) },
             text = { Text(strings.homePowerLimitedHint) },
             confirmButton = {
-                TextButton(onClick = { acknowledgedLimit = limit }) {
+                TextButton(onClick = { savedNotice = notice.copy(acknowledgedLimit = limit) }) {
                     Text(strings.homePowerLimitedConfirm)
                 }
             },

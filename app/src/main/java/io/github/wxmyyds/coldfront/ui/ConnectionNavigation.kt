@@ -1,5 +1,6 @@
 package io.github.wxmyyds.coldfront.ui
 
+import androidx.compose.runtime.saveable.listSaver
 import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.domain.CoolerLiveState
 import io.github.wxmyyds.coldfront.domain.CoolerProfile
@@ -10,8 +11,16 @@ internal data class ConnectionNavigationKey(val connection: ConnectionState, val
 internal fun connectionNavigationKey(state: CoolerLiveState): ConnectionNavigationKey =
     ConnectionNavigationKey(state.connection, state.connectionSessionId)
 
-internal fun shouldLeaveScanOnConnection(key: ConnectionNavigationKey, isScanDestination: Boolean): Boolean =
-    key.connection == ConnectionState.CONNECTED && isScanDestination
+internal val ConnectionNavigationKeySaver = listSaver<ConnectionNavigationKey, Any>(
+    save = { listOf(it.connection.name, it.sessionId) },
+    restore = { ConnectionNavigationKey(ConnectionState.valueOf(it[0] as String), it[1] as Long) },
+)
+
+internal fun shouldLeaveScanOnConnection(
+    previous: ConnectionNavigationKey,
+    current: ConnectionNavigationKey,
+    isScanDestination: Boolean,
+): Boolean = previous != current && current.connection == ConnectionState.CONNECTED && isScanDestination
 
 /**
  * App start may dial the configured default device, but never steals a running session: the
