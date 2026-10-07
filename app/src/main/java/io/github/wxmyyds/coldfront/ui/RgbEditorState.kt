@@ -49,9 +49,10 @@ internal data class RgbEditorState(
                 explicitApplyRequestId = null,
             )
         }
-        return if (currentWrite(write)?.status == RgbWriteStatus.SENT) {
-            // StateFlow may conflate the matching readback with a subsequent device update.
-            // The matching send releases this draft even when we first observe a newer value.
+        val sent = currentWrite(write)?.takeIf { it.status == RgbWriteStatus.SENT }
+        return if (sent != null && device.rgbRevision > sent.readbackRevisionAtWrite) {
+            // Delivery alone is not a new device value: a failed read leaves the old snapshot.
+            // A revision also handles StateFlow conflating a matching report with a newer one.
             if (received == config) copy(dirty = false) else copy(
                 config = received,
                 dirty = false,

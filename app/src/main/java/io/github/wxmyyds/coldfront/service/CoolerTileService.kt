@@ -1,6 +1,5 @@
 package io.github.wxmyyds.coldfront.service
 
-import android.content.Intent
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.util.Log
@@ -56,10 +55,8 @@ class CoolerTileService : TileService() {
                 val current = ble.state.value
                 if (current.isConnected && current.smartOn) {
                     // Unlike notification Close, this is advertised as auto-mode OFF.
-                    CoolerService.start(this@CoolerTileService, Intent(this@CoolerTileService, CoolerService::class.java).apply {
-                        action = CoolerService.ACTION_SWITCH_TO_MANUAL
-                        putExtra(CoolerService.EXTRA_CONTROL_ADDRESS, current.deviceAddress)
-                    })
+                    val target = ManualControlTarget.from(current) ?: return@launch
+                    CoolerService.switchToManual(this@CoolerTileService, target)
                 } else {
                     val active = ProfileRepository(applicationContext).loadActiveProfile()
                     // Reading storage suspends: both the selected device and the connection

@@ -145,8 +145,8 @@ class ProfileRepository internal constructor(private val dataStore: DataStore<Pr
     }
 
     private fun referencedProfile(prefs: Preferences, key: Preferences.Key<String>): CoolerProfile? {
-        val profiles = ProfileJson.parse(prefs[KEY_PROFILES]).profiles
         val id = prefs[key] ?: return null
+        val profiles = ProfileJson.parse(prefs[KEY_PROFILES]).profiles
         return profiles.firstOrNull { it.id == id }
     }
 

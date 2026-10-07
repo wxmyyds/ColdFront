@@ -16,6 +16,8 @@ import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
 import io.github.wxmyyds.coldfront.domain.CoolerLiveState
 import io.github.wxmyyds.coldfront.domain.CoolerProfile
 import io.github.wxmyyds.coldfront.domain.RGBConfig
+import io.github.wxmyyds.coldfront.service.CoolerService
+import io.github.wxmyyds.coldfront.service.ManualControlTarget
 import java.io.IOException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -147,38 +149,29 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
             ble.setSmart(true)
             return
         }
-        stopSmart()
+        stopAuto(switchToManual = true)
     }
 
-    /** 关闭智能温控,并取消同一个设备上还在跑的后台温控服务(否则它会再次打开温控)。 */
-    private fun stopSmart() {
-        val requested = liveState.value
+    /** Cancel same-device background recovery; BLE owns the mutually exclusive mode writes. */
+    private fun stopAuto(switchToManual: Boolean) {
+        val requested = ManualControlTarget.from(liveState.value) ?: return
         saveSetting {
             val target = profileRepo.loadServiceProfile()
-            if (target != null && target.macAddress.equals(requested.deviceAddress, ignoreCase = true)) {
-                // Cancel background recovery before turning this same device OFF.
-                io.github.wxmyyds.coldfront.service.CoolerService.start(
-                    getApplication(), android.content.Intent(getApplication(), io.github.wxmyyds.coldfront.service.CoolerService::class.java).apply {
-                        action = io.github.wxmyyds.coldfront.service.CoolerService.ACTION_SWITCH_TO_MANUAL
-                        putExtra(io.github.wxmyyds.coldfront.service.CoolerService.EXTRA_CONTROL_ADDRESS, requested.deviceAddress)
-                    },
-                )
-            } else if (liveState.value.connectionSessionId == requested.connectionSessionId) {
+            if (!requested.matches(liveState.value)) return@saveSetting
+            if (target != null && target.macAddress.equals(requested.address, ignoreCase = true)) {
+                // Service owns background opt-out and validates this session again on delivery.
+                if (switchToManual) CoolerService.switchToManual(getApplication(), requested)
+                else CoolerService.stopForTarget(getApplication(), requested)
+            } else if (switchToManual) {
                 ble.setSmart(false)
             }
         }
     }
 
     fun setBoost(on: Boolean) {
-        if (!on) {
-            ble.setBoost(false)
-            return
-        }
-        // 官方 Jacket8ProActivityV3.n5:破坏神与智能温控互斥——开启破坏神前先关掉温控,并一并
-        // 取消后台温控服务(官方只关开关,没有后台服务这一层)。反过来开启温控时关破坏神的规则
-        // 由 CoolerBleManager.startSmart 统一处理,所有开启温控的入口都走那里。
-        if (liveState.value.smartOn) stopSmart()
-        ble.setBoost(true)
+        if (on && !liveState.value.powerLimited) stopAuto(switchToManual = false)
+        // Do not enqueue a delayed Smart OFF here: it could supersede the Boost transition.
+        ble.setBoost(on)
     }
     fun setOvercoldProtection(on: Boolean) = ble.setOvercoldProtection(on)
     fun setRGB(config: RGBConfig) = ble.setRGB(config)

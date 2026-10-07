@@ -1,6 +1,5 @@
 package io.github.wxmyyds.coldfront.ble
 
-import android.bluetooth.BluetoothDevice
 import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
 
 /**
@@ -18,7 +17,6 @@ data class BleScanDiagnostic(
     val msd: List<Pair<Int, String>>,
     val serviceUuids: List<String>,
     val serviceData: List<Pair<String, String>>,
-    val bluetoothDevice: BluetoothDevice?,
     val coolerType: CoolerDeviceType? = null,
 )
 

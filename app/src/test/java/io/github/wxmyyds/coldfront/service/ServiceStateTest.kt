@@ -101,6 +101,45 @@ class ServiceStateTest {
     }
 
     @Test
+    fun `manual action cannot control a replacement session even at the same address`() {
+        val target = requireNotNull(ManualControlTarget.from(connected))
+        assertTrue(target.matches(connected))
+        assertTrue(target.matches(connected.copy(deviceAddress = profile.macAddress.lowercase(Locale.ROOT))))
+        assertTrue(target.matches(connected.copy(fanPercent = 10, temperatureC = 15f)))
+        assertFalse(target.matches(connected.copy(connectionSessionId = 2L)))
+        assertFalse(target.matches(connected.copy(deviceAddress = "11:22:33:44:55:66")))
+        assertFalse(target.matches(connected.copy(connection = ConnectionState.DISCONNECTED)))
+        assertFalse(target.matches(connected.copy(connection = ConnectionState.CONNECTING)))
+        assertNull(ManualControlTarget.from(CoolerLiveState()))
+        assertNull(ManualControlTarget.from(connected.copy(deviceAddress = null)))
+    }
+
+    @Test
+    fun `manual action revalidates after both storage and service queue suspensions`() = runTest {
+        val target = requireNotNull(ManualControlTarget.from(connected))
+        val state = MutableStateFlow(connected)
+        val storageRead = CompletableDeferred<Unit>()
+        val serviceDelivery = CompletableDeferred<Unit>()
+        var persistedStop = false
+        var sentOff = false
+        val request = launch {
+            storageRead.await()
+            if (!target.matches(state.value)) return@launch
+            serviceDelivery.await()
+            if (!target.matches(state.value)) return@launch
+            persistedStop = true
+            sentOff = true
+        }
+        storageRead.complete(Unit)
+        runCurrent()
+        state.value = connected.copy(connectionSessionId = 2L)
+        serviceDelivery.complete(Unit)
+        request.join()
+        assertFalse(persistedStop)
+        assertFalse(sentOff)
+    }
+
+    @Test
     fun `tile never starts the old active profile while another device is connected`() {
         val oldActive = profile.copy(id = "b", macAddress = "11:22:33:44:55:66")
         assertNull(tileStartProfile(connected, connected, oldActive))

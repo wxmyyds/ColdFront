@@ -47,7 +47,8 @@ class CoolerService : Service() {
         const val ACTION_STOP = "io.github.wxmyyds.coldfront.STOP"
         const val ACTION_SWITCH_TO_MANUAL = "io.github.wxmyyds.coldfront.SWITCH_TO_MANUAL"
         const val ACTION_RECONNECT = "io.github.wxmyyds.coldfront.RECONNECT"
-        internal const val EXTRA_CONTROL_ADDRESS = "control_address"
+        private const val EXTRA_CONTROL_ADDRESS = "control_address"
+        private const val EXTRA_CONTROL_SESSION = "control_session"
         private const val EXTRA_PROFILE_ID = "profile_id"
         private const val ACTION_VALIDATE_TARGET = "io.github.wxmyyds.coldfront.VALIDATE_TARGET"
 
@@ -55,6 +56,21 @@ class CoolerService : Service() {
             start(context, Intent(context, CoolerService::class.java).apply {
                 action = ACTION_START_AUTO
                 putExtra(EXTRA_PROFILE_ID, profile.id)
+            })
+        }
+
+        internal fun switchToManual(context: Context, target: ManualControlTarget) =
+            sendControl(context, target, ACTION_SWITCH_TO_MANUAL)
+
+        /** Stop background recovery only; the BLE mode coordinator owns the actual Boost transition. */
+        internal fun stopForTarget(context: Context, target: ManualControlTarget) =
+            sendControl(context, target, ACTION_STOP)
+
+        private fun sendControl(context: Context, target: ManualControlTarget, action: String) {
+            start(context, Intent(context, CoolerService::class.java).apply {
+                this.action = action
+                putExtra(EXTRA_CONTROL_ADDRESS, target.address)
+                putExtra(EXTRA_CONTROL_SESSION, target.sessionId)
             })
         }
 
@@ -138,6 +154,18 @@ class CoolerService : Service() {
                 activate(profile)
             }
             ACTION_STOP, ACTION_SWITCH_TO_MANUAL -> {
+                val controlTarget = if (intent.hasExtra(EXTRA_CONTROL_SESSION)) {
+                    ManualControlTarget(
+                        intent.getStringExtra(EXTRA_CONTROL_ADDRESS).orEmpty(),
+                        intent.getLongExtra(EXTRA_CONTROL_SESSION, -1L),
+                    )
+                } else null // Notification actions intentionally address the service's current target.
+                if (controlTarget != null && !controlTarget.matches(ble.state.value)) {
+                    // A delayed UI/tile action must not clear a newer service target or control
+                    // a replacement connection, including a reconnect to the very same address.
+                    if (target == null) stopSelfSafely()
+                    return
+                }
                 // Persist explicit opt-out before shutdown, so boot/sticky restart cannot
                 // silently re-enable the device. Notification Close keeps device mode intact.
                 val intendedAddress = intent.getStringExtra(EXTRA_CONTROL_ADDRESS)
@@ -150,6 +178,7 @@ class CoolerService : Service() {
                     val state = ble.state.value
                     val sent = intendedAddress != null && state.isConnected &&
                         intendedAddress.equals(state.deviceAddress, ignoreCase = true) &&
+                        (controlTarget == null || controlTarget.matches(state)) &&
                         ble.setSmartAndAwait(false)
                     if (!sent) showControlFailure()
                 }

@@ -17,11 +17,9 @@ interface AppStrings {
     // —— 通用 ——
     val cancel: String
     val delete: String
-    val edit: String
     val back: String
     val retry: String
     val close: String
-    val error: String
 
     // —— 导航 ——
     val navHome: String
@@ -183,11 +181,9 @@ object ZhStrings : AppStrings {
     override val appName = "ColdFront"
     override val cancel = "取消"
     override val delete = "删除"
-    override val edit = "编辑"
     override val back = "返回"
     override val retry = "重试"
     override val close = "关闭"
-    override val error = "出错了"
 
     override val navHome = "首页"
     override val navDevices = "设备"
@@ -338,11 +334,9 @@ object EnStrings : AppStrings {
     override val appName = "ColdFront"
     override val cancel = "Cancel"
     override val delete = "Delete"
-    override val edit = "Edit"
     override val back = "Back"
     override val retry = "Retry"
     override val close = "Close"
-    override val error = "Error"
 
     override val navHome = "Home"
     override val navDevices = "Devices"

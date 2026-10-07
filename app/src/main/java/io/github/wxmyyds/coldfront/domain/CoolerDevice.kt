@@ -21,17 +21,6 @@ data class CoolerDevice(
     /** UI 显示名 */
     val displayName: String get() = bleName ?: deviceType.deviceName
 
-    /** 信号质量百分比（0–100） */
-    val signalQuality: Int
-        get() = when {
-            rssi >= -50 -> 100
-            rssi >= -60 -> 80
-            rssi >= -70 -> 60
-            rssi >= -80 -> 40
-            rssi >= -90 -> 20
-            else -> 10
-        }
-
     override fun toString(): String =
         "CoolerDevice(type=${deviceType.deviceName}, name=$bleName, address=$address, rssi=$rssi dBm)"
 }

@@ -1,5 +1,7 @@
 package io.github.wxmyyds.coldfront.ui.theme
 
+import io.github.wxmyyds.coldfront.data.PaletteStyles
+
 import android.os.Build
 import androidx.compose.material3.ColorScheme
 import androidx.compose.ui.graphics.Color

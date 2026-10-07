@@ -1,5 +1,7 @@
 package io.github.wxmyyds.coldfront.ui.theme
 
+import io.github.wxmyyds.coldfront.data.PaletteStyles
+
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import org.junit.Assert.assertEquals

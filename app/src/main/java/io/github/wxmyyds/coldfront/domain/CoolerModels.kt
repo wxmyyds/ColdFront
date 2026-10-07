@@ -88,6 +88,8 @@ data class RgbWriteState(
     val requestId: Long,
     val config: RGBConfig,
     val status: RgbWriteStatus,
+    /** Last parsed RGB report at platform write dispatch, excluding all later notifications. */
+    val readbackRevisionAtWrite: Long = 0L,
 ) {
     /** Ignore obsolete completions after a newer request has superseded this one. */
     fun completed(completedRequestId: Long, success: Boolean): RgbWriteState =
@@ -126,6 +128,8 @@ data class CoolerLiveState(
     val pendingFanPercent: Int? = null,
     val fanMode: FanMode = FanMode.OFF,
     val rgb: RGBConfig? = null,
+    /** Increases for every parsed light report, even when its value is unchanged. */
+    val rgbRevision: Long = 0L,
     val deviceType: CoolerDeviceType? = null,
     val deviceName: String? = null,
     val deviceAddress: String? = null,
@@ -152,7 +156,7 @@ data class CoolerLiveState(
     val capabilities: CoolerCapabilities = CoolerCapabilities(),
     /** Configuration values reported by this connection; never carried across sessions. */
     val confirmedConfiguration: Set<UUID> = emptySet(),
-    /** A telemetry lane was quarantined. Only a new connection can restore that lane safely. */
+    /** A timed-out lane made telemetry uncertain. A new connection resets this warning. */
     val telemetryDegraded: Boolean = false,
 ) {
     val isConnected: Boolean get() = connection == ConnectionState.CONNECTED

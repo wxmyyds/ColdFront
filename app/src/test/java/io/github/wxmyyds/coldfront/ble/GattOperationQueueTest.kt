@@ -134,9 +134,12 @@ class GattOperationQueueTest {
             assertEquals(1, starts)
             assertFalse(queue.complete(owner, target, kind, success))
 
-            // A late callback cannot lift quarantine: Android has no operation generation.
-            val afterLateCallback = queue.execute(owner, target, kind, 100, { true }) { starts++; true }
+            // Permanent quarantine cannot be drained or downgraded by a lighter retry.
+            assertFalse(queue.complete(owner, target, kind, success))
+            val afterLateCallback = queue.execute(owner, target, kind, 100, { true },
+                poisonOnTimeout = false, quarantineOnTimeout = false) { starts++; true }
             assertFalse(afterLateCallback.success)
+            assertFalse(queue.execute(owner, target, kind, 100, { true }) { starts++; true }.success)
             assertEquals(1, starts)
         }
     }
@@ -163,7 +166,7 @@ class GattOperationQueueTest {
         }.success)
         assertEquals(listOf(old), degradedOwners)
 
-        queue.abort(old)
+        // Keep the old owner's tombstone while the replacement has a pending operation.
         val resumed = async {
             queue.execute(replacement, target, GattOperationQueue.Kind.READ, 100, { true }, poisonOnTimeout = false) { true }
         }
@@ -183,7 +186,7 @@ class GattOperationQueueTest {
         var fatalTimeouts = 0
         val queue = GattOperationQueue(
             onTimeout = { fatalTimeouts++ },
-            onQuarantined = { error("Only accepted optional timeouts report degradation") },
+            onQuarantined = { error("Fatal timeout and explicit rejection must not report degradation") },
         )
         val fatal = async {
             queue.execute(owner, target, GattOperationQueue.Kind.WRITE, 100, { true }) { true }
@@ -199,14 +202,15 @@ class GattOperationQueueTest {
     }
 
     @Test
-    fun `quarantine is scoped to owner identity target identity and kind`() = runTest {
+    fun `timeout tombstones are scoped to owner identity target identity and kind`() = runTest {
         data class Token(val id: String)
-        for (kind in GattOperationQueue.Kind.entries) {
+        for (quarantineOnTimeout in listOf(false, true)) for (kind in GattOperationQueue.Kind.entries) {
             val owner = Token("gatt")
             val target = Token("target")
             val queue = GattOperationQueue(onTimeout = { error("Unexpected fatal timeout") })
             val timedOut = async {
-                queue.execute(owner, target, kind, 100, { true }, poisonOnTimeout = false) { true }
+                queue.execute(owner, target, kind, 100, { true },
+                    poisonOnTimeout = false, quarantineOnTimeout = quarantineOnTimeout) { true }
             }
             advanceUntilIdle()
             assertFalse(timedOut.await().success)
@@ -232,7 +236,47 @@ class GattOperationQueueTest {
     }
 
     @Test
-    fun `abort clears every quarantined target and kind only for that owner identity`() = runTest {
+    fun `draining a lane does not erase sibling tombstones or complete unrelated pending work`() = runTest {
+        data class Token(val id: String)
+        val owner = Token("gatt")
+        val target = Token("target")
+        val lanes = listOf(
+            Triple(owner, target, GattOperationQueue.Kind.READ),
+            Triple(owner, target, GattOperationQueue.Kind.WRITE),
+            Triple(owner, Token("target"), GattOperationQueue.Kind.READ),
+            Triple(Token("gatt"), target, GattOperationQueue.Kind.READ),
+        )
+        val queue = GattOperationQueue(onTimeout = { error("Unexpected fatal timeout") })
+        for ((laneOwner, laneTarget, kind) in lanes) {
+            val operation = async {
+                queue.execute(laneOwner, laneTarget, kind, 100, { true },
+                    poisonOnTimeout = false, quarantineOnTimeout = false) { true }
+            }
+            advanceUntilIdle()
+            assertFalse(operation.await().success)
+        }
+        assertFalse(queue.complete(owner, target, GattOperationQueue.Kind.READ, success))
+        var blockedStarts = 0
+        for ((laneOwner, laneTarget, kind) in lanes.drop(1)) {
+            assertFalse(queue.execute(laneOwner, laneTarget, kind, 100, { true },
+                poisonOnTimeout = false, quarantineOnTimeout = false) { blockedStarts++; true }.success)
+            assertEquals(0, blockedStarts)
+        }
+        val retry = async {
+            queue.execute(owner, target, GattOperationQueue.Kind.READ, 100, { true }) { true }
+        }
+        runCurrent()
+        for ((laneOwner, laneTarget, kind) in lanes.drop(1)) {
+            assertFalse(queue.complete(laneOwner, laneTarget, kind, success))
+            assertFalse(retry.isCompleted)
+        }
+        assertTrue(queue.complete(owner, target, GattOperationQueue.Kind.READ, success))
+        advanceUntilIdle()
+        assertTrue(retry.await().success)
+    }
+
+    @Test
+    fun `abort clears drainable and permanent tombstones only for that owner identity`() = runTest {
         data class Owner(val address: String)
         val owner = Owner("same-address")
         val otherOwner = Owner("same-address")
@@ -241,7 +285,8 @@ class GattOperationQueueTest {
         for (gatt in listOf(owner, otherOwner)) {
             for (target in targets) for (kind in GattOperationQueue.Kind.entries) {
                 val operation = async {
-                    queue.execute(gatt, target, kind, 100, { true }, poisonOnTimeout = false) { true }
+                    queue.execute(gatt, target, kind, 100, { true },
+                        poisonOnTimeout = false, quarantineOnTimeout = target === targets.first()) { true }
                 }
                 advanceUntilIdle()
                 assertFalse(operation.await().success)
@@ -260,7 +305,8 @@ class GattOperationQueueTest {
             advanceUntilIdle()
             assertTrue(operation.await().success)
             var otherStarts = 0
-            val stillQuarantined = queue.execute(otherOwner, target, kind, 100, { true }) {
+            val stillQuarantined = queue.execute(otherOwner, target, kind, 100, { true },
+                poisonOnTimeout = false, quarantineOnTimeout = false) {
                 otherStarts++
                 false
             }
@@ -296,38 +342,188 @@ class GattOperationQueueTest {
         assertFalse(queue.complete(owner, target, GattOperationQueue.Kind.READ, success))
     }
 
+    @Test
+    fun `non-permanent timeout blocks retry until old callback drains without committing its value`() = runTest {
+        for (kind in GattOperationQueue.Kind.entries) {
+            val owner = Any()
+            val target = Any()
+            var starts = 0
+            val degradedOwners = mutableListOf<Any>()
+            val committed = mutableListOf<GattOperationQueue.Result>()
+            val queue = GattOperationQueue(
+                onTimeout = { error("Non-permanent timeout must not poison the owner") },
+                onQuarantined = { degradedOwners += it },
+            )
+            fun callback(value: GattOperationQueue.Result): Boolean {
+                val matched = queue.complete(owner, target, kind, value)
+                if (matched && value.success) committed += value
+                return matched
+            }
+            val first = async {
+                queue.execute(owner, target, kind, 100, { true },
+                    poisonOnTimeout = false, quarantineOnTimeout = false) { starts++; true }
+            }
+            runCurrent()
+            advanceTimeBy(100)
+            runCurrent()
+            assertFalse(first.await().success)
+            assertEquals(1, starts)
+            assertEquals(listOf(owner), degradedOwners)
+
+            // B arrives after A timed out, but must never reach the platform yet.
+            val blocked = async {
+                queue.execute(owner, target, kind, 100, { true },
+                    poisonOnTimeout = false, quarantineOnTimeout = false) { starts++; true }
+            }
+            runCurrent()
+            assertFalse(blocked.await().success)
+            assertEquals(1, starts)
+            // Elapsed time is not evidence that Android has delivered A's callback.
+            advanceTimeBy(10_000)
+            assertFalse(queue.execute(owner, target, kind, 100, { true },
+                poisonOnTimeout = false, quarantineOnTimeout = false) { starts++; true }.success)
+            assertEquals(1, starts)
+            assertEquals(listOf(owner, owner, owner), degradedOwners)
+
+            val oldValue = GattOperationQueue.Result(true, byteArrayOf(1), rssi = -80)
+            assertFalse(callback(oldValue))
+            assertTrue(committed.isEmpty())
+            assertFalse(callback(oldValue)) // Unsolicited once the tombstone is gone.
+
+            // Only a new B, started after draining A, can accept and commit B's callback.
+            val retry = async {
+                queue.execute(owner, target, kind, 100, { true },
+                    poisonOnTimeout = false, quarantineOnTimeout = false) { starts++; true }
+            }
+            runCurrent()
+            assertEquals(2, starts)
+            assertFalse(retry.isCompleted)
+            val newValue = GattOperationQueue.Result(true, byteArrayOf(2), rssi = -50)
+            assertTrue(callback(newValue))
+            advanceUntilIdle()
+            assertEquals(newValue, retry.await())
+            assertEquals(listOf(newValue), committed)
+        }
+    }
 
     @Test
-    fun `non-quarantining timeout stays silent and allows immediate retry`() = runTest {
+    fun `retry already waiting at a non-permanent timeout cannot start before drain`() = runTest {
         val owner = Any()
         val target = Any()
         var starts = 0
-        val queue = GattOperationQueue(
-            onTimeout = { error("Non-quarantining timeout must not poison the owner") },
-            onQuarantined = { error("Non-quarantining timeout must not report quarantine") },
-        )
+        val queue = GattOperationQueue(onTimeout = { error("Unexpected fatal timeout") })
         val first = async {
             queue.execute(owner, target, GattOperationQueue.Kind.READ, 100, { true },
                 poisonOnTimeout = false, quarantineOnTimeout = false) { starts++; true }
         }
         runCurrent()
-        advanceTimeBy(100)
-        runCurrent()
-        assertFalse(first.await().success)
-        assertEquals(1, starts)
-        // A late callback after a silent timeout is still dropped, as usual.
-        assertFalse(queue.complete(owner, target, GattOperationQueue.Kind.READ, success))
-
-        // Unlike a quarantined lane, the same owner/target/kind can be retried immediately.
-        val retry = async {
+        val waiting = async {
             queue.execute(owner, target, GattOperationQueue.Kind.READ, 100, { true },
                 poisonOnTimeout = false, quarantineOnTimeout = false) { starts++; true }
         }
         runCurrent()
+        assertFalse(waiting.isCompleted)
+        advanceTimeBy(100)
+        runCurrent()
+        assertFalse(first.await().success)
+        assertFalse(waiting.await().success)
+        assertEquals(1, starts)
+        // A failed callback also drains the old accepted operation, without retrying it.
+        assertFalse(queue.complete(owner, target, GattOperationQueue.Kind.READ, GattOperationQueue.Result(false)))
+        val retry = async {
+            queue.execute(owner, target, GattOperationQueue.Kind.READ, 100, { true }) { starts++; true }
+        }
+        runCurrent()
         assertEquals(2, starts)
+        assertFalse(retry.isCompleted)
         assertTrue(queue.complete(owner, target, GattOperationQueue.Kind.READ, success))
         advanceUntilIdle()
         assertTrue(retry.await().success)
+    }
+
+    @Test
+    fun `periodic read upgrades undrained initial read and reports degradation after readiness`() = runTest {
+        val owner = Any()
+        val target = Any()
+        var ready = false
+        var starts = 0
+        var reports = 0
+        val degradedOwners = mutableListOf<Any>()
+        val queue = GattOperationQueue(
+            onTimeout = { error("Optional read must not poison the owner") },
+            onQuarantined = {
+                reports++
+                // Mirrors the manager: initialization cannot expose degradation yet.
+                if (ready) degradedOwners += it
+            },
+        )
+        val initial = async {
+            queue.execute(owner, target, GattOperationQueue.Kind.READ, 100, { true },
+                poisonOnTimeout = false, quarantineOnTimeout = false) { starts++; true }
+        }
+        advanceUntilIdle()
+        assertFalse(initial.await().success)
+        assertEquals(1, reports)
+        assertTrue(degradedOwners.isEmpty())
+
+        ready = true
+        val periodic = async {
+            queue.execute(owner, target, GattOperationQueue.Kind.READ, 100, { true },
+                poisonOnTimeout = false) { starts++; true }
+        }
+        runCurrent()
+        assertFalse(periodic.await().success)
+        assertEquals(1, starts)
+        assertEquals(2, reports)
+        assertEquals(listOf(owner), degradedOwners)
+        // Once upgraded, neither callbacks nor lighter requests can lift quarantine.
+        repeat(2) {
+            assertFalse(queue.complete(owner, target, GattOperationQueue.Kind.READ, success))
+            assertFalse(queue.execute(owner, target, GattOperationQueue.Kind.READ, 100, { true },
+                poisonOnTimeout = false, quarantineOnTimeout = false) { starts++; true }.success)
+        }
+        assertEquals(1, starts)
+        assertEquals(2, reports)
+    }
+
+    @Test
+    fun `strict retry of undrained initial read fails owner without starting platform work`() = runTest {
+        for (quarantineOnTimeout in listOf(false, true)) {
+            val owner = Any()
+            val target = Any()
+            var current = true
+            var starts = 0
+            val failedOwners = mutableListOf<Any>()
+            val queue = GattOperationQueue(onTimeout = {
+                failedOwners += it
+                current = false
+            })
+            val initial = async {
+                queue.execute(owner, target, GattOperationQueue.Kind.READ, 100, { current },
+                    poisonOnTimeout = false, quarantineOnTimeout = false) { starts++; true }
+            }
+            advanceUntilIdle()
+            assertFalse(initial.await().success)
+            // Superseded requests must not escalate a timeout on behalf of a stale intent.
+            assertFalse(queue.execute(owner, target, GattOperationQueue.Kind.READ, 100, { false }) {
+                starts++; true
+            }.success)
+            assertTrue(failedOwners.isEmpty())
+
+            val strict = async {
+                queue.execute(owner, target, GattOperationQueue.Kind.READ, 100, { current },
+                    poisonOnTimeout = true, quarantineOnTimeout = quarantineOnTimeout) { starts++; true }
+            }
+            val waiting = async {
+                queue.execute(owner, target, GattOperationQueue.Kind.READ, 100, { current }) { starts++; true }
+            }
+            runCurrent()
+            assertFalse(strict.await().success)
+            assertFalse(waiting.await().success)
+            assertEquals(1, starts)
+            assertEquals(listOf(owner), failedOwners)
+            assertFalse(queue.complete(owner, target, GattOperationQueue.Kind.READ, success))
+        }
     }
 
     @Test

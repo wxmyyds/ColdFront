@@ -22,6 +22,7 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.core.util.size
+import io.github.wxmyyds.coldfront.ble.ModeCommandCoordinator.Mode
 import io.github.wxmyyds.coldfront.domain.CoolerBleConstants
 import io.github.wxmyyds.coldfront.domain.CoolerCapabilities
 import io.github.wxmyyds.coldfront.domain.CoolerDevice
@@ -88,6 +89,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         var gatt: BluetoothGatt? = null
         val characteristics = mutableMapOf<UUID, BluetoothGattCharacteristic>()
         val generations = mutableMapOf<Control, Long>()
+        val modeCommands = ModeCommandCoordinator()
         var discoveryJob: Job? = null
         var initJob: Job? = null
         var timeoutJob: Job? = null
@@ -96,7 +98,6 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         var discoveryRequested = false
         var initializing = false
         var controls = 0
-        val configurationRead = mutableSetOf<UUID>()
         // Readable configuration characteristics to read back after connecting.
         // Best-effort: a failed or unparsed read must not block CONNECTED.
         var requiredConfiguration = emptySet<UUID>()
@@ -245,7 +246,6 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             serviceUuids = record.serviceUuids?.map { it.toString() } ?: emptyList(),
             serviceData = record.serviceData?.entries?.map { (k, v) -> k.uuid.toString() to (v?.toHex() ?: "") }
                 ?: emptyList(),
-            bluetoothDevice = result.device,
             coolerType = coolerType,
         )
         if (msd.isNotEmpty() || entry.serviceUuids.isNotEmpty() || entry.serviceData.isNotEmpty()) {
@@ -564,15 +564,6 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         CoolerBleConstants.LIGHT_CONTROL_UUID,
     )
 
-    private val configurationUuids = listOf(
-        CoolerBleConstants.COOLING_SWITCH_UUID,
-        CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID,
-        CoolerBleConstants.LIGHT_CONTROL_UUID,
-        CoolerBleConstants.AUTO_MODE_CONTROL_UUID,
-        CoolerBleConstants.BOOST_CONTROL_UUID,
-        CoolerBleConstants.PROTECTION_UUID,
-    )
-
     private suspend fun initialize(s: Session) {
         for (uuid in telemetryUuids) {
             if (!owns(s)) return
@@ -587,19 +578,20 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         for (uuid in s.requiredConfiguration) {
             if (!owns(s)) return
             val ch = s.characteristics[uuid] ?: continue
-            // A one-off slow reply right after connecting must not consume the lane: the
-            // periodic pass is the retry path that confirms this configuration and unlocks
-            // its control, so quarantining here would hide the control until a reconnect.
-            // A lane that stays silent is still quarantined by the periodic pass, which
-            // surfaces the loss as degraded telemetry instead of retrying forever.
+            // A slow startup reply may be drained before the periodic retry. Until that
+            // callback arrives, the queue keeps this exact lane blocked so it cannot be
+            // mistaken for a new read. A still-blocked periodic read promotes quarantine
+            // and exposes degraded telemetry instead of silently retrying forever.
             val ok = readIfReadable(s, ch, poisonOnTimeout = false, quarantineOnTimeout = false)
             if (!owns(s)) return
             if (!ok) Log.w(TAG, "Initial configuration read unavailable: $uuid")
         }
         if (!owns(s)) return
         s.timeoutJob?.cancel()
+        val beforeConnected = _state.value
         _state.update { it.copy(connection = ConnectionState.CONNECTED) }
         if (!ready(s)) return
+        if (powerLimitNeedsEnforcement(beforeConnected, _state.value)) enforcePowerLimit()
         val rgb = pendingRgb
         pendingRgb = null
         if (rgb != null) applyRgb(s, rgb)
@@ -617,7 +609,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         s: Session,
         ch: BluetoothGattCharacteristic,
         value: ByteArray,
-        onStart: () -> Unit = {},
+        beforeWrite: () -> Unit = {},
         fresh: () -> Boolean = { true },
         poisonOnTimeout: Boolean = true,
         quarantineOnTimeout: Boolean = true,
@@ -627,7 +619,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         return operations.execute(g, ch, GattOperationQueue.Kind.WRITE, OP_TIMEOUT_MS,
             isCurrent = { owns(s) && s.characteristics[ch.uuid] === ch && fresh() },
             start = {
-                onStart()
+                beforeWrite()
                 @Suppress("DEPRECATION")
                 ch.value = value
                 ch.writeType = if (ch.properties and BluetoothGattCharacteristic.PROPERTY_WRITE != 0) {
@@ -643,7 +635,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
 
     /**
      * 对齐官方灯光兑底:设备回报的灯效字节无法解析(非 1/2/3/4/6)且数组非空时,下发官方默认灯
-     * (`n0.a()`)。节流并限制每次连接的次数,且写入不 poison/不 quarantine 灯光通道。
+     * (`n0.a()`)。节流并限制每次连接的次数；写超时不终止会话，旧回调排空后才可重试。
      */
     private fun maybeSendDefaultLight(s: Session) {
         if (!ready(s)) return
@@ -753,12 +745,9 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
      * and poisoning defaults; periodic reads cannot invalidate an otherwise healthy session.
      */
     private suspend fun pollTelemetryOnce(s: Session): Boolean {
-        // RGB light state is not telemetry: unless a parseable mode has already arrived,
-        // keep the light characteristic in the periodic pass so an early failed or timed
-        // out read can be retried until the device reports a mode. Its timeout must not
-        // quarantine the lane, or the one retry that could succeed would never fire.
-        // The retry is throttled above READ_TIMEOUT_MS so a slow firmware's read can
-        // complete instead of being starved by the 500ms poll cadence.
+        // Keep unknown light state in the periodic pass. A timeout retains a drainable
+        // marker: retry is safe only after the old callback is consumed, otherwise the
+        // degraded warning offers reconnection. Throttling avoids excess read traffic.
         val lightPending = _state.value.rgb == null
         val light = s.characteristics[CoolerBleConstants.LIGHT_CONTROL_UUID]
         val targets = buildList {
@@ -795,10 +784,6 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
 
     private fun handleData(s: Session, uuid: UUID, value: ByteArray) {
         if (!owns(s)) return
-        // A device reply, read-back or notification, is authoritative confirmation that
-        // the characteristic was read — even when the payload's semantics are not yet
-        // parsed: the read itself is confirmed, only the displayed value stays unknown.
-        s.configurationRead += uuid
         val previous = _state.value
         val update = CoolerTelemetryReducer.reduce(previous, uuid, value)
         // Official refreshLightModeView else-branch: a non-empty 0x1013 reply whose
@@ -812,16 +797,11 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         ) {
             maybeSendDefaultLight(s)
         }
-        val next = if (update != null) {
-            if (update.temperatureReported) s.lastTempUpdateMs = SystemClock.elapsedRealtime()
-            update.state
-        } else {
-            previous
-        }
-        val committed = next.copy(confirmedConfiguration = s.configurationRead.toSet())
+        if (update?.temperatureReported == true) s.lastTempUpdateMs = SystemClock.elapsedRealtime()
+        val committed = confirmedConfigurationState(previous, uuid, update)
         _state.value = committed
-        // 官方 Jacket8ProActivityV3.N4 同样只在限档值发生变化时动作:重复上报不会重复下发。
-        if (previous.fanLimit != committed.fanLimit) enforcePowerLimit()
+        // Repeat limits stay quiet, but a limit received before readiness must not be lost.
+        if (powerLimitNeedsEnforcement(previous, committed)) enforcePowerLimit()
     }
 
     /**
@@ -835,7 +815,21 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
     private fun enforcePowerLimit() {
         val state = _state.value
         val maxRaw = state.fanRawLimit ?: return
-        if (state.boostOn) setBoost(false)
+        val s = session ?: return
+        scope.launch {
+            // A charger limit is safety policy, not a newer user mode selection. Serialize
+            // with mode transitions, including an accepted ON not reflected in telemetry yet.
+            s.modeCommands.enforceOff(
+                mode = Mode.BOOST,
+                isCurrent = { ready(s) && _state.value.powerLimited },
+                reportedOn = { _state.value.boostOn },
+                writeOff = { safetyFresh ->
+                    modeCommand(Mode.BOOST)?.let {
+                        executeCommand(it, byteArrayOf(0), additionalFresh = safetyFresh)
+                    }
+                },
+            )
+        }
         val type = state.deviceType ?: return
         // 待确认的拖动目标优先于回读值(与 fanGear 同一口径):刚拖到超限档位、限档随后才上报时,
         // 只比回读值会漏掉本次拖动。
@@ -879,22 +873,24 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         command: Command,
         value: ByteArray,
         debounceMs: Long = 0,
+        additionalFresh: () -> Boolean = { true },
+        beforeWrite: () -> Unit = {},
     ): Boolean {
         val s = command.session
+        val compositeFresh = { fresh(command) && additionalFresh() }
         s.controls++
         try {
             if (debounceMs > 0) delay(debounceMs)
-            if (!fresh(command)) return false
-            val ok = enqueueWrite(s, command.characteristic, value,
-                fresh = { fresh(command) },
+            return executeFreshCommand(
+                compositeFresh = compositeFresh,
+                write = { enqueueWrite(s, command.characteristic, value, beforeWrite = beforeWrite, fresh = it) },
+                readBack = {
+                    // A GATT write callback confirms delivery only. Read-back remains the
+                    // source of configuration, but its failure must not kill the session.
+                    readIfReadable(s, command.characteristic, fresh = it, poisonOnTimeout = false,
+                        quarantineOnTimeout = command.characteristic.uuid != CoolerBleConstants.LIGHT_CONTROL_UUID)
+                },
             )
-            if (!fresh(command)) return false
-            // A GATT write callback confirms delivery only. The device read-back remains the
-            // sole source of the published configuration value; its timeout must quarantine
-            // the lane (except light, whose lane must stay retryable), never kill the session.
-            readIfReadable(s, command.characteristic, fresh = { fresh(command) }, poisonOnTimeout = false,
-                quarantineOnTimeout = command.characteristic.uuid != CoolerBleConstants.LIGHT_CONTROL_UUID)
-            return ok
         } finally {
             s.controls--
         }
@@ -936,25 +932,45 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
     fun setSmart(on: Boolean) = onMain { startSmart(on) }
 
     /**
-     * True only for a successful GATT callback in the same ready session and latest smart intent.
-     * False when unavailable, superseded or failed. This does not assert firmware readback.
+     * True only for a successful GATT callback in the same ready session, with the latest
+     * Smart/Boost intent still fresh after read-back. This does not assert firmware state.
      * Caller cancellation stops waiting, never cancels the manager-owned command/accepted write.
      */
     suspend fun setSmartAndAwait(on: Boolean): Boolean = withContext(Dispatchers.Main.immediate) {
         startSmart(on)?.await() ?: false
     }
 
-    private fun startSmart(on: Boolean) = command(Control.SMART, CoolerBleConstants.AUTO_MODE_CONTROL_UUID)?.let { smart ->
+    private fun modeCommand(mode: Mode): Command? = when (mode) {
+        Mode.SMART -> command(Control.SMART, CoolerBleConstants.AUTO_MODE_CONTROL_UUID)
+        Mode.BOOST -> command(Control.BOOST, CoolerBleConstants.BOOST_CONTROL_UUID)
+    }
+
+    private fun startSmart(on: Boolean) = startMode(Mode.SMART, on)
+
+    private fun startMode(mode: Mode, on: Boolean) = modeCommand(mode)?.let { target ->
+        val coordinator = target.session.modeCommands
+        // Register before launching: a queued ON can already threaten mutual exclusion,
+        // even when the last reported state still says OFF (e.g. concurrent tile requests).
+        val request = coordinator.request(mode, on)
         scope.async {
-            // 官方 Jacket8ProActivityV3.o6/b6:智能温控与破坏神互斥——开启温控会先关掉破坏神
-            // (写入前先落 0x1017=0,顺序与官方一致)。放在这里而不是 UI 层,是为了让磁贴/后台
-            // 服务开启温控时也走同一条规则。
-            if (on && _state.value.boostOn) {
-                command(Control.BOOST, CoolerBleConstants.BOOST_CONTROL_UUID)
-                    ?.let { executeCommand(it, byteArrayOf(0)) }
-            }
-            val value = if (on) CoolerBleConstants.AUTO_MODE_ON else CoolerBleConstants.AUTO_MODE_OFF
-            executeCommand(smart, byteArrayOf(value))
+            coordinator.execute(
+                request = request,
+                isCurrent = {
+                    fresh(target) && (mode != Mode.BOOST || !on || !_state.value.powerLimited)
+                },
+                reportedOn = { if (it == Mode.SMART) _state.value.smartOn else _state.value.boostOn },
+                write = { writeMode, writeOn, ticketFresh ->
+                    // The attached OFF retains per-control freshness but MUST NOT register
+                    // a new mode ticket: both writes belong to the original request.
+                    val command = if (writeMode == mode) target else modeCommand(writeMode)
+                    val value = if (writeMode == Mode.SMART) {
+                        if (writeOn) CoolerBleConstants.AUTO_MODE_ON else CoolerBleConstants.AUTO_MODE_OFF
+                    } else {
+                        if (writeOn) 1.toByte() else 0.toByte()
+                    }
+                    command?.let { executeCommand(it, byteArrayOf(value), additionalFresh = ticketFresh) }
+                },
+            )
         }
     }
 
@@ -964,8 +980,8 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             Log.i(TAG, "Boost on refused: charger power limited (limit=${_state.value.fanLimit})")
             return@onMain
         }
-        val command = command(Control.BOOST, CoolerBleConstants.BOOST_CONTROL_UUID) ?: return@onMain
-        scope.launch { executeCommand(command, byteArrayOf(if (on) 1 else 0)) }
+        // The same power gate is rechecked inside queued write/read freshness in startMode.
+        startMode(Mode.BOOST, on)
     }
 
     fun setOvercoldProtection(on: Boolean) = onMain {
@@ -995,7 +1011,15 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             return
         }
         scope.launch {
-            val ok = executeCommand(command, request.config.toCommand(), 200)
+            val ok = executeCommand(command, request.config.toCommand(), 200, beforeWrite = {
+                // Capture at platform dispatch, after queue/debounce waits but before any
+                // post-write notification (including one arriving during the callback gap).
+                _rgbWriteState.update { current ->
+                    if (current?.requestId == request.requestId) {
+                        current.copy(readbackRevisionAtWrite = _state.value.rgbRevision)
+                    } else current
+                }
+            })
             if (!fresh(command) || _rgbWriteState.value?.requestId != request.requestId) return@launch
             _rgbWriteState.update { it?.completed(request.requestId, ok) }
         }
