@@ -24,7 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -73,10 +73,10 @@ fun AboutScreen(onBack: () -> Unit) {
                     .padding(horizontal = 24.dp, vertical = 32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                // 关于页图标：圆形紫灰底（与应用图标同色）+ 白色雪花，圆形呈现。
+                // 关于页图标使用当前主题角色，跟随动态取色、调色板和深浅模式。
                 Surface(
                     shape = CircleShape,
-                    color = Color(0xFF5A5A8B),
+                    color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(80.dp),
                 ) {
                     Image(
@@ -84,6 +84,7 @@ fun AboutScreen(onBack: () -> Unit) {
                         contentDescription = null,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Fit,
+                        colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onPrimary),
                     )
                 }
                 Text(
