@@ -4,7 +4,6 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import androidx.core.net.toUri
 import android.widget.Toast
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -20,12 +19,13 @@ import androidx.compose.foundation.Image
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -73,18 +73,18 @@ fun AboutScreen(onBack: () -> Unit) {
                     .padding(horizontal = 24.dp, vertical = 32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                // 仿 KernelSU MD3E 版 About 头部：80dp 白底 16dp 圆角块 + 彩色前景式 logo
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(80.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color.White),
+                // 仿 KernelSU MD3E 版 About 头部观感（仅借鉴设计参数：80dp 白底、16dp 圆角、
+                // 彩色前景式 logo；实现用 MD3 Surface 惯用法，结构独立）
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color.White,
+                    modifier = Modifier.size(80.dp),
                 ) {
                     Image(
                         painter = painterResource(R.drawable.ic_logo_foreground),
                         contentDescription = null,
-                        modifier = Modifier.size(80.dp),
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit,
                     )
                 }
                 Text(
