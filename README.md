@@ -14,7 +14,7 @@
 | 型号 | 支持情况 |
 |---|---|
 | 红魔散热器 1–6 代 | 按广播名及厂商数据兼容旧协议 |
-| Heat Sink 6 Pro | 独立协议实现；仅静态分析验证，未完成实机验证 |
+| Cryo Cooler 6 Pro | 独立协议实现；仅静态分析验证，未完成实机验证 |
 | Cryo Cooler 8 Pro | 含功耗限档等专属行为；协议见 [8 Pro 文档](docs/protocol-8pro.md) |
 
 6 Pro 依据 MSD `(0x05,0x05)/(0x05,0x06)`、广播服务 UUID `4a41` 和名称识别。6 Pro+ 是独立型号；本次分析的官方旧版 App 不支持它，因此 6 Pro 协议资料不涵盖该型号。详见 [6 Pro 文档](docs/protocol-6pro.md)。

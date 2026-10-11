@@ -79,7 +79,7 @@ enum class CoolerDeviceType(
     ),
 
     JACKET_6_PRO(
-        deviceName = "Heat Sink 6 Pro",
+        deviceName = "Cryo Cooler 6 Pro",
         mainType = 0x05, subType = 0x06,
         generation = 6,
         description = "第六代专业版(官方 40–80 raw 协议)",
