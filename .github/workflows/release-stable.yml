@@ -181,8 +181,6 @@ jobs:
           {
             echo "# ColdFront v${VERSION}"
             echo
-            echo "> 本 APK 已使用 ColdFront 发布密钥签名，安装时需在系统设置中允许「未知来源」。"
-            echo
             echo "## ✨ 新功能"
             echo "$LOG" | grep -E '^(feat|feature)(\(|:)' | sed 's/^/ - /' || true
             echo
