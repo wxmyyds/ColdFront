@@ -22,8 +22,21 @@
 | 型号 | 代数 | 识别方式（厂商数据 MSD 0x08CA 的 [mainType, subType]） |
 |---|---|---|
 | 双核/涡轮散热背夹 | 1–2 | 广播名兜底（旧协议） |
-| 磁吸散热器 / Heat Sink 4 Pro / 5 Pro / 5 Lite / 6 / 6 Pro | 3–6 | MSD (5,3) (5,4) (5,5) (5,6) |
+| 磁吸散热器 / Heat Sink 4 Pro / 5 Pro / 5 Lite / 6 | 3–6 | MSD (5,3) (5,4) (5,5) (5,6) |
+| **Heat Sink 6 Pro** | 6 | **MSD (5,5)/(5,6) + 广播 Service UUID 4a41；官方协议静态适配** |
 | **Cryo Cooler 8 Pro** | 8 | **MSD (5,8)，官方协议完整支持** |
+
+### 散热器 6 Pro（官方 App smali 静态逆向）
+
+- **识别**：官方 `Jacket6ProManagerV2` 使用 MSD `0x08CA` 的 `[0x05,0x05]`/`[0x05,0x06]` 和广播 Service UUID `00004a41-...`；ColdFront 在名称明确包含 `Pro` 时归类为 6 Pro，无法从广播静态区分时保守归类为普通 6
+- **Hall 协议**：官方 `0x1011` 支持 `[0x01]` 自动、`[0x02]` 开启、`[0x03]` 关闭；由于具体官方版本的 UI 可见性无法仅凭 Smali 资源确认，ColdFront 保留协议封装但不新增独立 Hall 首页设置项
+- **风扇**：官方 UI 使用单字节 raw `0x28..0x50`（40–80），ColdFront 使用独立 raw 滑条，不套用 8 Pro 离散档位或功耗限档
+- **自动温控**：`0x1018` 写 `0x01` 开、`0x00` 关；**破坏神/超频** `0x1017` 写 `0x01` 开、`0x00` 关
+- **灯效**：`0x1013` 使用官方 `[mode][R][G][B]` 数组：`01` 炫彩、`02` 呼吸、`03+RGB` 单色呼吸、`04+RGB` 常亮、`06` 关闭
+- **状态**：`0x1015` 使用独立的 `[kind,payload...]` 封装，`01` Hall、`02` Fan、`03` Light、`04` Temperature、`05` OutputHasLoad；不使用 8 Pro 的功耗限档标签
+- **验证范围**：当前只有 Smali 静态证据，没有 6 Pro 实机；温度换算、OutputHasLoad 值映射和不同固件时序必须后续真机验证
+
+完整静态协议记录：[docs/protocol-6pro.md](docs/protocol-6pro.md)
 
 ### 散热器 8 Pro（官方 App smali 逆向，协议已确认）
 

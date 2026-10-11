@@ -22,6 +22,8 @@ enum class CoolerDeviceType(
     val rawMax: Int = 200,
     val supportsRgb: Boolean = true,
     val supportsAutoMode: Boolean = true,
+    /** 6 Pro uses the official 40–80 raw slider; 8 Pro is the only discrete gear UI. */
+    val usesRawFanSlider: Boolean = false,
 ) {
     JACKET_1(
         deviceName = "双核散热背夹",
@@ -80,7 +82,10 @@ enum class CoolerDeviceType(
         deviceName = "Heat Sink 6 Pro",
         mainType = 0x05, subType = 0x06,
         generation = 6,
-        description = "第六代专业版",
+        description = "第六代专业版(官方 40–80 raw 协议)",
+        rawMin = 40,
+        rawMax = 80,
+        usesRawFanSlider = true,
     ),
 
     /**
@@ -100,6 +105,22 @@ enum class CoolerDeviceType(
         /** 按 MSD [mainType, subType] 精确匹配 */
         fun fromMsdType(mainType: Int, subType: Int): CoolerDeviceType? =
             entries.firstOrNull { it.mainType == mainType && it.subType == subType }
+
+        /**
+         * The official 6 Pro scanner accepts the same MSD family as the plain 6.  A Pro
+         * broadcast name is therefore the only static discriminator available to the app;
+         * without it we retain the conservative plain-6 type rather than inventing a Pro claim.
+         */
+        fun fromMsdType(mainType: Int, subType: Int, bleName: String?): CoolerDeviceType? {
+            val name = bleName.orEmpty()
+            return when {
+                mainType != 0x05 -> null
+                subType in setOf(0x05, 0x06) &&
+                    name.contains("6", ignoreCase = true) &&
+                    name.contains("Pro", ignoreCase = true) -> JACKET_6_PRO
+                else -> fromMsdType(mainType, subType)
+            }
+        }
 
         /**
          * 名称兜底识别:优先明确代数，最后匹配通用 Magcooler（第三代）。

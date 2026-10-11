@@ -30,6 +30,8 @@ import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
 import io.github.wxmyyds.coldfront.domain.CoolerLiveState
 import io.github.wxmyyds.coldfront.domain.CoolerTelemetryReducer
 import io.github.wxmyyds.coldfront.domain.ConnectionState
+import io.github.wxmyyds.coldfront.domain.HallMode
+import io.github.wxmyyds.coldfront.domain.Jacket6ProProtocol
 import io.github.wxmyyds.coldfront.domain.LightEffect
 import io.github.wxmyyds.coldfront.domain.RGBConfig
 import io.github.wxmyyds.coldfront.domain.RgbWriteState
@@ -237,7 +239,11 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         }
         val payload = msdSparse.get(CoolerBleConstants.MSD_COMPANY_ID)
         val coolerType = if (payload != null && payload.size > 1) {
-            CoolerDeviceType.fromMsdType(payload[0].toInt() and 0xFF, payload[1].toInt() and 0xFF)
+            CoolerDeviceType.fromMsdType(
+                payload[0].toInt() and 0xFF,
+                payload[1].toInt() and 0xFF,
+                entryName(record.deviceName, result.device),
+            )
         } else null
         val entry = BleScanDiagnostic(
             address = result.device.address,
@@ -260,17 +266,32 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
 
     private fun identify(result: ScanResult): CoolerDevice? {
         val device = result.device
-        val name = result.scanRecord?.deviceName ?: device.safeName()
-        val msd = result.scanRecord?.manufacturerSpecificData?.get(CoolerBleConstants.MSD_COMPANY_ID)
+        val record = result.scanRecord
+        val name = record?.deviceName ?: device.safeName()
+        val msd = record?.manufacturerSpecificData?.get(CoolerBleConstants.MSD_COMPANY_ID)
+        val serviceUuids = record?.serviceUuids?.map { it.uuid }.orEmpty()
         val msdType = if (msd != null && msd.size > CoolerBleConstants.MSD_INDEX_SUB_TYPE) {
             CoolerDeviceType.fromMsdType(
                 msd[CoolerBleConstants.MSD_INDEX_MAIN_TYPE].toInt() and 0xFF,
                 msd[CoolerBleConstants.MSD_INDEX_SUB_TYPE].toInt() and 0xFF,
+                name,
             )
         } else null
         val type = msdType ?: CoolerDeviceType.fromBleName(name) ?: return null
+        // The official 6 Pro scanner requires both its MSD type and the 4a41 family UUID.
+        // Do not broaden that rule to legacy/name fallback devices.
+        if (type == CoolerDeviceType.JACKET_6_PRO &&
+            !Jacket6ProProtocol.isAdvertisement(
+                msd?.getOrNull(CoolerBleConstants.MSD_INDEX_MAIN_TYPE)?.toInt()?.and(0xFF) ?: -1,
+                msd?.getOrNull(CoolerBleConstants.MSD_INDEX_SUB_TYPE)?.toInt()?.and(0xFF) ?: -1,
+                serviceUuids,
+            )
+        ) return null
         return CoolerDevice(device.address, name, type, result.rssi, matchedByName = msdType == null)
     }
+
+    private fun entryName(advertised: String?, device: BluetoothDevice): String? =
+        advertised ?: device.safeName()
 
     // All entry points share permission, address, adapter and exception handling.
     fun connect(device: CoolerDevice) = onMain {
@@ -468,10 +489,14 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                 for (service in orderedServices) for (ch in service.characteristics) {
                     s.characteristics.putIfAbsent(ch.uuid, ch)
                 }
-                if (s.characteristics[CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID] == null &&
-                    s.characteristics[CoolerBleConstants.COOLING_SWITCH_UUID] == null
-                ) {
-                    fail(s, "Missing cooler characteristics (1011/1012)")
+                val required = if (_state.value.deviceType == CoolerDeviceType.JACKET_6_PRO) {
+                    Jacket6ProProtocol.REQUIRED_CHARACTERISTICS
+                } else setOf(
+                    CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID,
+                    CoolerBleConstants.COOLING_SWITCH_UUID,
+                )
+                if (required.any { s.characteristics[it] == null }) {
+                    fail(s, "Missing required cooler characteristics: $required")
                     return@dispatch
                 }
                 val capabilities = CoolerCapabilities.fromCharacteristics(
@@ -950,6 +975,13 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
 
     fun setFanSpeed(percent: Int) = onMain { writeFanSpeed(percent, enforceManual = true) }
 
+    /** 6 Pro's official slider is expressed directly as fan raw 40..80, not as 8 Pro gears. */
+    fun setFanRaw(raw: Int) = onMain {
+        if (_state.value.deviceType != CoolerDeviceType.JACKET_6_PRO) return@onMain
+        if (!_state.value.manualLevelEnabled) return@onMain
+        writeFanRaw(raw)
+    }
+
     /**
      * 发写风扇百分比(已按限档钳制)。[enforceManual] 为 true 时沿用手动档位闸门(UI/调用方入口);
      * 为 false 时仅限 enforcePowerLimit 调用——它在调用前已用"破坏神关闭后"的口径评估过闸门,
@@ -957,22 +989,37 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
      */
     private fun writeFanSpeed(percent: Int, enforceManual: Boolean) {
         if (enforceManual && !_state.value.manualLevelEnabled) return
-        val command = command(Control.FAN, CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID) ?: return
         val type = _state.value.deviceType ?: return
         // 供电功率不足时把请求钳到限档 raw 对应的百分比:整数换算只能往下取整,
         // 所以钳后重新算出的 raw 不会超过限档值。
         val maxPercent = _state.value.fanRawLimit
             ?.let { CoolerBleConstants.rawToPercentage(it, type) } ?: 100
         val clamped = percent.coerceIn(0, maxPercent)
-        val raw = CoolerBleConstants.percentageToRaw(clamped, type).toByte()
-        _state.update { it.copy(pendingFanPercent = clamped) }
+        writeFanRaw(CoolerBleConstants.percentageToRaw(clamped, type))
+    }
+
+    private fun writeFanRaw(raw: Int) {
+        val command = command(Control.FAN, CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID) ?: return
+        val type = _state.value.deviceType ?: return
+        val clampedRaw = raw.coerceIn(type.rawMin, type.rawMax)
+        val percent = CoolerBleConstants.rawToPercentage(clampedRaw, type)
+        _state.update { it.copy(pendingFanPercent = percent) }
         scope.launch {
             try {
-                executeCommand(command, byteArrayOf(raw), 150)
+                val payload = if (type == CoolerDeviceType.JACKET_6_PRO) {
+                    Jacket6ProProtocol.fanCommand(clampedRaw)
+                } else byteArrayOf(clampedRaw.toByte())
+                executeCommand(command, payload, 150)
             } finally {
                 if (fresh(command)) _state.update { it.copy(pendingFanPercent = null) }
             }
         }
+    }
+
+    fun setHallMode(mode: HallMode) = onMain {
+        if (_state.value.deviceType != CoolerDeviceType.JACKET_6_PRO) return@onMain
+        val command = command(Control.COOLING, Jacket6ProProtocol.HALL_UUID) ?: return@onMain
+        scope.launch { executeCommand(command, Jacket6ProProtocol.hallCommand(mode)) }
     }
 
     fun setCooling(on: Boolean) = onMain {
@@ -1015,12 +1062,15 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                     // The attached OFF retains per-control freshness but MUST NOT register
                     // a new mode ticket: both writes belong to the original request.
                     val command = if (writeMode == mode) target else modeCommand(writeMode)
-                    val value = if (writeMode == Mode.SMART) {
-                        if (writeOn) CoolerBleConstants.AUTO_MODE_ON else CoolerBleConstants.AUTO_MODE_OFF
+                    val value = if (_state.value.deviceType == CoolerDeviceType.JACKET_6_PRO) {
+                        if (writeMode == Mode.SMART) Jacket6ProProtocol.autoCommand(writeOn)
+                        else Jacket6ProProtocol.overClockingCommand(writeOn)
+                    } else if (writeMode == Mode.SMART) {
+                        byteArrayOf(if (writeOn) CoolerBleConstants.AUTO_MODE_ON else CoolerBleConstants.AUTO_MODE_OFF)
                     } else {
-                        if (writeOn) 1.toByte() else 0.toByte()
+                        byteArrayOf(if (writeOn) 1 else 0)
                     }
-                    command?.let { executeCommand(it, byteArrayOf(value), additionalFresh = ticketFresh) }
+                    command?.let { executeCommand(it, value, additionalFresh = ticketFresh) }
                 },
             )
         }

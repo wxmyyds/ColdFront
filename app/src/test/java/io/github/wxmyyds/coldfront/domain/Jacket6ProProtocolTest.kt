@@ -1,0 +1,81 @@
+package io.github.wxmyyds.coldfront.domain
+
+import java.util.UUID
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class Jacket6ProProtocolTest {
+    private val state = CoolerLiveState(
+        deviceType = CoolerDeviceType.JACKET_6_PRO,
+        connection = ConnectionState.CONNECTED,
+    )
+
+    @Test
+    fun `advertisement requires official type and family service`() {
+        val services = setOf(CoolerBleConstants.ADVERTISING_SERVICE_UUID)
+        assertTrue(Jacket6ProProtocol.isAdvertisement(5, 6, services))
+        assertTrue(Jacket6ProProtocol.isAdvertisement(5, 5, services))
+        assertFalse(Jacket6ProProtocol.isAdvertisement(5, 6, emptySet()))
+        assertFalse(Jacket6ProProtocol.isAdvertisement(4, 6, services))
+    }
+
+    @Test
+    fun `pro name disambiguates the shared six generation msd`() {
+        assertEquals(
+            CoolerDeviceType.JACKET_6_PRO,
+            CoolerDeviceType.fromMsdType(5, 6, "RM Magcooler 6 Pro"),
+        )
+        assertEquals(CoolerDeviceType.JACKET_6, CoolerDeviceType.fromMsdType(5, 6, "RM Magcooler 6"))
+    }
+
+    @Test
+    fun `six pro commands are the official one byte writes`() {
+        assertArrayEquals(byteArrayOf(1), Jacket6ProProtocol.hallCommand(HallMode.AUTO))
+        assertArrayEquals(byteArrayOf(2), Jacket6ProProtocol.hallCommand(HallMode.ON))
+        assertArrayEquals(byteArrayOf(3), Jacket6ProProtocol.hallCommand(HallMode.OFF))
+        assertArrayEquals(byteArrayOf(0x28), Jacket6ProProtocol.fanCommand(0))
+        assertArrayEquals(byteArrayOf(0x50), Jacket6ProProtocol.fanCommand(200))
+        assertArrayEquals(byteArrayOf(1), Jacket6ProProtocol.autoCommand(true))
+        assertArrayEquals(byteArrayOf(0), Jacket6ProProtocol.overClockingCommand(false))
+    }
+
+    @Test
+    fun `six pro status envelope is not interpreted as the eight pro tag table`() {
+        val hall = requireNotNull(
+            Jacket6ProProtocol.statusUpdate(state, byteArrayOf(1, 1)),
+        ).state
+        assertEquals(HallMode.AUTO, hall.hallMode)
+        assertTrue(hall.coolingOn)
+
+        val fan = requireNotNull(
+            Jacket6ProProtocol.statusUpdate(state, byteArrayOf(2, 0x50)),
+        ).state
+        assertEquals(80, fan.fanRaw)
+        assertEquals(100, fan.fanPercent)
+
+        assertNull(Jacket6ProProtocol.statusUpdate(state, byteArrayOf(5, 1)))
+        assertNull(
+            CoolerTelemetryReducer.reduce(
+                state,
+                UUID.fromString("00001015-0000-1000-8000-00805f9b34fb"),
+                byteArrayOf(7, 6),
+            ),
+        )
+    }
+
+    @Test
+    fun `six pro temperature does not apply eight pro offset`() {
+        val update = requireNotNull(
+            CoolerTelemetryReducer.reduce(
+                state,
+                CoolerBleConstants.STATUS_UUID,
+                byteArrayOf(4, 20),
+            ),
+        )
+        assertEquals(20f, update.state.temperatureC)
+    }
+}

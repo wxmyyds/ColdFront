@@ -44,6 +44,7 @@ interface AppStrings {
     val homeLevel: String
     val homeLevelGear: String
     val homeLevelPercent: String
+    val homeLevelRaw: String
     val homeSmartActiveLevel: String
 
     // —— 设备页 ——
@@ -203,6 +204,7 @@ object ZhStrings : AppStrings {
     override val homeLevel = "制冷档位"
     override val homeLevelGear = "%d 档"
     override val homeLevelPercent = "%d%%"
+    override val homeLevelRaw = "%d raw"
     override val homeSmartActiveLevel = "智能温控运行中,档位由设备调节"
 
     override val devicesTitle = "我的设备"
@@ -353,6 +355,7 @@ object EnStrings : AppStrings {
     override val homeLevel = "Cooling level"
     override val homeLevelGear = "Level %d"
     override val homeLevelPercent = "%d%%"
+    override val homeLevelRaw = "%d raw"
     override val homeSmartActiveLevel = "Smart control active - level managed by device"
 
     override val devicesTitle = "My devices"

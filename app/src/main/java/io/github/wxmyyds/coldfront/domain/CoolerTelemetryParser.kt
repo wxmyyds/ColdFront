@@ -17,6 +17,10 @@ internal object CoolerTelemetryParser {
     fun temperature(data: ByteArray): Float? =
         temperatureRaw(data)?.minus(CoolerBleConstants.TEMPERATURE_OFFSET)
 
+    /** 6 Pro's official handler passes the status payload through without the 8 Pro calibration. */
+    fun temperatureWithoutCalibration(data: ByteArray): Float? =
+        temperatureRaw(data)
+
     private fun temperatureRaw(data: ByteArray): Float? {
         if (data.isEmpty()) return null
         if (data.size == 1) return data[0].toFloat().takeIf { it in -40f..80f }
