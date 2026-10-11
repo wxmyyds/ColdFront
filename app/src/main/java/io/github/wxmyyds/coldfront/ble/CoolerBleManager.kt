@@ -479,17 +479,28 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                 return@dispatch
             }
             try {
-                // Official 8 Pro binds its characteristics from the main service
-                // (d52082ad-...) and only processes reads/notifications from it. Another
-                // service may expose a same-UUID characteristic that is not the cooler's
-                // register, so visit the main service first and keep that instance.
-                val orderedServices = g.services.sortedBy {
-                    if (it.uuid == CoolerBleConstants.MAIN_SERVICE_UUID) 0 else 1
+                // Official 6 Pro binds every normal register from its main service only.
+                // Other models retain UUID-wide discovery for their firmware variants.
+                val type = _state.value.deviceType
+                val mainService = g.getService(CoolerBleConstants.MAIN_SERVICE_UUID)
+                if (type == CoolerDeviceType.JACKET_6_PRO && mainService == null) {
+                    fail(s, "Missing 6 Pro main service")
+                    return@dispatch
+                }
+                val orderedServices = if (type == CoolerDeviceType.JACKET_6_PRO) {
+                    listOfNotNull(mainService)
+                } else {
+                    g.services.sortedBy {
+                        if (it.uuid == CoolerBleConstants.MAIN_SERVICE_UUID) 0 else 1
+                    }
                 }
                 for (service in orderedServices) for (ch in service.characteristics) {
+                    if (type == CoolerDeviceType.JACKET_6_PRO &&
+                        ch.uuid in Jacket6ProProtocol.UNSUPPORTED_CHARACTERISTICS
+                    ) continue
                     s.characteristics.putIfAbsent(ch.uuid, ch)
                 }
-                val required = if (_state.value.deviceType == CoolerDeviceType.JACKET_6_PRO) {
+                val required = if (type == CoolerDeviceType.JACKET_6_PRO) {
                     Jacket6ProProtocol.REQUIRED_CHARACTERISTICS
                 } else setOf(
                     CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID,
@@ -1087,6 +1098,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
     }
 
     fun setOvercoldProtection(on: Boolean) = onMain {
+        if (_state.value.deviceType == CoolerDeviceType.JACKET_6_PRO) return@onMain
         val command = command(Control.PROTECTION, CoolerBleConstants.PROTECTION_UUID) ?: return@onMain
         val value = byteArrayOf(
             if (on) CoolerBleConstants.PROTECTION_FLAG_ON else CoolerBleConstants.PROTECTION_FLAG_OFF,

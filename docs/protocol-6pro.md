@@ -13,7 +13,7 @@
 - 正常散热器广播还要求 Service UUID `00004a41-0000-1000-8000-00805f9b34fb`；
 - `PPlusOTA` 是 OTA 特殊入口，不是正常 6 Pro 控制模式。
 
-由于 `0x05/0x06` 可能同时由普通 6 和 6 Pro 管理器接受，ColdFront 只有在广播名称明确包含 `Pro` 时才把 MSD `0x05/0x06` 归类为 `JACKET_6_PRO`；没有名称证据时保守归类为普通 `JACKET_6`。这避免把两个硬件变体无依据地混为 6 Pro。
+由于 `0x05/0x05` 和 `0x05/0x06` 存在型号重叠，ColdFront 只有在名称明确包含 `6 Pro` 时才归类为 `JACKET_6_PRO`；第三方应用将 `6 Pro+` 配置为不同设备 family，因此带 `Plus` 或 `+` 的名称不会自动套用 6 Pro 协议。
 
 ## 2. 服务和特征
 
@@ -31,7 +31,7 @@ Service  d52082ad-e805-9f97-9d4e-1c682d9c9ce6
 1018     Auto / Speed 相关寄存器
 ```
 
-官方 `buildServiceAndCharacter` 对正常 6 Pro 硬性要求 `1011`、`1012`、`1013`、`1015`；`1014`、`1017`、`1018` 和设备信息服务按可选项处理。ColdFront 连接发现阶段沿用该边界，并优先使用主服务中的同 UUID 特征。
+官方 `buildServiceAndCharacter` 对正常 6 Pro 硬性要求 `1011`、`1012`、`1013`、`1015`；`1014`、`1016`、`1017`、`1018` 和设备信息服务按可选项处理。ColdFront 对 6 Pro 只从该主服务收集特征，避免误绑其他服务中重复 UUID；同时忽略没有出现在官方 6 Pro processor 中的 101C/101D/101F，避免把 8 Pro 新遥测或过冷保护误当作 6 Pro 能力。其他型号保留原有跨服务兼容查找。
 
 设备信息服务：
 
@@ -81,16 +81,16 @@ Service  d52082ad-e805-9f97-9d4e-1c682d9c9ce6
 02  Fan，payload[0] 为风扇 raw
 03  Light，去掉外层 kind 后按 1013 灯效数组解析
 04  Temperature，去掉 kind 后解析温度 payload
-05  OutputHasLoad，官方有回调，但静态代码不能证明各值的布尔映射
+05  OutputHasLoad，官方对 payload[0] 为 `0x80/0x81` 执行 true 分支、`0x00/0x01` 执行 false 分支；其他值未知
 ```
 
-ColdFront 已独立实现 `Jacket6ProProtocol` 的 1015 解析；未知状态和未证明的 `OutputHasLoad` 值会被忽略，不会生成虚假状态。6 Pro 温度不套用 8 Pro 专属的 `-6°C` 校准；官方 6 Pro 温度回调的完整数值换算仍需硬件或更多资源证据核对，因此当前只按原始温度字节解析。
+ColdFront 已独立实现 `Jacket6ProProtocol` 的 1015 解析；未知状态和未证明的字段会被忽略。`OutputHasLoad` 仅对官方明确分支处理的四个首字节映射为 Boolean，其他值保持未知。官方 `Jacket6ProActivityV2.onTemperature([B)` 只取通知首个 signed byte 并直接显示；6 Pro 专用路径只处理该首字节，不应用 8 Pro 偏移或通用 Kelvin/tag 启发式。温度单位和传感器含义仍需实机确认。
 
 ## 5. 功能边界
 
-静态代码确认官方协议和父类 Activity 存在 Hall 自动/开启/关闭回调（`rd_hall_auto`、`rd_hall_on`、`rd_hall_off`）。但 6 Pro 子类没有新增独立设置页；这些控件是否在具体官方版本的主页面布局中可见，当前无法仅凭 Smali 资源完整确认。
+静态代码确认官方协议和父类 Activity 存在 Hall 自动/开启/关闭回调（`rd_hall_auto`、`rd_hall_on`、`rd_hall_off`）。但 6 Pro 子类没有新增独立设置页；这些控件是否在具体官方版本的主页面布局中可见，当前无法仅凭 Smali 资源完整确认。ColdFront 因此保留 Hall 三态协议和状态/命令封装，但不新增未经确认的首页 Hall 设置项；首页仍使用现有通用散热开关。
 
-ColdFront 因此保留 Hall 三态协议和状态/命令封装，但不新增一个未经确认的首页 Hall 下拉设置项；首页仍使用现有通用散热开关。
+静态代码确认 `onOutputHasLoad` 对 `0x80/0x81` 和 `0x00/0x01` 分别执行 true/false 设置分支；ColdFront 只映射这四个被明确处理的值。其他值不猜测，继续保持未知。
 
 静态代码确认官方协议支持：
 
@@ -102,14 +102,14 @@ ColdFront 因此保留 Hall 三态协议和状态/命令封装，但不新增一
 - 温度、风扇和状态读取；
 - 软件/硬件版本读取入口。
 
-ColdFront 复用通用 GATT 串行队列、连接/断线重连、配置回读和 StateFlow UI，但 6 Pro 的识别、40–80 raw 规则、Hall 三态和 1015 状态封装均在 `Jacket6ProProtocol.kt` 中独立实现。Hall 命令可由协议层发出，但当前 UI 不把它包装成新的官方设置项。8 Pro 的功耗限档和离散 8 档规则不会应用到 6 Pro。
+ColdFront 复用通用 GATT 串行队列、连接/断线重连、配置回读和 StateFlow UI，但 6 Pro 的识别、40–80 raw 规则、Hall 三态和 1015 状态封装均在 `Jacket6ProProtocol.kt` 中独立实现。`101C/101D/101F` 不纳入 6 Pro 能力映射，6 Pro UI 不显示 8 Pro 过冷保护。Hall 命令可由协议层发出，但当前 UI 不把它包装成新的官方设置项。8 Pro 的功耗限档和离散 8 档规则不会应用到 6 Pro。
 
 ## 6. 无法静态确认、必须真机验证
 
 - `0x05/0x05` 与 `0x05/0x06` 在实际零售硬件上的对应关系；
 - 不同固件对特征 properties、通知和读回时序的差异；
 - 温度的单位、缩放和校准；
-- `OutputHasLoad` 的具体值映射及其是否影响控制；
+- `OutputHasLoad` 其他值及状态变化对控制/UI 的完整影响；
 - 颜色页在所有固件上允许的 `colorValue` 长度；
 - 风扇越界值在设备端的处理；
 - 断线后的固件状态是否需要额外初始化；

@@ -25,6 +25,12 @@ object Jacket6ProProtocol {
         LIGHT_UUID,
         STATUS_UUID,
     )
+    /** These registers are not part of the official 6 Pro processor's characteristic map. */
+    val UNSUPPORTED_CHARACTERISTICS: Set<UUID> = setOf(
+        CoolerBleConstants.RPM_UUID,
+        CoolerBleConstants.POWER_UUID,
+        CoolerBleConstants.PROTECTION_UUID,
+    )
 
     const val FAN_MIN_RAW: Int = 0x28
     const val FAN_MAX_RAW: Int = 0x50
@@ -66,7 +72,7 @@ object Jacket6ProProtocol {
      * The official status characteristic uses [kind, payload...], not the 8 Pro 0x04/0x07/0x08
      * tag table. Unknown kinds and incomplete payloads are intentionally ignored.
      */
-    fun statusUpdate(state: CoolerLiveState, value: ByteArray): CoolerTelemetryReducer.Update? {
+    internal fun statusUpdate(state: CoolerLiveState, value: ByteArray): CoolerTelemetryReducer.Update? {
         if (value.size < 2) return null
         val payload = value.copyOfRange(1, value.size)
         return when (value[0].toInt() and 0xFF) {
@@ -81,14 +87,16 @@ object Jacket6ProProtocol {
                     temperatureReported = true,
                 )
             }
-            // The official app exposes an OutputHasLoad callback here, but its value mapping is
-            // not proven by the static code. Do not turn an unknown byte into a Boolean state.
-            0x05 -> null
+            0x05 -> when (payload.firstOrNull()?.toInt()?.and(0xFF)) {
+                0x80, 0x81 -> CoolerTelemetryReducer.Update(state.copy(outputHasLoad = true))
+                0x00, 0x01 -> CoolerTelemetryReducer.Update(state.copy(outputHasLoad = false))
+                else -> null
+            }
             else -> null
         }
     }
 
-    fun hallUpdate(state: CoolerLiveState, value: Byte): CoolerTelemetryReducer.Update? =
+    internal fun hallUpdate(state: CoolerLiveState, value: Byte): CoolerTelemetryReducer.Update? =
         when (value.toInt() and 0xFF) {
             HALL_AUTO.toInt() -> CoolerTelemetryReducer.Update(
                 state.copy(coolingOn = true, hallMode = HallMode.AUTO).withFanMode(),

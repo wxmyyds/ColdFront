@@ -28,13 +28,14 @@
 
 ### 散热器 6 Pro（官方 App smali 静态逆向）
 
-- **识别**：官方 `Jacket6ProManagerV2` 使用 MSD `0x08CA` 的 `[0x05,0x05]`/`[0x05,0x06]` 和广播 Service UUID `00004a41-...`；ColdFront 在名称明确包含 `Pro` 时归类为 6 Pro，无法从广播静态区分时保守归类为普通 6
+- **识别**：官方 `Jacket6ProManagerV2` 使用 MSD `0x08CA` 的 `[0x05,0x05]`/`[0x05,0x06]` 和广播 Service UUID `00004a41-...`；ColdFront 要求名称明确包含 `6 Pro`，不把第三方 App 区分为独立 family 的 `6 Pro+` 自动映射为 6 Pro
 - **Hall 协议**：官方 `0x1011` 支持 `[0x01]` 自动、`[0x02]` 开启、`[0x03]` 关闭；由于具体官方版本的 UI 可见性无法仅凭 Smali 资源确认，ColdFront 保留协议封装但不新增独立 Hall 首页设置项
 - **风扇**：官方 UI 使用单字节 raw `0x28..0x50`（40–80），ColdFront 使用独立 raw 滑条，不套用 8 Pro 离散档位或功耗限档
 - **自动温控**：`0x1018` 写 `0x01` 开、`0x00` 关；**破坏神/超频** `0x1017` 写 `0x01` 开、`0x00` 关
 - **灯效**：`0x1013` 使用官方 `[mode][R][G][B]` 数组：`01` 炫彩、`02` 呼吸、`03+RGB` 单色呼吸、`04+RGB` 常亮、`06` 关闭
-- **状态**：`0x1015` 使用独立的 `[kind,payload...]` 封装，`01` Hall、`02` Fan、`03` Light、`04` Temperature、`05` OutputHasLoad；不使用 8 Pro 的功耗限档标签
-- **验证范围**：当前只有 Smali 静态证据，没有 6 Pro 实机；温度换算、OutputHasLoad 值映射和不同固件时序必须后续真机验证
+- **GATT 特征**：只从官方主服务 `d52082ad-...` 绑定 6 Pro 特征；不把 8 Pro 的 `0x101C/0x101D/0x101F` 遥测/过冷保护映射到 6 Pro
+- **状态**：`0x1015` 使用独立的 `[kind,payload...]` 封装，`01` Hall、`02` Fan、`03` Light、`04` Temperature、`05` OutputHasLoad；后者仅将 `0x80/0x81` 映射为 true、`0x00/0x01` 映射为 false，不使用 8 Pro 的功耗限档标签
+- **验证范围**：当前只有 Smali 静态证据，没有 6 Pro 实机；官方 UI 取温度通知的首个 signed byte，但温度单位/传感器含义及不同固件时序仍需真机验证
 
 完整静态协议记录：[docs/protocol-6pro.md](docs/protocol-6pro.md)
 

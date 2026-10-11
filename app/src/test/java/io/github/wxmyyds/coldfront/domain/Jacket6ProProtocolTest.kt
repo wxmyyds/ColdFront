@@ -33,6 +33,15 @@ class Jacket6ProProtocolTest {
     }
 
     @Test
+    fun `six pro does not inherit eight pro only telemetry and protection registers`() {
+        assertTrue(Jacket6ProProtocol.UNSUPPORTED_CHARACTERISTICS.contains(CoolerBleConstants.RPM_UUID))
+        assertTrue(Jacket6ProProtocol.UNSUPPORTED_CHARACTERISTICS.contains(CoolerBleConstants.POWER_UUID))
+        assertTrue(Jacket6ProProtocol.UNSUPPORTED_CHARACTERISTICS.contains(CoolerBleConstants.PROTECTION_UUID))
+        assertFalse(Jacket6ProProtocol.UNSUPPORTED_CHARACTERISTICS.contains(Jacket6ProProtocol.AUTO_UUID))
+        assertFalse(Jacket6ProProtocol.UNSUPPORTED_CHARACTERISTICS.contains(Jacket6ProProtocol.OVER_CLOCKING_UUID))
+    }
+
+    @Test
     fun `six pro commands are the official one byte writes`() {
         assertArrayEquals(byteArrayOf(1), Jacket6ProProtocol.hallCommand(HallMode.AUTO))
         assertArrayEquals(byteArrayOf(2), Jacket6ProProtocol.hallCommand(HallMode.ON))
@@ -57,7 +66,23 @@ class Jacket6ProProtocolTest {
         assertEquals(80, fan.fanRaw)
         assertEquals(100, fan.fanPercent)
 
-        assertNull(Jacket6ProProtocol.statusUpdate(state, byteArrayOf(5, 1)))
+        assertEquals(
+            true,
+            Jacket6ProProtocol.statusUpdate(state, byteArrayOf(5, 0x80.toByte()))?.state?.outputHasLoad,
+        )
+        assertEquals(
+            true,
+            Jacket6ProProtocol.statusUpdate(state, byteArrayOf(5, 0x81.toByte()))?.state?.outputHasLoad,
+        )
+        assertEquals(
+            false,
+            Jacket6ProProtocol.statusUpdate(state, byteArrayOf(5, 0))?.state?.outputHasLoad,
+        )
+        assertEquals(
+            false,
+            Jacket6ProProtocol.statusUpdate(state, byteArrayOf(5, 1))?.state?.outputHasLoad,
+        )
+        assertNull(Jacket6ProProtocol.statusUpdate(state, byteArrayOf(5, 2)))
         assertNull(
             CoolerTelemetryReducer.reduce(
                 state,
@@ -77,5 +102,21 @@ class Jacket6ProProtocolTest {
             ),
         )
         assertEquals(20f, update.state.temperatureC)
+
+        val standalone = requireNotNull(
+            CoolerTelemetryReducer.reduce(
+                state,
+                CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID,
+                byteArrayOf(0x01, 0x25),
+            ),
+        )
+        assertEquals(1f, standalone.state.temperatureC)
+        assertNull(
+            CoolerTelemetryReducer.reduce(
+                state,
+                CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID,
+                byteArrayOf(0x80.toByte(), 20),
+            ),
+        )
     }
 }

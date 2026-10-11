@@ -3,14 +3,14 @@ package io.github.wxmyyds.coldfront.domain
 /**
  * 红魔/努比亚散热器支持的设备类型。
  *
- * 识别方式(逆向自官方 App,见 docs/protocol-8pro.md):
+ * 识别方式(逆向自官方 App,见 docs/protocol-6pro.md 与 docs/protocol-8pro.md):
  * - 3 代起:广播厂商数据 MSD(company id 0x08CA)前两字节 [mainType, subType];
  * - 兜底:蓝牙广播名匹配 [matchesBleName]。
  *
  * @param mainType MSD byte0(全系 0x05)
  * @param subType MSD byte1(型号编号)
- * @param rawMin 风扇 raw 下限(8 Pro 为 40)
- * @param rawMax 风扇 raw 上限(8 Pro 为 80,旧型号 200)
+ * @param rawMin 风扇 raw 下限(6/8 Pro 为 40)
+ * @param rawMax 风扇 raw 上限(6/8 Pro 为 80,旧型号 200)
  */
 enum class CoolerDeviceType(
     val deviceName: String,
@@ -113,6 +113,10 @@ enum class CoolerDeviceType(
          */
         fun fromMsdType(mainType: Int, subType: Int, bleName: String?): CoolerDeviceType? {
             val name = bleName.orEmpty()
+            if (name.contains("6", ignoreCase = true) &&
+                name.contains("Pro", ignoreCase = true) &&
+                (name.contains("Plus", ignoreCase = true) || '+' in name)
+            ) return null
             return when {
                 mainType != 0x05 -> null
                 subType in setOf(0x05, 0x06) &&
@@ -128,6 +132,10 @@ enum class CoolerDeviceType(
          */
         fun fromBleName(bleName: String?): CoolerDeviceType? {
             if (bleName.isNullOrBlank()) return null
+            if (bleName.contains("6", ignoreCase = true) &&
+                bleName.contains("Pro", ignoreCase = true) &&
+                (bleName.contains("Plus", ignoreCase = true) || '+' in bleName)
+            ) return null
             val isRedMagic = bleName.contains("Magcooler", true) ||
                 bleName.contains("RM ", true) ||
                 bleName.contains("RedMagic", true) ||
@@ -155,7 +163,8 @@ enum class CoolerDeviceType(
                 (bleName.contains("5", true) && bleName.contains("Pro", true) && !bleName.contains("Lite", true))
             JACKET_5_LITE -> bleName.contains("5 Lite", true) || bleName.contains("5Lite", true)
             JACKET_6 -> bleName.contains("6", true) && !bleName.contains("Pro", true)
-            JACKET_6_PRO -> bleName.contains("6", true) && bleName.contains("Pro", true)
+            JACKET_6_PRO -> bleName.contains("6", true) && bleName.contains("Pro", true) &&
+                !bleName.contains("Plus", true) && '+' !in bleName
             JACKET_8_PRO -> (bleName.contains("8", true) && bleName.contains("Pro", true)) ||
                 bleName.contains("Cooler 8", true) || bleName.contains("8 Pro", true)
         }
