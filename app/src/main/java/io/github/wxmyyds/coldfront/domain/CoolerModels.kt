@@ -105,6 +105,13 @@ enum class FanMode(val labelZh: String, val labelEn: String) {
     AUTO("自动", "Auto"),
 }
 
+/** 6 Pro Hall/cooling mode, kept separate from its independent smart-temperature mode. */
+enum class HallMode(val labelZh: String, val labelEn: String) {
+    AUTO("自动", "Auto"),
+    ON("开启", "On"),
+    OFF("关闭", "Off"),
+}
+
 /** BLE 连接状态 */
 enum class ConnectionState(val labelZh: String, val labelEn: String) {
     DISCONNECTED("已断开", "Disconnected"),
@@ -138,8 +145,9 @@ data class CoolerLiveState(
     val fanRpm: Int? = null,
     /** 功率(101D/1015上报, W) */
     val powerW: Int? = null,
-    /** 散热总开关(1011): 2=开 3=关 */
+    /** 散热总开关(1011): generic devices use 2=开/3=关; 6 Pro also reports Hall auto=1. */
     val coolingOn: Boolean = false,
+    val hallMode: HallMode = HallMode.OFF,
     /** 智能温控(1018): 设备自主温控 */
     val smartOn: Boolean = false,
     /** 破坏神/Boost 超频(1017) */
@@ -153,6 +161,7 @@ data class CoolerLiveState(
     val fanLimit: Int? = null,
     /** Distinguish reconnects even when lifecycle collection skips intermediate states. */
     val connectionSessionId: Long = 0L,
+    val outputHasLoad: Boolean? = null,
     val capabilities: CoolerCapabilities = CoolerCapabilities(),
     /** Configuration values reported by this connection; never carried across sessions. */
     val confirmedConfiguration: Set<UUID> = emptySet(),

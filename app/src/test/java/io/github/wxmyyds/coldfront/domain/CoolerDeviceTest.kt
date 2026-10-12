@@ -45,6 +45,8 @@ class CoolerDeviceTest {
         assertEquals(CoolerDeviceType.JACKET_5_LITE, CoolerDeviceType.fromBleName("Magcooler 5 Lite"))
         assertEquals(CoolerDeviceType.JACKET_6, CoolerDeviceType.fromBleName("Magcooler 6"))
         assertEquals(CoolerDeviceType.JACKET_6_PRO, CoolerDeviceType.fromBleName("Magcooler 6 Pro"))
+        assertNull(CoolerDeviceType.fromBleName("RM Magcooler 6 Pro+"))
+        assertNull(CoolerDeviceType.fromMsdType(5, 6, "RM Magcooler 6 Pro+"))
         assertEquals(CoolerDeviceType.JACKET_8_PRO, CoolerDeviceType.fromBleName("Magcooler 8 Pro"))
         assertEquals(CoolerDeviceType.JACKET_3, CoolerDeviceType.fromBleName("Magcooler"))
         assertEquals(CoolerDeviceType.JACKET_3, CoolerDeviceType.fromBleName("MAGCOOLER 3"))

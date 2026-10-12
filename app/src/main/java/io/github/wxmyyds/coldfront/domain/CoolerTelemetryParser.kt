@@ -17,6 +17,10 @@ internal object CoolerTelemetryParser {
     fun temperature(data: ByteArray): Float? =
         temperatureRaw(data)?.minus(CoolerBleConstants.TEMPERATURE_OFFSET)
 
+    /** 6 Pro's official callback consumes only the first signed temperature byte. */
+    fun temperatureWithoutCalibration(data: ByteArray): Float? =
+        data.firstOrNull()?.toFloat()?.takeIf { it in -40f..80f }
+
     private fun temperatureRaw(data: ByteArray): Float? {
         if (data.isEmpty()) return null
         if (data.size == 1) return data[0].toFloat().takeIf { it in -40f..80f }
