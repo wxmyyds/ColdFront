@@ -105,7 +105,7 @@ enum class CoolerDeviceType(
 
     /**
      * 红魔磁吸散热器 8 Pro(第 8 代 COLDLNG,36W,11 叶 6200RPM,16 颗可寻址 RGB,NTC 温控)。
-     * MSD(0x08CA) = [0x05, 0x08];风扇 raw 40–80 共 8 档;自动模式写 0x01/0x00。
+     * MSD(0x08CA) = [0x05, 0x08];风扇 raw 40–80 共 9 档;自动模式写 0x01/0x00。
      */
     JACKET_8_PRO(
         deviceName = "Cryo Cooler 8 Pro",

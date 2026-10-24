@@ -191,7 +191,7 @@ data class CoolerLiveState(
     val fanRawLimit: Int?
         get() = fanLimit?.takeIf { powerLimited }?.let(CoolerBleConstants::fanLimitToRaw8Pro)
 
-    /** 供电功率不足时允许的最高档位(1–8);null = 不受限 */
+    /** 供电功率不足时允许的最高档位(1–9);null = 不受限 */
     val fanGearLimit: Int?
         get() = fanLimit?.takeIf { powerLimited }?.let(CoolerBleConstants::maxGearForFanLimit8Pro)
 
@@ -199,7 +199,7 @@ data class CoolerLiveState(
      * Pending intent wins until acknowledged; otherwise use the unrounded device byte.
      * 供电功率不足时钳到限档:官方把滑条压回 `maxSelectableProgress` 并下发该档位,
      * 所以显示值与之后实际可选的档位保持一致。
-     * 8 Pro 为 1–8 档;6 Pro+ 用官方 9 档表(Jacket6ProPlusManagerV2$a)。
+     * 8 Pro 与 6 Pro+ 均为官方 9 档(1–9),档位表见 CoolerBleConstants 两个型号各自的函数。
      */
     val fanGear: Int?
         get() {
