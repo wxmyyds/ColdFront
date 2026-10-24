@@ -7,9 +7,8 @@ package io.github.wxmyyds.coldfront.domain
  * - 3 代起:广播厂商数据 MSD(company id 0x08CA)前两字节 [mainType, subType];
  * - 兜底:蓝牙广播名匹配 [matchesBleName]。
  *
- * Pro 系列命名规则:展示名 "RM Magcooler 6 Pro / 6 Pro+ / 8 Pro",历史展示名
- * "Cryo Cooler …" 降为 [aliases] 别名;全系均有展示名与 [aliases] 别名
- * (官方广播名等其它叫法),广播名识别规则不受影响。
+ * 全系命名规则:展示名 "RM Magcooler {代数}[ 变体]",别名 "Cryo Cooler {代数}[ 变体]"
+ * (历史展示名);广播名识别规则不受影响。
  *
  * @param mainType MSD byte0(全系 0x05)
  * @param subType MSD byte1(型号编号)
@@ -29,74 +28,69 @@ enum class CoolerDeviceType(
     /** 6 Pro uses the official 40–80 raw slider; 8 Pro is the only discrete gear UI. */
     val usesRawFanSlider: Boolean = false,
     /**
-     * 全系覆盖的其它已知叫法:官方广播名/历史展示名。仅作元数据与展示兼容,
+     * 全系覆盖的其它已知叫法(历史展示名 Cryo 系)。仅作元数据与展示兼容,
      * 广播名识别规则(contains,见 [matchesBleName])不受此列表限制。
      */
     val aliases: List<String> = emptyList(),
 ) {
     JACKET_1(
-        deviceName = "双核散热背夹",
+        deviceName = "RM Magcooler 1",
         mainType = 0x05, subType = 0x01,
         generation = 1,
         description = "红魔散热器第一代(旧协议)",
         supportsRgb = false,
         supportsAutoMode = false,
-        aliases = listOf(
-            "RedMagic Ice Dock",
-            "RedMagic Dual-core Cooler",
-            "RedMagic Cooler",
-            "红魔双核散热背夹",
-        ),
+        aliases = listOf("Cryo Cooler 1"),
     ),
 
     JACKET_2(
-        deviceName = "涡轮散热背夹",
+        deviceName = "RM Magcooler 2",
         mainType = 0x05, subType = 0x02,
         generation = 2,
         description = "红魔散热器第二代(旧协议)",
         supportsRgb = false,
         supportsAutoMode = false,
-        aliases = listOf("RedMagic Turbo Cooler", "红魔涡扇背夹"),
+        aliases = listOf("Cryo Cooler 2"),
     ),
 
     JACKET_3(
-        deviceName = "红魔散热器",
+        deviceName = "RM Magcooler 3",
         mainType = 0x05, subType = 0x03,
         generation = 3,
         description = "第三代(官方名称就叫「红魔散热器」)",
-        aliases = listOf("Redmagic Magcooler", "红魔磁吸背夹"),
+        aliases = listOf("Cryo Cooler 3"),
     ),
 
     JACKET_4(
-        deviceName = "Heat Sink 4 Pro",
+        deviceName = "RM Magcooler 4 Pro",
         mainType = 0x05, subType = 0x04,
         generation = 4,
         description = "第四代专业版",
-        aliases = listOf("RM Magcooler 4pro"),
+        aliases = listOf("Cryo Cooler 4 Pro"),
     ),
 
     JACKET_5(
-        deviceName = "Heat Sink 5 Pro",
+        deviceName = "RM Magcooler 5 Pro",
         mainType = 0x05, subType = 0x05,
         generation = 5,
         description = "第五代,RGB 控制",
-        aliases = listOf("RM Magcooler 5pro"),
+        aliases = listOf("Cryo Cooler 5 Pro"),
     ),
 
     JACKET_5_LITE(
-        deviceName = "Heat Sink 5 Lite",
+        deviceName = "RM Magcooler 5 Lite",
         mainType = 0x05, subType = 0x05,
         generation = 5,
         description = "第五代紧凑版(与 5 Pro 同识别码)",
-        aliases = listOf("红魔散热器5"),
+        aliases = listOf("Cryo Cooler 5 Lite"),
     ),
 
     JACKET_6(
-        deviceName = "Heat Sink 6",
+        deviceName = "RM Magcooler 6",
         mainType = 0x05, subType = 0x06,
         generation = 6,
         description = "第六代(与 6 Pro 同识别码,官方双管理器)",
-        aliases = listOf("RM Magcooler 6", "红魔散热器6"),
+        aliases = listOf("Cryo Cooler 6"),
     ),
 
     JACKET_6_PRO(
