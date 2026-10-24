@@ -14,11 +14,13 @@
 | 型号 | 支持情况 |
 |---|---|
 | 红魔散热器 1–6 代 | 按广播名及厂商数据兼容旧协议 |
-| Cryo Cooler 6 Pro | 独立协议实现；仅静态分析验证，未完成实机验证 |
+| REDMAGIC Cooler 6 Pro | 独立协议实现；仅静态分析验证，未完成实机验证 |
 | REDMAGIC Cooler 6 Pro+ | 6 Pro 家族协议 + 官方 9 档风扇；仅静态分析验证，未完成实机验证；协议见 [6 Pro+ 文档](docs/protocol-6pro-plus.md) |
-| Cryo Cooler 8 Pro | 含功耗限档等专属行为；协议见 [8 Pro 文档](docs/protocol-8pro.md) |
+| REDMAGIC Cooler 8 Pro | 含功耗限档等专属行为；协议见 [8 Pro 文档](docs/protocol-8pro.md) |
 
 6 Pro 依据 MSD `(0x05,0x05)/(0x05,0x06)`、广播服务 UUID `4a41` 和名称识别。6 Pro+ 与 6/6 Pro 广播同一组 MSD，仅靠名称（`REDMAGIC Cooler 6 pro+`）区分；协议与 6 Pro 同族，风扇为官方 9 档（40–80 raw 中取 9 个档位格点）。详见 [6 Pro 文档](docs/protocol-6pro.md) 与 [6 Pro+ 文档](docs/protocol-6pro-plus.md)。
+
+Pro 系列命名：canonical ID 为 `redmagic-cooler-6-pro` / `redmagic-cooler-6-pro-plus` / `redmagic-cooler-8-pro`，展示名统一为 `REDMAGIC Cooler 6 Pro / 6 Pro+ / 8 Pro`；旧展示名 `Cryo Cooler …` 仅作为识别别名保留。
 
 ## 构建
 

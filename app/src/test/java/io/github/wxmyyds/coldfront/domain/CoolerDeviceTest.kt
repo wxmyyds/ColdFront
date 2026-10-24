@@ -56,6 +56,27 @@ class CoolerDeviceTest {
     }
 
     @Test
+    fun `pro model naming follows the canonical table`() {
+        // Canonical ID / 展示名 / 别名,见 README 命名表。
+        assertEquals("redmagic-cooler-6-pro", CoolerDeviceType.JACKET_6_PRO.canonicalId)
+        assertEquals("REDMAGIC Cooler 6 Pro", CoolerDeviceType.JACKET_6_PRO.deviceName)
+        assertEquals(listOf("Cryo Cooler 6 Pro"), CoolerDeviceType.JACKET_6_PRO.aliases)
+        assertEquals("redmagic-cooler-6-pro-plus", CoolerDeviceType.JACKET_6_PRO_PLUS.canonicalId)
+        assertEquals("REDMAGIC Cooler 6 Pro+", CoolerDeviceType.JACKET_6_PRO_PLUS.deviceName)
+        assertEquals(listOf("Cryo Cooler 6 Pro+"), CoolerDeviceType.JACKET_6_PRO_PLUS.aliases)
+        assertEquals("redmagic-cooler-8-pro", CoolerDeviceType.JACKET_8_PRO.canonicalId)
+        assertEquals("REDMAGIC Cooler 8 Pro", CoolerDeviceType.JACKET_8_PRO.deviceName)
+        assertEquals(listOf("Cryo Cooler 8 Pro"), CoolerDeviceType.JACKET_8_PRO.aliases)
+        // 未列入命名表的型号没有 canonical ID / 别名。
+        assertNull(CoolerDeviceType.JACKET_3.canonicalId)
+        assertTrue(CoolerDeviceType.JACKET_3.aliases.isEmpty())
+        // 旧称别名仍可按广播名兜底识别。
+        assertEquals(CoolerDeviceType.JACKET_6_PRO, CoolerDeviceType.fromBleName("Cryo Cooler 6 Pro"))
+        assertEquals(CoolerDeviceType.JACKET_6_PRO_PLUS, CoolerDeviceType.fromBleName("Cryo Cooler 6 Pro+"))
+        assertEquals(CoolerDeviceType.JACKET_8_PRO, CoolerDeviceType.fromBleName("Cryo Cooler 8 Pro"))
+    }
+
+    @Test
     fun `official pro plus broadcast name identifies the pro plus type`() {
         // 官方 DeviceHelperKt.X:包含 "REDMAGIC Cooler 6 pro+"(忽略大小写)。
         assertEquals(

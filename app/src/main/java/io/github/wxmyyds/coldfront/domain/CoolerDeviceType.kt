@@ -7,6 +7,10 @@ package io.github.wxmyyds.coldfront.domain
  * - 3 代起:广播厂商数据 MSD(company id 0x08CA)前两字节 [mainType, subType];
  * - 兜底:蓝牙广播名匹配 [matchesBleName]。
  *
+ * Pro 系列命名规则:canonical ID `redmagic-cooler-6-pro[-plus]` / `redmagic-cooler-8-pro`,
+ * 展示名 "REDMAGIC Cooler …",历史展示名 "Cryo Cooler …" 降为 [aliases] 别名(仅用于
+ * 识别兼容与新旧档案展示,广播名识别规则不受影响)。
+ *
  * @param mainType MSD byte0(全系 0x05)
  * @param subType MSD byte1(型号编号)
  * @param rawMin 风扇 raw 下限(6/8 Pro 为 40)
@@ -24,6 +28,10 @@ enum class CoolerDeviceType(
     val supportsAutoMode: Boolean = true,
     /** 6 Pro uses the official 40–80 raw slider; 8 Pro is the only discrete gear UI. */
     val usesRawFanSlider: Boolean = false,
+    /** 机器可读规范 ID(命名表见 README);未列入命名表的型号为 null。 */
+    val canonicalId: String? = null,
+    /** 识别/展示兼容的历史别名;广播名 contains 识别规则见 [matchesBleName],不受此列表限制。 */
+    val aliases: List<String> = emptyList(),
 ) {
     JACKET_1(
         deviceName = "双核散热背夹",
@@ -79,13 +87,15 @@ enum class CoolerDeviceType(
     ),
 
     JACKET_6_PRO(
-        deviceName = "Cryo Cooler 6 Pro",
+        deviceName = "REDMAGIC Cooler 6 Pro",
         mainType = 0x05, subType = 0x06,
         generation = 6,
         description = "第六代专业版(官方 40–80 raw 协议)",
         rawMin = 40,
         rawMax = 80,
         usesRawFanSlider = true,
+        canonicalId = "redmagic-cooler-6-pro",
+        aliases = listOf("Cryo Cooler 6 Pro"),
     ),
 
     /**
@@ -101,6 +111,8 @@ enum class CoolerDeviceType(
         description = "第六代专业版 Plus(官方 9 档风扇)",
         rawMin = 40,
         rawMax = 80,
+        canonicalId = "redmagic-cooler-6-pro-plus",
+        aliases = listOf("Cryo Cooler 6 Pro+"),
     ),
 
     /**
@@ -108,12 +120,14 @@ enum class CoolerDeviceType(
      * MSD(0x08CA) = [0x05, 0x08];风扇 raw 40–80 共 9 档;自动模式写 0x01/0x00。
      */
     JACKET_8_PRO(
-        deviceName = "Cryo Cooler 8 Pro",
+        deviceName = "REDMAGIC Cooler 8 Pro",
         mainType = 0x05, subType = 0x08,
         generation = 8,
         description = "第八代 COLDLNG 架构,36W 峰值",
         rawMin = 40,
         rawMax = 80,
+        canonicalId = "redmagic-cooler-8-pro",
+        aliases = listOf("Cryo Cooler 8 Pro"),
     );
 
     companion object {
