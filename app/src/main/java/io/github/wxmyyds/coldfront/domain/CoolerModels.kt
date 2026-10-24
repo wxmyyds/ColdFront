@@ -199,13 +199,20 @@ data class CoolerLiveState(
      * Pending intent wins until acknowledged; otherwise use the unrounded device byte.
      * 供电功率不足时钳到限档:官方把滑条压回 `maxSelectableProgress` 并下发该档位,
      * 所以显示值与之后实际可选的档位保持一致。
+     * 8 Pro 为 1–8 档;6 Pro+ 用官方 9 档表(Jacket6ProPlusManagerV2$a)。
      */
     val fanGear: Int?
         get() {
-            val type = deviceType?.takeIf { it.generation == 8 } ?: return null
+            val type = deviceType
+                ?.takeIf { it.generation == 8 || it == CoolerDeviceType.JACKET_6_PRO_PLUS }
+                ?: return null
             val raw = pendingFanPercent?.let { CoolerBleConstants.percentageToRaw(it, type) }
                 ?: fanRaw ?: CoolerBleConstants.percentageToRaw(fanPercent, type)
-            val gear = CoolerBleConstants.rawToGear8Pro(raw)
+            val gear = if (type == CoolerDeviceType.JACKET_6_PRO_PLUS) {
+                CoolerBleConstants.rawToGear6ProPlus(raw)
+            } else {
+                CoolerBleConstants.rawToGear8Pro(raw)
+            }
             return fanGearLimit?.let { minOf(gear, it) } ?: gear
         }
 }

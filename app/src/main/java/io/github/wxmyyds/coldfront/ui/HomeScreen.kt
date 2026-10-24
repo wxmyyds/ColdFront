@@ -387,11 +387,12 @@ private fun MetricPillContent(icon: @Composable () -> Unit, value: String, unit:
     }
 }
 
-/** 制冷档位:强调数字 + 滑条(8 Pro 为 1–8 离散档) */
+/** 制冷档位:强调数字 + 滑条(8 Pro 为 1–8 离散档;6 Pro+ 为官方 9 档;6 Pro 为 40–80 raw) */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: AppStrings) {
-    val isGear = state.deviceType?.generation == 8
+    val isProPlus = state.deviceType == CoolerDeviceType.JACKET_6_PRO_PLUS
+    val isGear = state.deviceType?.generation == 8 || isProPlus
     val isJacket6Pro = state.deviceType == CoolerDeviceType.JACKET_6_PRO
     val displayedPercent = state.pendingFanPercent ?: state.fanPercent
     val displayedRaw = state.pendingFanPercent
@@ -400,8 +401,8 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
         ?: CoolerBleConstants.percentageToRaw(displayedPercent, CoolerDeviceType.JACKET_6_PRO)
     val displayedGear = state.fanGear ?: 1
     // 官方把滑条的 maxSelectableProgress 设为功耗限档,超出的拖动会被弹回并提示
-    // (`LimitedSeekBar.a.onProgressChanged`)。这里同样保留整条 1–8 轨道,只把可选上限钳住。
-    val maxGear = state.fanGearLimit ?: 8
+    // (`LimitedSeekBar.a.onProgressChanged`)。这里同样保留整条 1–8/1–9 轨道,只把可选上限钳住。
+    val maxGear = state.fanGearLimit ?: if (isProPlus) 9 else 8
 
     if (state.isConnected && state.hasConfirmedConfiguration(CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID) && state.capabilities.fanControl && state.coolingAllowsControl && state.smartOn) {
         Surface(
@@ -467,7 +468,11 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
             var dragging by remember { mutableStateOf(false) }
             val gear = displayedGear.toFloat()
             val percent = displayedPercent.toFloat()
-            val gearSlider = rememberSliderState(value = gear, steps = 6, trackRange = 1f..8f)
+            val gearSlider = rememberSliderState(
+                value = gear,
+                steps = if (isProPlus) 7 else 6,
+                trackRange = 1f..if (isProPlus) 9f else 8f,
+            )
             val percentSlider = rememberSliderState(value = percent, trackRange = 0f..100f)
             val rawSlider = rememberSliderState(value = displayedRaw.toFloat(), steps = 39, trackRange = 40f..80f)
             LaunchedEffect(gear, dragging) { if (!dragging) gearSlider.value = gear }
@@ -499,7 +504,13 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
                         dragging = true
                         val capped = it.coerceAtMost(maxGear.toFloat())
                         gearSlider.value = capped
-                        vm.setFanSpeed(CoolerBleConstants.gearToPercentage8Pro(capped.roundToInt()))
+                        vm.setFanSpeed(
+                            if (isProPlus) {
+                                CoolerBleConstants.gearToPercentage6ProPlus(capped.roundToInt())
+                            } else {
+                                CoolerBleConstants.gearToPercentage8Pro(capped.roundToInt())
+                            },
+                        )
                     },
                     onValueChangeFinished = { dragging = false },
                     enabled = !state.smartOn,

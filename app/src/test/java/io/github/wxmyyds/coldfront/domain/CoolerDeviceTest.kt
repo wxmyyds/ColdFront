@@ -2,9 +2,11 @@ package io.github.wxmyyds.coldfront.domain
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CoolerDeviceTest {
@@ -45,13 +47,43 @@ class CoolerDeviceTest {
         assertEquals(CoolerDeviceType.JACKET_5_LITE, CoolerDeviceType.fromBleName("Magcooler 5 Lite"))
         assertEquals(CoolerDeviceType.JACKET_6, CoolerDeviceType.fromBleName("Magcooler 6"))
         assertEquals(CoolerDeviceType.JACKET_6_PRO, CoolerDeviceType.fromBleName("Magcooler 6 Pro"))
-        assertNull(CoolerDeviceType.fromBleName("RM Magcooler 6 Pro+"))
-        assertNull(CoolerDeviceType.fromMsdType(5, 6, "RM Magcooler 6 Pro+"))
         assertEquals(CoolerDeviceType.JACKET_8_PRO, CoolerDeviceType.fromBleName("Magcooler 8 Pro"))
         assertEquals(CoolerDeviceType.JACKET_3, CoolerDeviceType.fromBleName("Magcooler"))
         assertEquals(CoolerDeviceType.JACKET_3, CoolerDeviceType.fromBleName("MAGCOOLER 3"))
         assertNull(CoolerDeviceType.fromBleName("Unrelated 6 Pro"))
         assertNull(CoolerDeviceType.fromBleName(null))
         assertNull(CoolerDeviceType.fromBleName(" "))
+    }
+
+    @Test
+    fun `official pro plus broadcast name identifies the pro plus type`() {
+        // 官方 DeviceHelperKt.X:包含 "REDMAGIC Cooler 6 pro+"(忽略大小写)。
+        assertEquals(
+            CoolerDeviceType.JACKET_6_PRO_PLUS,
+            CoolerDeviceType.fromBleName("REDMAGIC Cooler 6 pro+"),
+        )
+        assertEquals(
+            CoolerDeviceType.JACKET_6_PRO_PLUS,
+            CoolerDeviceType.fromBleName("redmagic cooler 6 PRO+"),
+        )
+        // 与 6/6 Pro 同 MSD (0x05,0x06)/(0x05,0x05),仅名称可区分。
+        assertEquals(
+            CoolerDeviceType.JACKET_6_PRO_PLUS,
+            CoolerDeviceType.fromMsdType(5, 6, "REDMAGIC Cooler 6 pro+"),
+        )
+        assertEquals(
+            CoolerDeviceType.JACKET_6_PRO_PLUS,
+            CoolerDeviceType.fromMsdType(5, 5, "RM Magcooler 6 Pro Plus"),
+        )
+        assertTrue(CoolerDeviceType.JACKET_6_PRO_PLUS.matchesBleName("REDMAGIC Cooler 6 pro+"))
+        // 6 Pro 仍拒绝 Plus 名称,不得误判为 6 Pro。
+        assertFalse(CoolerDeviceType.JACKET_6_PRO.matchesBleName("REDMAGIC Cooler 6 pro+"))
+        // Pro+ 名称兜底仍要求红魔系前缀。
+        assertNull(CoolerDeviceType.fromBleName("Unrelated 6 Pro Plus"))
+        // 8 Pro 的 MSD 精确匹配不受名称影响。
+        assertEquals(
+            CoolerDeviceType.JACKET_8_PRO,
+            CoolerDeviceType.fromMsdType(5, 8, "REDMAGIC Cooler 6 pro+"),
+        )
     }
 }

@@ -172,6 +172,46 @@ object CoolerBleConstants {
         return (8 downTo 1).first { gearToRaw8Pro(it) <= maxRaw }
     }
 
+    // —— 红魔散热器 6 Pro+:官方 Jacket6ProPlusManagerV2$a 的 9 档风扇 ——
+
+    /**
+     * 官方 `Jacket6ProPlusManagerV2$a.d(I)`:档位索引 0–8 → 风扇 raw
+     * (40/46/52/58/64/68/72/76/80)。本应用 UI 用 1–9 档,与官方索引一一对应(+1)。
+     */
+    fun gearToRaw6ProPlus(gear: Int): Int = when (gear.coerceIn(1, 9)) {
+        1 -> 40
+        2 -> 46
+        3 -> 52
+        4 -> 58
+        5 -> 64
+        6 -> 68
+        7 -> 72
+        8 -> 76
+        else -> 80
+    }
+
+    /**
+     * 官方 `Jacket6ProPlusManagerV2$a.c(I)` 的 raw→档位边界
+     * (40–43/43–49/49–55/55–61/61–67/67–71/71–74/74–78/78+),换算为本应用 1–9 档。
+     */
+    fun rawToGear6ProPlus(raw: Int): Int = when {
+        raw <= 43 -> 1
+        raw <= 49 -> 2
+        raw <= 55 -> 3
+        raw <= 61 -> 4
+        raw <= 67 -> 5
+        raw <= 71 -> 6
+        raw <= 74 -> 7
+        raw <= 78 -> 8
+        else -> 9
+    }
+
+    fun gearToPercentage6ProPlus(gear: Int): Int =
+        rawToPercentage(gearToRaw6ProPlus(gear), CoolerDeviceType.JACKET_6_PRO_PLUS)
+
+    /** 任意 raw 归一到官方档位格点(c(I) 取档 → d(I) 回 raw):官方界面只会写这 9 个字节。 */
+    fun snapToGearRaw6ProPlus(raw: Int): Int = gearToRaw6ProPlus(rawToGear6ProPlus(raw))
+
     /** 百分比(0–100)→ 该型号 raw */
     fun percentageToRaw(percentage: Int, type: CoolerDeviceType): Int {
         val clamped = percentage.coerceIn(0, 100)

@@ -89,6 +89,21 @@ enum class CoolerDeviceType(
     ),
 
     /**
+     * 红魔散热器 6 Pro+(官方广播名 "REDMAGIC Cooler 6 pro+",见 DeviceHelperKt.X)。
+     * 与 6/6 Pro 共用 MSD (0x05,0x05)/(0x05,0x06),官方也仅靠名称区分;
+     * 协议与 6 Pro 同族(见 [usesJacket6ProFamilyProtocol]),但官方界面是 9 档风扇
+     * (Jacket6ProPlusManagerV2$a 档位表 40/46/52/58/64/68/72/76/80),不是连续滑条。
+     */
+    JACKET_6_PRO_PLUS(
+        deviceName = "REDMAGIC Cooler 6 Pro+",
+        mainType = 0x05, subType = 0x06,
+        generation = 6,
+        description = "第六代专业版 Plus(官方 9 档风扇)",
+        rawMin = 40,
+        rawMax = 80,
+    ),
+
+    /**
      * 红魔磁吸散热器 8 Pro(第 8 代 COLDLNG,36W,11 叶 6200RPM,16 颗可寻址 RGB,NTC 温控)。
      * MSD(0x08CA) = [0x05, 0x08];风扇 raw 40–80 共 8 档;自动模式写 0x01/0x00。
      */
@@ -107,18 +122,17 @@ enum class CoolerDeviceType(
             entries.firstOrNull { it.mainType == mainType && it.subType == subType }
 
         /**
-         * The official 6 Pro scanner accepts the same MSD family as the plain 6.  A Pro
-         * broadcast name is therefore the only static discriminator available to the app;
-         * without it we retain the conservative plain-6 type rather than inventing a Pro claim.
+         * The official 6 Pro scanner accepts the same MSD family as the plain 6, and the
+         * official 6 Pro+ scan filter (Jacket6ProPlusManagerV2.S6) additionally accepts both
+         * (0x05,0x05) and (0x05,0x06). A Pro/Pro+ broadcast name is therefore the only static
+         * discriminator available to the app; without it we retain the conservative plain-6
+         * type rather than inventing a Pro claim.
          */
         fun fromMsdType(mainType: Int, subType: Int, bleName: String?): CoolerDeviceType? {
             val name = bleName.orEmpty()
-            if (name.contains("6", ignoreCase = true) &&
-                name.contains("Pro", ignoreCase = true) &&
-                (name.contains("Plus", ignoreCase = true) || '+' in name)
-            ) return null
             return when {
                 mainType != 0x05 -> null
+                subType in setOf(0x05, 0x06) && name.matchesJacket6ProPlus() -> JACKET_6_PRO_PLUS
                 subType in setOf(0x05, 0x06) &&
                     name.contains("6", ignoreCase = true) &&
                     name.contains("Pro", ignoreCase = true) -> JACKET_6_PRO
@@ -132,10 +146,6 @@ enum class CoolerDeviceType(
          */
         fun fromBleName(bleName: String?): CoolerDeviceType? {
             if (bleName.isNullOrBlank()) return null
-            if (bleName.contains("6", ignoreCase = true) &&
-                bleName.contains("Pro", ignoreCase = true) &&
-                (bleName.contains("Plus", ignoreCase = true) || '+' in bleName)
-            ) return null
             val isRedMagic = bleName.contains("Magcooler", true) ||
                 bleName.contains("RM ", true) ||
                 bleName.contains("RedMagic", true) ||
@@ -147,6 +157,12 @@ enum class CoolerDeviceType(
             return entries.firstOrNull { it != JACKET_3 && it.matchesBleName(bleName) }
                 ?: JACKET_3.takeIf { it.matchesBleName(bleName) }
         }
+
+        /** 6 Pro+ 官方名称判别(DeviceHelperKt.X:包含 "REDMAGIC Cooler 6 pro+"，忽略大小写)。 */
+        private fun String.matchesJacket6ProPlus(): Boolean =
+            contains("6", ignoreCase = true) &&
+                contains("Pro", ignoreCase = true) &&
+                (contains("Plus", ignoreCase = true) || '+' in this)
     }
 
     /** 该型号是否与给定 BLE 广播名一致(严格匹配,避免误判) */
@@ -165,10 +181,15 @@ enum class CoolerDeviceType(
             JACKET_6 -> bleName.contains("6", true) && !bleName.contains("Pro", true)
             JACKET_6_PRO -> bleName.contains("6", true) && bleName.contains("Pro", true) &&
                 !bleName.contains("Plus", true) && '+' !in bleName
+            JACKET_6_PRO_PLUS -> bleName.matchesJacket6ProPlus()
             JACKET_8_PRO -> (bleName.contains("8", true) && bleName.contains("Pro", true)) ||
                 bleName.contains("Cooler 8", true) || bleName.contains("8 Pro", true)
         }
     }
+
+    /** 6 Pro 与 6 Pro+ 共用同一套 jacket6 家族协议路径(同服务/特征/状态包,命令均为单字节)。 */
+    val usesJacket6ProFamilyProtocol: Boolean
+        get() = this == JACKET_6_PRO || this == JACKET_6_PRO_PLUS
 
     val suggestedIcon: String
         get() = when (generation) {
