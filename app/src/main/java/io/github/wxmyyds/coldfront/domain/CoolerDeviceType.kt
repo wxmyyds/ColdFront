@@ -25,7 +25,7 @@ enum class CoolerDeviceType(
     val rawMax: Int = 200,
     val supportsRgb: Boolean = true,
     val supportsAutoMode: Boolean = true,
-    /** 6 Pro uses the official 40–80 raw slider; 8 Pro is the only discrete gear UI. */
+    /** 6 Pro uses the official 40–80 raw slider; 8 Pro/6 Pro+ are the discrete gear UIs. */
     val usesRawFanSlider: Boolean = false,
     /**
      * 全系覆盖的其它已知叫法(历史展示名 Cryo 系)。仅作元数据与展示兼容,
