@@ -56,6 +56,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.wxmyyds.coldfront.R
 import io.github.wxmyyds.coldfront.domain.CoolerBleConstants
 import io.github.wxmyyds.coldfront.domain.ConnectionState
+import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
 import io.github.wxmyyds.coldfront.domain.CoolerLiveState
 import io.github.wxmyyds.coldfront.ui.component.AppMotion
 import io.github.wxmyyds.coldfront.ui.component.RowIcon
@@ -193,6 +194,8 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
     }
 
     if (state.capabilities.hasCoolingSwitch && state.hasConfirmedConfiguration(CoolerBleConstants.COOLING_SWITCH_UUID)) {
+        // 6 Pro's Hall register is decoded independently, but its official UI visibility is
+        // version/layout dependent. Do not invent a new homepage setting for it here.
         SegmentedSwitchRow(
             title = strings.homeCoolingSwitch,
             summary = strings.homeCoolingSwitchDesc,
@@ -389,7 +392,12 @@ private fun MetricPillContent(icon: @Composable () -> Unit, value: String, unit:
 @Composable
 private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: AppStrings) {
     val isGear = state.deviceType?.generation == 8
+    val isJacket6Pro = state.deviceType == CoolerDeviceType.JACKET_6_PRO
     val displayedPercent = state.pendingFanPercent ?: state.fanPercent
+    val displayedRaw = state.pendingFanPercent
+        ?.let { CoolerBleConstants.percentageToRaw(it, CoolerDeviceType.JACKET_6_PRO) }
+        ?: state.fanRaw?.takeIf { isJacket6Pro }
+        ?: CoolerBleConstants.percentageToRaw(displayedPercent, CoolerDeviceType.JACKET_6_PRO)
     val displayedGear = state.fanGear ?: 1
     // 官方把滑条的 maxSelectableProgress 设为功耗限档,超出的拖动会被弹回并提示
     // (`LimitedSeekBar.a.onProgressChanged`)。这里同样保留整条 1–8 轨道,只把可选上限钳住。
@@ -445,8 +453,11 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
                 Text(strings.homeLevel, style = MaterialTheme.typography.titleMedium)
                 // 设备档位可能随实时回读更新，保持数值即时，避免每次遥测都重启动效。
                 Text(
-                    if (isGear) strings.homeLevelGear.format(displayedGear)
-                    else strings.homeLevelPercent.format(displayedPercent),
+                    when {
+                        isGear -> strings.homeLevelGear.format(displayedGear)
+                        isJacket6Pro -> strings.homeLevelRaw.format(displayedRaw)
+                        else -> strings.homeLevelPercent.format(displayedPercent)
+                    },
                     style = EmphasizedTypography.headlineLarge,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -458,9 +469,26 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
             val percent = displayedPercent.toFloat()
             val gearSlider = rememberSliderState(value = gear, steps = 6, trackRange = 1f..8f)
             val percentSlider = rememberSliderState(value = percent, trackRange = 0f..100f)
+            val rawSlider = rememberSliderState(value = displayedRaw.toFloat(), steps = 39, trackRange = 40f..80f)
             LaunchedEffect(gear, dragging) { if (!dragging) gearSlider.value = gear }
             LaunchedEffect(percent, dragging) { if (!dragging) percentSlider.value = percent }
-            if (isGear) {
+            LaunchedEffect(displayedRaw, dragging) { if (!dragging) rawSlider.value = displayedRaw.toFloat() }
+            if (isJacket6Pro) {
+                Slider(
+                    state = rawSlider,
+                    modifier = Modifier.semantics {
+                        contentDescription = strings.homeLevel
+                        stateDescription = strings.homeLevelRaw.format(rawSlider.value.roundToInt())
+                    },
+                    onValueChange = {
+                        dragging = true
+                        rawSlider.value = it
+                        vm.setFanRaw(it.roundToInt())
+                    },
+                    onValueChangeFinished = { dragging = false },
+                    enabled = !state.smartOn && !state.boostOn,
+                )
+            } else if (isGear) {
                 Slider(
                     state = gearSlider,
                     modifier = Modifier.semantics {

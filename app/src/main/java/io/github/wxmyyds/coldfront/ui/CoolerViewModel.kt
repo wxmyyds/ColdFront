@@ -15,6 +15,7 @@ import io.github.wxmyyds.coldfront.domain.CoolerDevice
 import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
 import io.github.wxmyyds.coldfront.domain.CoolerLiveState
 import io.github.wxmyyds.coldfront.domain.CoolerProfile
+import io.github.wxmyyds.coldfront.domain.HallMode
 import io.github.wxmyyds.coldfront.domain.RGBConfig
 import io.github.wxmyyds.coldfront.service.CoolerService
 import io.github.wxmyyds.coldfront.service.ManualControlTarget
@@ -142,6 +143,8 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
         ble.connectByAddress(target.address, target.type)
     }
     fun setFanSpeed(percent: Int) = ble.setFanSpeed(percent)
+    fun setFanRaw(raw: Int) = ble.setFanRaw(raw)
+    fun setHallMode(mode: HallMode) = ble.setHallMode(mode)
     fun setCooling(on: Boolean) = ble.setCooling(on)
     fun setSmart(on: Boolean) {
         if (on) {
