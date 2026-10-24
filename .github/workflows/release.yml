@@ -1,0 +1,326 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: '发布模式：stable = 正式版（基于 main 最新代码）；prerelease = 预发布（基于指定分支 / SHA）'
+        required: true
+        type: choice
+        options:
+          - stable
+          - prerelease
+      version:
+        description: '版本号：正式版填 X.Y.Z（须高于最近正式版 tag）；预发布填 X.Y.Z-rc.N（如 1.0.2-rc.1）'
+        required: false
+        type: string
+        default: ''
+      source_ref:
+        description: '预发布模式下要发布的来源分支名或完整 40 位 commit SHA（正式版模式忽略此项，固定用 main）'
+        required: false
+        type: string
+        default: 'main'
+
+env:
+  APP_NAME: ColdFront
+
+permissions:
+  contents: write
+
+# 正式版与预发布共享同一并发组：两者都会写 tag / versionCode 水位，必须串行
+concurrency:
+  group: release-versioning
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, tag and publish (${{ inputs.mode }})
+    runs-on: ubuntu-latest
+    steps:
+      # 正式版固定检出 main；预发布检出指定分支或 SHA。
+      # 发布分支（release / prerelease）模型已废弃：不再维护任何长期发布分支。
+      - name: Checkout source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.mode == 'stable' && 'main' || inputs.source_ref }}
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle (with dependency cache)
+        uses: gradle/actions/setup-gradle@v6
+
+      # compileSdk 37 可能不在 runner 预装 SDK 里，先接受许可以便 AGP 自动补装
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      # ---------------------------------------------------------------------------
+      # 版本号解析
+      #
+      # 版本水位来自 tag，而不是分支：正式版 tag = vX.Y.Z，预发布 tag = vX.Y.Z-rc.N。
+      # 每次发布都会把 versionName / versionCode 写进一个只被 tag 引用的提交，
+      # main 因此永远不含版本号改动，也不需要任何长期发布分支。
+      # ---------------------------------------------------------------------------
+      - name: Resolve version
+        id: resolve
+        shell: bash
+        env:
+          MODE: ${{ inputs.mode }}
+          INPUT: ${{ inputs.version }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+        run: |
+          set -euo pipefail
+
+          # grep 无匹配时退出 1，在 set -e 下会静默终结整步，故一律 || true 兜住后显式校验
+          read_version() {
+            git show "$1:app/build.gradle.kts" 2>/dev/null \
+              | grep -oP 'versionName\s*=\s*"\K[0-9][0-9A-Za-z.\-]*' || true
+          }
+          read_code() {
+            git show "$1:app/build.gradle.kts" 2>/dev/null \
+              | grep -oP 'versionCode\s*=\s*\K[0-9]+' || true
+          }
+
+          git fetch --tags --force origin >/dev/null 2>&1 || true
+
+          # 最近一个正式版 tag（按版本排序，排除 rc）
+          LATEST_STABLE_TAG=$(git tag --list --sort=-v:refname \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
+
+          if [[ -n "$LATEST_STABLE_TAG" ]]; then
+            BASE_REF="$LATEST_STABLE_TAG"
+            echo "最近正式版：$LATEST_STABLE_TAG"
+          else
+            BASE_REF="origin/main"
+            echo "尚无正式版 tag，以 origin/main 作为版本基线"
+          fi
+
+          STABLE_VERSION=$(read_version "$BASE_REF")
+          CODE=$(read_code "$BASE_REF")
+          if [[ -z "$STABLE_VERSION" || -z "$CODE" ]]; then
+            echo "::error::无法从 $BASE_REF 解析版本号（versionName='$STABLE_VERSION' versionCode='$CODE'）"
+            exit 1
+          fi
+          echo "基线版本：v$STABLE_VERSION（versionCode $CODE）"
+
+          # 全局 versionCode 水位：扫描近期预发布 tag，取最大值，保证 versionCode 单调递增
+          HIGH_WATER="$CODE"
+          for T in $(git tag --list --sort=-v:refname 'v*-rc.*' | head -20); do
+            C=$(read_code "$T")
+            if [[ "$C" =~ ^[0-9]+$ ]] && (( C > HIGH_WATER )); then HIGH_WATER="$C"; fi
+          done
+          if (( HIGH_WATER > CODE )); then
+            echo "预发布 tag 水位更高：versionCode $HIGH_WATER"
+          fi
+
+          # ---- 分流：正式版 ----
+          if [[ "$MODE" == "stable" ]]; then
+            if [[ -z "$INPUT" ]]; then
+              # 留空仅在从未发过正式版时可用（等价于用 main 上的初始版本号）
+              if [[ -n "$LATEST_STABLE_TAG" ]]; then
+                echo "::error::已存在正式版 $LATEST_STABLE_TAG，请填写更高的版本号（X.Y.Z）"
+                exit 1
+              fi
+              VERSION="$STABLE_VERSION"
+              NEW_CODE="$CODE"
+              BUMPED=false
+              echo "留空：使用 main 当前版本 v$VERSION（首次正式版）"
+            else
+              [[ "$INPUT" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+                echo "::error::正式版版本号格式错误：$INPUT（需 X.Y.Z，例如 1.0.3）"
+                exit 1
+              }
+              if [[ -n "$LATEST_STABLE_TAG" ]] && ! printf '%s\n%s\n' "$STABLE_VERSION" "$INPUT" \
+                | sort -V | tail -1 | grep -Fxq "$INPUT"; then
+                echo "::error::新版本 $INPUT 不高于最近正式版 v$STABLE_VERSION，拒绝发布"
+                exit 1
+              fi
+              VERSION="$INPUT"
+              NEW_CODE=$((HIGH_WATER + 1))
+              BUMPED=true
+            fi
+            TAG="v${VERSION}"
+          # ---- 分流：预发布 ----
+          else
+            if ! git check-ref-format --branch "$SOURCE_REF" >/dev/null 2>&1 &&
+              ! [[ "$SOURCE_REF" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::source_ref 必须是有效分支名或完整 40 位 commit SHA（当前：'$SOURCE_REF'）"
+              exit 1
+            fi
+            [[ "$INPUT" =~ ^[0-9]+\.[0-9]+\.[0-9]+-rc\.[1-9][0-9]*$ ]] || {
+              echo "::error::预发布版本号必须为 X.Y.Z-rc.N（例如 1.0.2-rc.1），当前：'$INPUT'"
+              exit 1
+            }
+            BASE_VERSION="${INPUT%-rc.*}"
+            if ! printf '%s\n%s\n' "$STABLE_VERSION" "$BASE_VERSION" \
+              | sort -V | tail -1 | grep -Fxq "$BASE_VERSION"; then
+              echo "::error::预发布基础版本 v$BASE_VERSION 不高于最近正式版 v$STABLE_VERSION"
+              exit 1
+            fi
+            VERSION="$INPUT"
+            NEW_CODE=$((HIGH_WATER + 1))
+            BUMPED=true
+            TAG="v${VERSION}"
+          fi
+
+          # tag 去重，防止重复发布
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "::error::tag $TAG 已存在，拒绝重复发布"
+            exit 1
+          fi
+
+          # 写入版本号（只在工作区改动，随后由一个仅被 tag 引用的提交固化）
+          if [[ "$BUMPED" == "true" ]]; then
+            sed -i "s/versionName = \".*\"/versionName = \"$VERSION\"/" app/build.gradle.kts
+            sed -i "s/versionCode = [0-9]*/versionCode = $NEW_CODE/" app/build.gradle.kts
+            echo "已写入 versionName=$VERSION, versionCode=$NEW_CODE"
+            git diff -- app/build.gradle.kts
+          else
+            echo "首次正式版：沿用 $BASE_REF 上的版本号，无改动"
+          fi
+
+          echo "sourceSha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "sourceRef=$SOURCE_REF" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "versionCode=$NEW_CODE" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "bumped=$BUMPED" >> "$GITHUB_OUTPUT"
+
+      - name: Compile debug and release sources
+        run: ./gradlew compileDebugKotlin compileReleaseKotlin --stacktrace
+
+      - name: Run tests and lint
+        run: ./gradlew testDebugUnitTest testReleaseUnitTest lintRelease --stacktrace
+
+      # 发布必须带签名：密钥库只存在于 Secrets，不落仓库。缺密钥直接失败，
+      # 避免静默发出未签名（实际上无法安装）的 APK。
+      - name: Materialize release keystore
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.COLDFRONT_KEYSTORE_BASE64 }}
+          KEYSTORE_PATH: ${{ runner.temp }}/coldfront-release.jks
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_BASE64:-}" ]; then
+            echo "::error::仓库缺少 Secret COLDFRONT_KEYSTORE_BASE64，无法签名发布"
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$KEYSTORE_PATH"
+          chmod 600 "$KEYSTORE_PATH"
+          echo "密钥库已就绪：$KEYSTORE_PATH（$(stat -c%s "$KEYSTORE_PATH") 字节）"
+
+      - name: Assemble release APK
+        shell: bash
+        env:
+          COLDFRONT_KEYSTORE_FILE: ${{ runner.temp }}/coldfront-release.jks
+          COLDFRONT_KEYSTORE_PASSWORD: ${{ secrets.COLDFRONT_KEYSTORE_PASSWORD }}
+          COLDFRONT_KEY_ALIAS: ${{ secrets.COLDFRONT_KEY_ALIAS }}
+          COLDFRONT_KEY_PASSWORD: ${{ secrets.COLDFRONT_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          ./gradlew assembleRelease --stacktrace
+          # 签名生效时 AGP 产出 app-release.apk；未签名会以 -unsigned 结尾，此处直接卡住
+          test -f app/build/outputs/apk/release/app-release.apk \
+            || { echo "::error::未生成已签名 APK"; ls -l app/build/outputs/apk/release/; exit 1; }
+
+      # 发布前校对签名：确认 APK 真的带证书且是预期的那把
+      - name: Verify APK signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          APKSIGNER=$(ls -d "$SDK_ROOT"/build-tools/*/apksigner | sort -V | tail -1)
+          echo "使用 $APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk
+
+      # ---------------------------------------------------------------------------
+      # 打 tag 并发布
+      #
+      # 版本号改动提交只被 tag 引用、不进入任何分支，因此 main 保持干净。
+      # 正式版 tag 直接落在 main 的最新提交之上；预发布 tag 落在被检出的来源 SHA 之上。
+      # ---------------------------------------------------------------------------
+      - name: Tag and publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODE: ${{ inputs.mode }}
+          VERSION: ${{ steps.resolve.outputs.version }}
+          VERSION_CODE: ${{ steps.resolve.outputs.versionCode }}
+          TAG: ${{ steps.resolve.outputs.tag }}
+          BUMPED: ${{ steps.resolve.outputs.bumped }}
+          SOURCE_REF: ${{ steps.resolve.outputs.sourceRef }}
+          SOURCE_SHA: ${{ steps.resolve.outputs.sourceSha }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          cp app/build/outputs/apk/release/app-release.apk "$APP_NAME.apk"
+
+          if [[ "$BUMPED" == "true" ]]; then
+            git add app/build.gradle.kts
+            git commit -m "chore(release): $TAG"
+            echo "版本号提交：$(git rev-parse --short HEAD)（仅被 tag $TAG 引用）"
+          fi
+
+          git tag -a "$TAG" -m "Release $TAG (versionCode $VERSION_CODE)"
+          git push origin "refs/tags/$TAG"
+          echo "已推送 tag $TAG"
+
+          if [[ "$MODE" == "stable" ]]; then
+            # 上一个正式版 tag（不含本次），用于生成变更清单
+            PREV=$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)
+            RANGE="${PREV:+$PREV..}HEAD"
+            echo "变更范围：$RANGE（上一个正式版：${PREV:-无}）"
+            LOG=$(git log "$RANGE" --no-merges --pretty=format:'%s' 2>/dev/null \
+              | grep -vE '^(Merge (pull request|branch)|chore\((release|prerelease)\): v)' || true)
+
+            {
+              echo "# $APP_NAME $TAG"
+              echo
+              echo "## ✨ 新功能"
+              echo "$LOG" | grep -E '^(feat|feature)(\(|:)' | sed 's/^/ - /' || true
+              echo
+              echo "## 🐛 修复"
+              echo "$LOG" | grep -E '^fix(\(|:)' | sed 's/^/ - /' || true
+              echo
+              echo "## ⚙️ 改进与优化"
+              echo "$LOG" | grep -E '^(refactor|perf)(\(|:)' | sed 's/^/ - /' || true
+              echo
+              echo "## 📦 其他"
+              echo "$LOG" | grep -vE '^(feat|feature|fix|refactor|perf)(\(|:)' | sed 's/^/ - /' || true
+              echo
+              echo "基于 \`main\` 最新代码构建，versionCode $VERSION_CODE。"
+            } > /tmp/release-notes.md
+
+            echo "===== 发布说明预览 ====="
+            cat /tmp/release-notes.md
+
+            gh release create "$TAG" \
+              --title "$APP_NAME $TAG" \
+              --notes-file /tmp/release-notes.md \
+              "$APP_NAME.apk"
+          else
+            {
+              echo "# $APP_NAME $TAG（预发布）"
+              echo
+              echo "- 来源：\`$SOURCE_REF\`（SHA \`$SOURCE_SHA\`）"
+              echo "- versionCode：$VERSION_CODE"
+              echo "- 此版本用于验证分支上的新功能，实机验证状态请参看对应协议文档。"
+              echo "- 构建记录：https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            } > /tmp/prerelease-notes.md
+
+            echo "===== 发布说明预览 ====="
+            cat /tmp/prerelease-notes.md
+
+            gh release create "$TAG" \
+              --title "$APP_NAME $TAG（预发布）" \
+              --prerelease \
+              --notes-file /tmp/prerelease-notes.md \
+              "$APP_NAME.apk"
+          fi

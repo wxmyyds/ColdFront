@@ -8,7 +8,7 @@ plugins {
 
 // ---------- Release 签名 ----------
 // 密钥库与口令不入库，只在构建时注入：
-//   CI   ：GitHub Secrets → 环境变量 COLDFRONT_KEYSTORE_*（见 .github/workflows/release-stable.yml）
+//   CI   ：GitHub Secrets → 环境变量 COLDFRONT_KEYSTORE_*（见 .github/workflows/release.yml）
 //   本机 ：-P 或 ~/.gradle/gradle.properties 中的 coldfront.* 属性
 // 环境变量优先于 Gradle 属性。取值一律经 providers，配置缓存才能正确跟踪并在口令轮换后失效重算。
 // 任一必填项缺失时回退为未签名构建，fork / PR（拿不到 Secrets）仍能正常编译。
