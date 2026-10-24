@@ -7,9 +7,8 @@ package io.github.wxmyyds.coldfront.domain
  * - 3 代起:广播厂商数据 MSD(company id 0x08CA)前两字节 [mainType, subType];
  * - 兜底:蓝牙广播名匹配 [matchesBleName]。
  *
- * Pro 系列命名规则:canonical ID `redmagic-cooler-6-pro[-plus]` / `redmagic-cooler-8-pro`,
- * 展示名 "REDMAGIC Cooler …",历史展示名 "Cryo Cooler …" 降为 [aliases] 别名(仅用于
- * 识别兼容与新旧档案展示,广播名识别规则不受影响)。
+ * Pro 系列命名规则:展示名 "REDMAGIC Cooler …",历史展示名 "Cryo Cooler …" 降为别名;
+ * 全系均有展示名与 [aliases] 别名(官方广播名等其它叫法),广播名识别规则不受影响。
  *
  * @param mainType MSD byte0(全系 0x05)
  * @param subType MSD byte1(型号编号)
@@ -28,9 +27,10 @@ enum class CoolerDeviceType(
     val supportsAutoMode: Boolean = true,
     /** 6 Pro uses the official 40–80 raw slider; 8 Pro is the only discrete gear UI. */
     val usesRawFanSlider: Boolean = false,
-    /** 机器可读规范 ID(命名表见 README);未列入命名表的型号为 null。 */
-    val canonicalId: String? = null,
-    /** 识别/展示兼容的历史别名;广播名 contains 识别规则见 [matchesBleName],不受此列表限制。 */
+    /**
+     * 全系覆盖的其它已知叫法:官方广播名/历史展示名。仅作元数据与展示兼容,
+     * 广播名识别规则(contains,见 [matchesBleName])不受此列表限制。
+     */
     val aliases: List<String> = emptyList(),
 ) {
     JACKET_1(
@@ -40,6 +40,12 @@ enum class CoolerDeviceType(
         description = "红魔散热器第一代(旧协议)",
         supportsRgb = false,
         supportsAutoMode = false,
+        aliases = listOf(
+            "RedMagic Ice Dock",
+            "RedMagic Dual-core Cooler",
+            "RedMagic Cooler",
+            "红魔双核散热背夹",
+        ),
     ),
 
     JACKET_2(
@@ -49,6 +55,7 @@ enum class CoolerDeviceType(
         description = "红魔散热器第二代(旧协议)",
         supportsRgb = false,
         supportsAutoMode = false,
+        aliases = listOf("RedMagic Turbo Cooler", "红魔涡扇背夹"),
     ),
 
     JACKET_3(
@@ -56,6 +63,7 @@ enum class CoolerDeviceType(
         mainType = 0x05, subType = 0x03,
         generation = 3,
         description = "第三代(官方名称就叫「红魔散热器」)",
+        aliases = listOf("Redmagic Magcooler", "红魔磁吸背夹"),
     ),
 
     JACKET_4(
@@ -63,6 +71,7 @@ enum class CoolerDeviceType(
         mainType = 0x05, subType = 0x04,
         generation = 4,
         description = "第四代专业版",
+        aliases = listOf("RM Magcooler 4pro"),
     ),
 
     JACKET_5(
@@ -70,6 +79,7 @@ enum class CoolerDeviceType(
         mainType = 0x05, subType = 0x05,
         generation = 5,
         description = "第五代,RGB 控制",
+        aliases = listOf("RM Magcooler 5pro"),
     ),
 
     JACKET_5_LITE(
@@ -77,6 +87,7 @@ enum class CoolerDeviceType(
         mainType = 0x05, subType = 0x05,
         generation = 5,
         description = "第五代紧凑版(与 5 Pro 同识别码)",
+        aliases = listOf("红魔散热器5"),
     ),
 
     JACKET_6(
@@ -84,6 +95,7 @@ enum class CoolerDeviceType(
         mainType = 0x05, subType = 0x06,
         generation = 6,
         description = "第六代(与 6 Pro 同识别码,官方双管理器)",
+        aliases = listOf("RM Magcooler 6", "红魔散热器6"),
     ),
 
     JACKET_6_PRO(
@@ -94,8 +106,12 @@ enum class CoolerDeviceType(
         rawMin = 40,
         rawMax = 80,
         usesRawFanSlider = true,
-        canonicalId = "redmagic-cooler-6-pro",
-        aliases = listOf("Cryo Cooler 6 Pro"),
+        aliases = listOf(
+            "Cryo Cooler 6 Pro",
+            "红魔散热器6pro",
+            "RM Magcooler 6pro",
+            "PA1246",
+        ),
     ),
 
     /**
@@ -111,8 +127,7 @@ enum class CoolerDeviceType(
         description = "第六代专业版 Plus(官方 9 档风扇)",
         rawMin = 40,
         rawMax = 80,
-        canonicalId = "redmagic-cooler-6-pro-plus",
-        aliases = listOf("Cryo Cooler 6 Pro+"),
+        aliases = listOf("Cryo Cooler 6 Pro+", "REDMAGIC Cooler 6 pro+"),
     ),
 
     /**
@@ -126,8 +141,7 @@ enum class CoolerDeviceType(
         description = "第八代 COLDLNG 架构,36W 峰值",
         rawMin = 40,
         rawMax = 80,
-        canonicalId = "redmagic-cooler-8-pro",
-        aliases = listOf("Cryo Cooler 8 Pro"),
+        aliases = listOf("Cryo Cooler 8 Pro", "RM Magcooler 8pro"),
     );
 
     companion object {

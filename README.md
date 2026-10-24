@@ -20,7 +20,7 @@
 
 6 Pro 依据 MSD `(0x05,0x05)/(0x05,0x06)`、广播服务 UUID `4a41` 和名称识别。6 Pro+ 与 6/6 Pro 广播同一组 MSD，仅靠名称（`REDMAGIC Cooler 6 pro+`）区分；协议与 6 Pro 同族，风扇为官方 9 档（40–80 raw 中取 9 个档位格点）。详见 [6 Pro 文档](docs/protocol-6pro.md) 与 [6 Pro+ 文档](docs/protocol-6pro-plus.md)。
 
-Pro 系列命名：canonical ID 为 `redmagic-cooler-6-pro` / `redmagic-cooler-6-pro-plus` / `redmagic-cooler-8-pro`，展示名统一为 `REDMAGIC Cooler 6 Pro / 6 Pro+ / 8 Pro`；旧展示名 `Cryo Cooler …` 仅作为识别别名保留。
+全系列均有展示名与别名两层命名（别名为官方广播名/历史展示名，如 `红魔双核散热背夹`、`RM Magcooler 4pro`、`Cryo Cooler 6 Pro`）；Pro 系列展示名统一为 `REDMAGIC Cooler 6 Pro / 6 Pro+ / 8 Pro`，旧展示名 `Cryo Cooler …` 降为别名。
 
 ## 构建
 
