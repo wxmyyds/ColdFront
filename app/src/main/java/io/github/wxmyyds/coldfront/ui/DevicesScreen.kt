@@ -146,7 +146,8 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
             title = { Text(strings.devicesDelete) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(profile.name)
+                    // 与卡片标题同口径:显示规范展示名而非原始广播名。
+                    Text(profile.deviceType.deviceName)
                     Text(profile.macAddress)
                 }
             },
