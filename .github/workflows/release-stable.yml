@@ -15,7 +15,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-stable
+  group: release-versioning
   cancel-in-progress: false
 
 jobs:
@@ -51,16 +51,27 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          git fetch origin +refs/heads/prerelease:refs/remotes/origin/prerelease 2>/dev/null || true
           # 注意：grep 无匹配时退出 1，在 set -e 下会静默终结整步（本步骤曾因漏写文件参数而零输出失败），
           # 故一律用 || true 兜住，改由下方显式校验并报出可读错误。
           if git rev-parse origin/release >/dev/null 2>&1; then
             CUR=$(git show origin/release:app/build.gradle.kts | grep -oP 'versionName\s*=\s*"\K[0-9.]+' || true)
             CODE=$(git show origin/release:app/build.gradle.kts | grep -oP 'versionCode\s*=\s*\K[0-9]+' || true)
             echo "最近发布（release 分支）：v$CUR（versionCode $CODE）"
+            PRE_CODE=$(git show origin/prerelease:app/build.gradle.kts 2>/dev/null | grep -oP 'versionCode\s*=\s*\K[0-9]+' || true)
+            if [[ "$PRE_CODE" =~ ^[0-9]+$ ]] && (( PRE_CODE > CODE )); then
+              echo "预发布版本 code 高水位：$PRE_CODE"
+              CODE="$PRE_CODE"
+            fi
           else
             CUR=$(grep -oP 'versionName\s*=\s*"\K[0-9.]+' app/build.gradle.kts || true)
             CODE=$(grep -oP 'versionCode\s*=\s*\K[0-9]+' app/build.gradle.kts || true)
             echo "首次发布（尚无 release 分支）：main 版本 v$CUR（versionCode $CODE）"
+            PRE_CODE=$(git show origin/prerelease:app/build.gradle.kts 2>/dev/null | grep -oP 'versionCode\s*=\s*\K[0-9]+' || true)
+            if [[ "$PRE_CODE" =~ ^[0-9]+$ ]] && (( PRE_CODE > CODE )); then
+              echo "预发布版本 code 高水位：$PRE_CODE"
+              CODE="$PRE_CODE"
+            fi
           fi
           if [ -z "$CUR" ] || [ -z "$CODE" ]; then
             echo "::error::无法解析版本号（CUR='$CUR' CODE='$CODE'），检查 app/build.gradle.kts 的 versionName/versionCode"
