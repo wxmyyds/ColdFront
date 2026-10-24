@@ -67,15 +67,13 @@ class CoolerDeviceTest {
         assertTrue(CoolerDeviceType.JACKET_3.aliases.contains("红魔磁吸背夹"))
         assertTrue(CoolerDeviceType.JACKET_4.aliases.contains("RM Magcooler 4pro"))
         assertTrue(CoolerDeviceType.JACKET_6.aliases.contains("红魔散热器6"))
-        assertTrue(CoolerDeviceType.JACKET_6_PRO.aliases.containsAll(
-            listOf("Cryo Cooler 6 Pro", "红魔散热器6pro", "RM Magcooler 6pro", "PA1246"),
-        ))
+        assertTrue(CoolerDeviceType.JACKET_6_PRO.aliases.contains("Cryo Cooler 6 Pro"))
         assertTrue(CoolerDeviceType.JACKET_6_PRO_PLUS.aliases.contains("Cryo Cooler 6 Pro+"))
-        assertTrue(CoolerDeviceType.JACKET_8_PRO.aliases.contains("RM Magcooler 8pro"))
-        // Pro 系列展示名统一为 REDMAGIC,旧称 Cryo 为别名。
-        assertEquals("REDMAGIC Cooler 6 Pro", CoolerDeviceType.JACKET_6_PRO.deviceName)
-        assertEquals("REDMAGIC Cooler 6 Pro+", CoolerDeviceType.JACKET_6_PRO_PLUS.deviceName)
-        assertEquals("REDMAGIC Cooler 8 Pro", CoolerDeviceType.JACKET_8_PRO.deviceName)
+        assertTrue(CoolerDeviceType.JACKET_8_PRO.aliases.contains("Cryo Cooler 8 Pro"))
+        // Pro 系列展示名统一为 RM Magcooler,旧称 Cryo 为别名。
+        assertEquals("RM Magcooler 6 Pro", CoolerDeviceType.JACKET_6_PRO.deviceName)
+        assertEquals("RM Magcooler 6 Pro+", CoolerDeviceType.JACKET_6_PRO_PLUS.deviceName)
+        assertEquals("RM Magcooler 8 Pro", CoolerDeviceType.JACKET_8_PRO.deviceName)
         // 旧称别名仍可按广播名兜底识别。
         assertEquals(CoolerDeviceType.JACKET_6_PRO, CoolerDeviceType.fromBleName("Cryo Cooler 6 Pro"))
         assertEquals(CoolerDeviceType.JACKET_6_PRO_PLUS, CoolerDeviceType.fromBleName("Cryo Cooler 6 Pro+"))

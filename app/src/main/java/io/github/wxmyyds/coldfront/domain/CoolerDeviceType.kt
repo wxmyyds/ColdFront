@@ -7,8 +7,9 @@ package io.github.wxmyyds.coldfront.domain
  * - 3 代起:广播厂商数据 MSD(company id 0x08CA)前两字节 [mainType, subType];
  * - 兜底:蓝牙广播名匹配 [matchesBleName]。
  *
- * Pro 系列命名规则:展示名 "REDMAGIC Cooler …",历史展示名 "Cryo Cooler …" 降为别名;
- * 全系均有展示名与 [aliases] 别名(官方广播名等其它叫法),广播名识别规则不受影响。
+ * Pro 系列命名规则:展示名 "RM Magcooler 6 Pro / 6 Pro+ / 8 Pro",历史展示名
+ * "Cryo Cooler …" 降为 [aliases] 别名;全系均有展示名与 [aliases] 别名
+ * (官方广播名等其它叫法),广播名识别规则不受影响。
  *
  * @param mainType MSD byte0(全系 0x05)
  * @param subType MSD byte1(型号编号)
@@ -99,19 +100,14 @@ enum class CoolerDeviceType(
     ),
 
     JACKET_6_PRO(
-        deviceName = "REDMAGIC Cooler 6 Pro",
+        deviceName = "RM Magcooler 6 Pro",
         mainType = 0x05, subType = 0x06,
         generation = 6,
         description = "第六代专业版(官方 40–80 raw 协议)",
         rawMin = 40,
         rawMax = 80,
         usesRawFanSlider = true,
-        aliases = listOf(
-            "Cryo Cooler 6 Pro",
-            "红魔散热器6pro",
-            "RM Magcooler 6pro",
-            "PA1246",
-        ),
+        aliases = listOf("Cryo Cooler 6 Pro"),
     ),
 
     /**
@@ -121,13 +117,13 @@ enum class CoolerDeviceType(
      * (Jacket6ProPlusManagerV2$a 档位表 40/46/52/58/64/68/72/76/80),不是连续滑条。
      */
     JACKET_6_PRO_PLUS(
-        deviceName = "REDMAGIC Cooler 6 Pro+",
+        deviceName = "RM Magcooler 6 Pro+",
         mainType = 0x05, subType = 0x06,
         generation = 6,
         description = "第六代专业版 Plus(官方 9 档风扇)",
         rawMin = 40,
         rawMax = 80,
-        aliases = listOf("Cryo Cooler 6 Pro+", "REDMAGIC Cooler 6 pro+"),
+        aliases = listOf("Cryo Cooler 6 Pro+"),
     ),
 
     /**
@@ -135,13 +131,13 @@ enum class CoolerDeviceType(
      * MSD(0x08CA) = [0x05, 0x08];风扇 raw 40–80 共 9 档;自动模式写 0x01/0x00。
      */
     JACKET_8_PRO(
-        deviceName = "REDMAGIC Cooler 8 Pro",
+        deviceName = "RM Magcooler 8 Pro",
         mainType = 0x05, subType = 0x08,
         generation = 8,
         description = "第八代 COLDLNG 架构,36W 峰值",
         rawMin = 40,
         rawMax = 80,
-        aliases = listOf("Cryo Cooler 8 Pro", "RM Magcooler 8pro"),
+        aliases = listOf("Cryo Cooler 8 Pro"),
     );
 
     companion object {
