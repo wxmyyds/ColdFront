@@ -78,11 +78,11 @@ enum class CoolerDeviceType(
     ),
 
     JACKET_5_LITE(
-        deviceName = "RM Magcooler 5 Lite",
+        deviceName = "RM Magcooler 5",
         mainType = 0x05, subType = 0x05,
         generation = 5,
         description = "第五代紧凑版(与 5 Pro 同识别码)",
-        aliases = listOf("Cryo Cooler 5 Lite"),
+        aliases = listOf("Cryo Cooler 5"),
     ),
 
     JACKET_6(
