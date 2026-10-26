@@ -38,7 +38,7 @@ internal object CoolerTelemetryReducer {
                 }
             CoolerBleConstants.STATUS_TAG_FAN_POWER ->
                 value.getOrNull(1)?.let { Update(state.copy(powerW = it.toInt() and 0xFF)) }
-            // 官方 b.smali 的 tag 0x7 分支:byte1 = 供电功率限档的官方档位索引(0–8)。
+            // 官方 `b.smali` 的 tag `0x7` 分支中，byte1 是供电功率限档索引，范围为 0 到 8。
             CoolerBleConstants.STATUS_TAG_FAN_LIMIT ->
                 value.getOrNull(1)?.let { Update(state.copy(fanLimit = it.toInt() and 0xFF)) }
             else -> null

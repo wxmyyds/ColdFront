@@ -39,7 +39,7 @@ private const val CHANNEL_ID = "cooler_service_channel"
 private const val NOTIFICATION_ID = 1001
 private const val TAG = "CoolerService"
 
-/** Owns background connection intent, not the Activity or the BLE protocol implementation. */
+/** Owns background connection intent; the Activity and BLE protocol remain separate. */
 class CoolerService : Service() {
     companion object {
         const val ACTION_START_AUTO = "io.github.wxmyyds.coldfront.START_AUTO"
@@ -61,7 +61,7 @@ class CoolerService : Service() {
         internal fun switchToManual(context: Context, target: ManualControlTarget) =
             sendControl(context, target, ACTION_SWITCH_TO_MANUAL)
 
-        /** Stop background recovery only; the BLE mode coordinator owns the actual Boost transition. */
+        /** Stop background recovery; the BLE coordinator handles the Boost transition. */
         internal fun stopForTarget(context: Context, target: ManualControlTarget) =
             sendControl(context, target, ACTION_STOP)
 
@@ -124,8 +124,8 @@ class CoolerService : Service() {
                     handleCommand(command.intent)
                 } catch (e: IOException) {
                     Log.e(TAG, "Cannot read/save service intent", e)
-                    // Do not proceed with an unpersisted user request or write defaults over
-                    // unread data. In particular a failed stop persistence is logged explicitly.
+                    // Do not continue with an unpersisted request or overwrite unread data. A failed
+                    // stop persistence is logged before the service shuts down.
                     stopSelfSafely()
                 }
             }
@@ -158,15 +158,16 @@ class CoolerService : Service() {
                         intent.getStringExtra(EXTRA_CONTROL_ADDRESS).orEmpty(),
                         intent.getLongExtra(EXTRA_CONTROL_SESSION, -1L),
                     )
-                } else null // Notification actions intentionally address the service's current target.
+                } else null
+                // Notification actions without a captured target address the service's current target.
                 if (controlTarget != null && !controlTarget.matches(ble.state.value)) {
-                    // A delayed UI/tile action must not clear a newer service target or control
-                    // a replacement connection, including a reconnect to the very same address.
+                    // A delayed action must not affect a newer target or replacement session, even
+                    // when both sessions use the same address.
                     if (target == null) stopSelfSafely()
                     return
                 }
-                // Persist explicit opt-out before shutdown, so boot/sticky restart cannot
-                // silently re-enable the device. Notification Close keeps device mode intact.
+                // Persist the opt-out before shutdown so boot or sticky restart cannot re-enable it.
+                // Notification Close leaves the device mode unchanged.
                 val intendedAddress = intent.getStringExtra(EXTRA_CONTROL_ADDRESS)
                     ?: target?.macAddress ?: profiles.loadServiceProfile()?.macAddress
                 stopping = true
@@ -184,12 +185,12 @@ class CoolerService : Service() {
                 stopSelfSafely()
             }
             ACTION_RECONNECT, null -> {
-                // START_STICKY delivers a null Intent: recover only an explicit saved target.
+                // START_STICKY may deliver a null Intent. Recover only an explicitly saved target.
                 val profile = profiles.loadServiceProfile() ?: run { stopSelfSafely(); return }
                 activate(profile)
             }
             ACTION_VALIDATE_TARGET -> {
-                // The flow emission may precede a newer command; re-read before acting.
+                // A flow emission can be stale by the time this command runs; read storage again.
                 if (profiles.loadServiceProfile() == null) stopSelfSafely()
             }
             else -> stopSelfSafely()
@@ -197,8 +198,7 @@ class CoolerService : Service() {
     }
 
     private fun activate(profile: CoolerProfile) {
-        // The service owns this connection intent; a stale UI link-loss record must not
-        // outlive it and resume a second session after the service already connected.
+        // Clear stale UI link-loss state so it cannot resume a second session after the service connects.
         ble.clearLinkLoss()
         stopping = false
         activation?.cancel()
@@ -212,12 +212,10 @@ class CoolerService : Service() {
             ble.state.filter { it.isConnected && profile.matches(it) }
                 .distinctUntilChangedBy { it.connectionSessionId }
                 .collect {
-                    // CONNECTED means initialization is done. No optimistic smart=true before
-                    // characteristics exist; the manager acknowledges the actual write.
+                    // CONNECTED follows initialization. The manager reports Smart only after the write succeeds.
                     activationFailed = !ble.setSmartAndAwait(true)
                     if (activationFailed) showControlFailure()
-                    // A successful retry need not change BLE StateFlow (smart may already
-                    // be true), so refresh text and actions explicitly on both outcomes.
+                    // A retry may leave StateFlow unchanged, so refresh notification text and actions both ways.
                     updateNotification()
                 }
         }
@@ -246,8 +244,8 @@ class CoolerService : Service() {
             }.retryStorageReads { cause ->
                 Log.e(TAG, "Cannot observe service target", cause)
             }.collectTargetInvalidations(latestStartId = { latestStartId }) { startId ->
-                // Never discard deletion while target is still being loaded. The queued
-                // validator runs after startup/manual commands and re-reads persisted intent.
+                // Keep deletion queued while the target is loading. The validator re-reads storage
+                // after startup and manual commands.
                 commands.trySend(ServiceCommand(Intent().setAction(ACTION_VALIDATE_TARGET), startId))
             }
         }
@@ -265,8 +263,7 @@ class CoolerService : Service() {
         activation?.cancel()
         target = null
         if (processingStartId != latestStartId) {
-            // A newer START is queued; removing foreground state or stopping here would
-            // discard it. The consumer stays alive and processes the newer start next.
+            // A newer START is queued. Keep the foreground state and consumer alive so that command is not discarded.
             stopping = false
             return
         }

@@ -13,11 +13,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.colorResource
 
 /**
- * MD3E 主题：[MaterialExpressiveTheme] + 弹簧动效 [MotionScheme.expressive]。
+ * MD3E 主题使用 [MaterialExpressiveTheme] 和 [MotionScheme.expressive] 弹簧动效。
  *
- * 取色种子：开启动态取色时取系统动态色板的 accent 资源，关闭时用品牌紫灰。
- * 两者都交给同一个生成器（[colorSchemeFromSeed]），变体由设置中的调色板决定，
- * 因此所有 surface 角色都由种子推导，没有写死的常量。
+ * 开启动态取色时，种子取自系统动态色板的 accent 资源；关闭时使用品牌紫灰。
+ * 两种种子都交给 [colorSchemeFromSeed]，再按设置中的调色板生成颜色变体。所有 surface
+ * 角色色都由种子生成，没有硬编码颜色值。
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -27,21 +27,21 @@ fun RedmagicCoolerTheme(
     palette: String = PaletteStyles.DEFAULT,
     content: @Composable () -> Unit,
 ) {
-    // 读取放在版本判断之后：Android 12 以下不存在该资源。
-    // 用 Compose 的 colorResource 而非 Context.getColor：前者是配置感知的，
-    // 壁纸或深浅模式变化时会重新读取。
+    // 先检查系统版本再读取资源，因为 Android 12 以下没有此资源。
+    // 使用 Compose 的 colorResource 而不是 Context.getColor，让资源随系统配置变化重新读取，
+    // 例如壁纸或深浅模式变化时。
     val dynamicSeed = if (dynamicColor && ThemeSeed.supportsDynamic()) {
         colorResource(ThemeSeed.dynamicResourceId())
     } else {
         null
     }
     val colorScheme = remember(dynamicSeed, darkTheme, palette) {
-        // 页面底色落到 surfaceContainer，SPEC_2025 下 background 已被重映射到 surface。
+        // 页面底色使用 surfaceContainer；SPEC_2025 会把 background 重映射到 surface。
         pageLayerScheme(colorSchemeFromSeed(dynamicSeed ?: BrandSeed, darkTheme, palette))
     }
     val motionScheme = MotionScheme.expressive()
     MaterialExpressiveTheme(
-        // 切深浅/开关动态取色时整套角色色平滑过渡，而非瞬时跳变（MD3E 动效表达因果）
+        // 切换深浅模式或动态取色时，主题角色色会平滑过渡，避免颜色瞬间跳变。
         colorScheme = animateColorScheme(colorScheme, motionScheme),
         motionScheme = motionScheme,
         typography = AppTypography,

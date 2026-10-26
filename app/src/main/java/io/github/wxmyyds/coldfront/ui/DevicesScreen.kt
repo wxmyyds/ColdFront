@@ -64,11 +64,7 @@ import java.util.Locale
 
 private enum class SavedDevicesContent { Loading, Empty, List }
 
-/**
- * 设备页(MD3E):
- * - 主操作「添加设备」放在 [ExtendedFloatingActionButton](战术 6:主行动用 FAB)
- * - 已保存设备用非交互 Surface,分组圆角由 segmentedRowShapes(index, count) 生成
- */
+/** 设备页：保存的设备使用分组形状，添加设备使用 Extended FAB。 */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
@@ -146,7 +142,7 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
             title = { Text(strings.devicesDelete) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // 与卡片标题同口径:显示规范展示名而非原始广播名。
+                    // 显示规范名称，而不是保存的原始广播名称。
                     Text(profile.deviceType.deviceName)
                     Text(profile.macAddress)
                 }
@@ -209,8 +205,7 @@ private fun SavedDeviceCard(
                     else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    // 卡片标题用规范展示名:profile.name 存的是配对时的原始广播名
-                    // (如官方小写 "RM Magcooler 8pro"),直接显示会破坏命名规范。
+                    // 卡片标题使用规范名称；profile.name 可能仍是原始广播名称。
                     profile.deviceType.deviceName,
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.bodyLarge,
@@ -306,9 +301,9 @@ private fun EmptyState(strings: AppStrings, modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        // 主操作「添加设备」由 Scaffold 的 ExtendedFAB 承担,此处不重复放按钮
+        // 空列表的主操作由 Scaffold 中的 Extended FAB 提供。
     }
 }
 
-/** 列表底部给 ExtendedFAB 让位：FAB 56dp + Scaffold 默认 16dp 边距 + 一行呼吸空间。 */
+/** 为 Extended FAB 预留底部空间。 */
 private val FabClearance = 96.dp

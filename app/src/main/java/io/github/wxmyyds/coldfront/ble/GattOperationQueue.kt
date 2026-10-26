@@ -11,21 +11,18 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Main-confined GATT queue. Owner and target are compared by identity, not UUID/equality.
- * An accepted operation owns the lane until its callback or session teardown. A timeout
- * poisons the session by default: retrying on that GATT could consume the previous
- * operation's callback. Optional telemetry callers pass poisonOnTimeout = false;
- * their owner/target/kind combination retains a timeout tombstone. By default it is
- * permanently quarantined until session teardown. With quarantineOnTimeout = false,
- * only consuming the old callback (without committing it) makes a later retry safe.
- * Optional timeouts report recovery needs through onQuarantined, including drainable
- * lanes. A still-blocked drainable retry reports again, since setup may not be ready
- * to expose degradation yet; promotion to permanent quarantine also reports it.
+ * Main-confined GATT queue. Owners and targets are matched by identity, not UUID or equality.
+ * An accepted operation owns its lane until its callback or session teardown. By default, a
+ * timeout poisons the session because retrying could consume the old callback. Telemetry can opt
+ * out of poisoning; each timed-out owner/target/kind tuple then keeps a tombstone. The tombstone
+ * remains permanent until teardown by default. With `quarantineOnTimeout = false`, only consuming
+ * the old callback clears it, without applying that callback's value. [onQuarantined] reports
+ * recovery needs for drainable lanes, repeats while they remain blocked, and reports promotion to
+ * permanent quarantine.
  */
 internal class GattOperationQueue(
     private val onTimeout: (owner: Any) -> Unit,
-    // A single bounded retry backs off only after explicit platform rejection/failure.
-    // It is not evidence of completion; accepted requests still require their callback.
+    // Retry once after an explicit platform rejection or failed callback. Acceptance still requires its callback.
     private val retryDelayMs: Long = 120,
     private val onQuarantined: (owner: Any) -> Unit = {},
 ) {
@@ -43,9 +40,9 @@ internal class GattOperationQueue(
 
     private enum class TimeoutDisposition { DRAINABLE, PERMANENT }
 
-    // Android permits only one callback-bearing GATT operation in flight. This transport
-    // lane is the remaining coroutine mutex: cancellation cannot release accepted work.
-    // Business-level transactions use single-consumer mailboxes instead.
+    // Android allows one callback-bearing GATT operation at a time. This mutex is the transport
+    // lane; cancellation cannot release work already accepted by the platform. Command mailboxes
+    // serialize higher-level transactions.
     private val mutex = Mutex()
     private var pending: Pending? = null
     private val timedOut =
@@ -53,7 +50,7 @@ internal class GattOperationQueue(
     private val _availabilityChanges = MutableStateFlow(0L)
     val availabilityChanges = _availabilityChanges.asStateFlow()
 
-    /** Eligibility only: the transport lane still serializes actual platform dispatch. */
+    /** Check eligibility; the mutex still serializes platform dispatch. */
     fun isAvailable(owner: Any, target: Any, kind: Kind): Boolean =
         timeoutDisposition(owner, target, kind) == null
 
@@ -121,21 +118,20 @@ internal class GattOperationQueue(
         val disposition = timeoutDisposition(owner, target, kind)
         if (disposition != null) {
             if (disposition == TimeoutDisposition.DRAINABLE) {
-                // A stricter caller cannot silently inherit an undrained setup timeout.
-                // No new operation may start, regardless of how long ago it timed out.
+                // A stricter caller cannot reuse a lane while its old callback is pending.
                 if (poisonOnTimeout) onTimeout(owner)
                 else {
                     if (quarantineOnTimeout) {
                         markTimedOut(owner, target, kind, TimeoutDisposition.PERMANENT)
                     }
-                    // Repeat for drainable retries: the initial report may precede readiness.
+                    // A drainable retry can report again if setup has not exposed the degradation.
                     onQuarantined(owner)
                 }
             }
             return@withLock Result(false)
         }
-        // Cancellation must not free a lane that Android has already accepted. The owner
-        // can still abort it immediately on disconnect; timeout remains bounded.
+        // Cancellation cannot release an operation Android has accepted. Disconnect can abort
+        // the owner, and the timeout remains bounded.
         withContext(NonCancellable) {
             var result = Result(false)
             for (attempt in 0..1) {
@@ -152,10 +148,8 @@ internal class GattOperationQueue(
                     val callback = withTimeoutOrNull(timeoutMs) { operation.completion.await() }
                     clear(operation)
                     if (callback == null) {
-                        // No retry, even if isCurrent has become false due to a newer intent.
-                        // Android callbacks have no generation. Keep this exact lane blocked
-                        // until teardown, or (only for a drainable timeout) its old callback.
-                        // Other owners/targets/kinds remain usable.
+                        // Do not retry after timeout. Android callbacks carry no generation, so the
+                        // lane stays blocked until teardown or the old callback drains.
                         if (poisonOnTimeout) onTimeout(owner)
                         else {
                             markTimedOut(
@@ -175,7 +169,7 @@ internal class GattOperationQueue(
                 if (result.success) break
                 if (attempt == 0) delay(retryDelayMs)
             }
-            // The callback, not an arbitrary post-callback sleep, releases this operation.
+            // The callback releases the operation; no post-callback delay is needed.
             if (isCurrent()) result else Result(false)
         }
     }

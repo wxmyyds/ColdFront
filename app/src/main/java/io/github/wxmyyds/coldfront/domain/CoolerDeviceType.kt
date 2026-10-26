@@ -3,17 +3,17 @@ package io.github.wxmyyds.coldfront.domain
 /**
  * 红魔/努比亚散热器支持的设备类型。
  *
- * 识别方式(逆向自官方 App,见 docs/protocol-6pro.md 与 docs/protocol-8pro.md):
- * - 3 代起:广播厂商数据 MSD(company id 0x08CA)前两字节 [mainType, subType];
- * - 兜底:蓝牙广播名匹配 [matchesBleName]。
+ * 识别方式根据官方 App 逆向结果确定，见 docs/protocol-6pro.md 与 docs/protocol-8pro.md：
+ * - 3 代起：广播厂商数据 MSD(company id 0x08CA)前两字节 [mainType, subType]；
+ * - 兜底：蓝牙广播名匹配 [matchesBleName]。
  *
- * 全系命名规则:展示名 "RM Magcooler {代数}[ 变体]",别名 "Cryo Cooler {代数}[ 变体]"
- * (历史展示名);广播名识别规则不受影响。
+ * 全系命名规则：展示名为 "RM Magcooler {代数}[ 变体]"，历史展示名为 "Cryo Cooler {代数}[ 变体]"。
+ * 广播名识别规则不受展示名影响。
  *
  * @param mainType MSD byte0(全系 0x05)
  * @param subType MSD byte1(型号编号)
  * @param rawMin 风扇 raw 下限(6/8 Pro 为 40)
- * @param rawMax 风扇 raw 上限(6/8 Pro 为 80,旧型号 200)
+ * @param rawMax 风扇 raw 上限(6/8 Pro 为 80，旧型号 200)
  */
 enum class CoolerDeviceType(
     val deviceName: String,
@@ -140,11 +140,9 @@ enum class CoolerDeviceType(
             entries.firstOrNull { it.mainType == mainType && it.subType == subType }
 
         /**
-         * The official 6 Pro scanner accepts the same MSD family as the plain 6, and the
-         * official 6 Pro+ scan filter (Jacket6ProPlusManagerV2.S6) additionally accepts both
-         * (0x05,0x05) and (0x05,0x06). A Pro/Pro+ broadcast name is therefore the only static
-         * discriminator available to the app; without it we retain the conservative plain-6
-         * type rather than inventing a Pro claim.
+         * 6 Pro 扫描器接受与普通 6 相同的 MSD 系列；6 Pro+ 的过滤器
+         * (Jacket6ProPlusManagerV2.S6)也接受 (0x05,0x05) 和 (0x05,0x06)。因此，Pro/Pro+ 广播名是唯一可用的静态区分依据。
+         * 缺少广播名时保守识别为普通 6，不将设备误标为 Pro。
          */
         fun fromMsdType(mainType: Int, subType: Int, bleName: String?): CoolerDeviceType? {
             val name = bleName.orEmpty()
@@ -176,7 +174,7 @@ enum class CoolerDeviceType(
                 ?: JACKET_3.takeIf { it.matchesBleName(bleName) }
         }
 
-        /** 6 Pro+ 官方名称判别(DeviceHelperKt.X:包含 "REDMAGIC Cooler 6 pro+"，忽略大小写)。 */
+        /** 6 Pro+ 官方名称判别(DeviceHelperKt.X：包含 "REDMAGIC Cooler 6 pro+"，忽略大小写)。 */
         private fun String.matchesJacket6ProPlus(): Boolean =
             contains("6", ignoreCase = true) &&
                 contains("Pro", ignoreCase = true) &&

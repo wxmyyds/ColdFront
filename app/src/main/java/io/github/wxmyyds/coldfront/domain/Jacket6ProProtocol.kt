@@ -3,14 +3,12 @@ package io.github.wxmyyds.coldfront.domain
 import java.util.UUID
 
 /**
- * RedMagic Cooler 6 Pro / 6 Pro+ ("Jacket6Pro" 家族) protocol extracted from the official
- * application's smali. The 6-family V2 stack (Jacket6ProProcessor) is shared by both models:
- * same GATT register UUID family, same 0x1015 status envelope and fan raw bounds 0x28..0x50;
- * the Pro+ only differs in its 9-gear fan UI (see CoolerBleConstants' 6 Pro+ gear helpers).
+ * RedMagic Cooler 6 Pro / 6 Pro+ ("Jacket6Pro" 家族)协议，依据官方应用的 smali 提取。
+ * 两个型号共用 6-family V2 协议栈(Jacket6ProProcessor)：GATT 寄存器 UUID 系列、0x1015 状态包格式
+ * 和 0x28..0x50 的风扇 raw 范围都相同；Pro+ 只有风扇 UI 使用 9 档(见 CoolerBleConstants 中的 6 Pro+ 档位函数)。
  *
- * This type is deliberately separate from the 8 Pro power-limit protocol.
- * No checksum or extra framing is added: the official write paths pass these byte arrays
- * directly to BluetoothGattCharacteristic.writeCharacteristic().
+ * 此类型与 8 Pro 的功耗限档协议分开处理。官方写入路径会直接将这些字节数组传给
+ * BluetoothGattCharacteristic.writeCharacteristic()，因此这里不添加校验和或额外封装。
  */
 object Jacket6ProProtocol {
     val MAIN_SERVICE_UUID: UUID = CoolerBleConstants.MAIN_SERVICE_UUID
@@ -27,7 +25,7 @@ object Jacket6ProProtocol {
         LIGHT_UUID,
         STATUS_UUID,
     )
-    /** These registers are not part of the official 6 Pro processor's characteristic map. */
+    /** 这些寄存器不在官方 6 Pro 处理器的特征映射中。 */
     val UNSUPPORTED_CHARACTERISTICS: Set<UUID> = setOf(
         CoolerBleConstants.RPM_UUID,
         CoolerBleConstants.POWER_UUID,
@@ -45,7 +43,7 @@ object Jacket6ProProtocol {
     const val OVER_CLOCKING_OFF: Byte = 0x00
     const val OVER_CLOCKING_ON: Byte = 0x01
 
-    /** The official 6 Pro scanner accepts the 4a41 family service plus MSD type 05/05 or 05/06. */
+    /** 官方 6 Pro 扫描器要求 4a41 系列服务，以及 MSD 类型 05/05 或 05/06。 */
     fun isAdvertisement(
         mainType: Int,
         subType: Int,
@@ -71,8 +69,8 @@ object Jacket6ProProtocol {
         byteArrayOf(if (on) OVER_CLOCKING_ON else OVER_CLOCKING_OFF)
 
     /**
-     * The official status characteristic uses [kind, payload...], not the 8 Pro 0x04/0x07/0x08
-     * tag table. Unknown kinds and incomplete payloads are intentionally ignored.
+     * 官方状态特征使用 [kind, payload...] 格式，不采用 8 Pro 的 0x04/0x07/0x08 标签表。
+     * 未知 kind 和不完整 payload 会被忽略。
      */
     internal fun statusUpdate(state: CoolerLiveState, value: ByteArray): CoolerTelemetryReducer.Update? {
         if (value.size < 2) return null
@@ -92,7 +90,7 @@ object Jacket6ProProtocol {
             0x05 -> when (payload.firstOrNull()?.toInt()?.and(0xFF)) {
                 0x80, 0x81 -> CoolerTelemetryReducer.Update(state.copy(outputHasLoad = true))
                 0x00, 0x01 -> CoolerTelemetryReducer.Update(state.copy(outputHasLoad = false))
-                // 官方 Pro+ onOutputHasLoad 识别 0x7f 但对应协程是空实现:不改变负载状态。
+                // 官方 Pro+ 的 onOutputHasLoad 会识别 0x7f，但对应协程为空，因此不改变负载状态。
                 0x7f -> null
                 else -> null
             }

@@ -5,12 +5,11 @@ import java.util.UUID
 /**
  * 红魔散热器 BLE 协议常量。
  *
- * 特征语义以实测可用的第三方 App(com.magcooler.cpucontrol)与官方 App 逆向交叉验证,
- * 详见 docs/protocol-8pro.md。关键点:
- * - 温度在 0x1014(单字节有符号;固件 8.4.7 为 [0x04, 温度] 包),无偏移;
- * - 0x1011 是散热总开关(写 0x02 开 / 0x03 关)——不写它风扇不会转;
- * - 0x1012 风扇 raw 40–80(8 Pro/6 Pro+ 均为官方 9 档);旧型号 40–200;
- * - 特征值不依赖特定服务 UUID:遍历所有服务查找(兼容服务 UUID 变体)。
+ * 特征语义根据第三方 App(com.magcooler.cpucontrol)与官方 App 的逆向结果交叉验证，详见 docs/protocol-8pro.md：
+ * - 温度在 0x1014(单字节有符号；固件 8.4.7 为 [0x04, 温度] 包)，无偏移；
+ * - 0x1011 是散热总开关(写 0x02 开 / 0x03 关)，不写它风扇不会转；
+ * - 0x1012 风扇 raw 40–80(8 Pro/6 Pro+ 均为官方 9 档)，旧型号 40–200；
+ * - 特征 UUID 的服务归属会随型号和固件变化。6 Pro/6 Pro+ 只从主服务绑定；其他型号遍历服务以兼容 UUID 变体。
  */
 object CoolerBleConstants {
 
@@ -18,8 +17,8 @@ object CoolerBleConstants {
     val ADVERTISING_SERVICE_UUID: UUID = UUID.fromString("00004a41-0000-1000-8000-00805f9b34fb")
 
     /**
-     * 厂商数据(Manufacturer Specific Data)公司 ID:0x08CA(2250)。
-     * payload 前 2 字节 = [mainType, subType],用于精确识别型号(8 Pro = 0x05, 0x08)。
+     * 厂商数据(Manufacturer Specific Data)的公司 ID：0x08CA(2250)。
+     * payload 前 2 字节为 [mainType, subType]，用于精确识别型号(8 Pro = 0x05, 0x08)。
      */
     const val MSD_COMPANY_ID: Int = 0x08CA
 
@@ -42,15 +41,15 @@ object CoolerBleConstants {
     val LIGHT_CONTROL_UUID: UUID = UUID.fromString("00001013-0000-1000-8000-00805f9b34fb")
 
     /**
-     * 官方主服务(Jacket8ProProcessor.buildServiceAndCharacter 构造;其 onCharacteristicRead /
+     * 官方主服务(Jacket8ProProcessor.buildServiceAndCharacter 构造；其 onCharacteristicRead /
      * onCharacteristicChanged 只在 service == 此值时处理)。8 Pro 的全部控制/灯效特征都在该服务下。
-     * 其它服务里可能暴露同 UUID 但语义不同的特征,因此绑定特征时优先取主服务实例。
+     * 其它服务可能暴露相同 UUID 但语义不同的特征，因此绑定时优先使用主服务中的实例。
      */
     val MAIN_SERVICE_UUID: UUID = UUID.fromString("d52082ad-e805-9f97-9d4e-1c682d9c9ce6")
 
     /**
-     * 官方默认灯效字节(n0.a() = [0x01,0x00,0x00,0x00],炫彩)。官方 refreshLightModeView 在读到
-     * 非 1/2/3/4/6 的未知灯效字节且数组非空时,会下发该命令把设备纠正到已知状态。
+     * 官方默认灯效字节(n0.a() = [0x01,0x00,0x00,0x00]，炫彩)。读取到非 1/2/3/4/6 的未知灯效字节且数组非空时，
+     * 官方 refreshLightModeView 会下发该命令，将设备恢复到已知状态。
      */
     fun defaultLightCommand(): ByteArray = byteArrayOf(0x01, 0x00, 0x00, 0x00)
 
@@ -81,8 +80,8 @@ object CoolerBleConstants {
     const val STATUS_TAG_FAN_POWER: Int = 0x09
 
     /**
-     * 官方 `Jacket8ProManagerV2$a.b()`(即静态字段 `r0`)的值:设备上报的功耗限档"不限"值。
-     * 限档等于该值表示供电充足;小于该值表示充电器供电功率不足。
+     * 官方 `Jacket8ProManagerV2$a.b()`(即静态字段 `r0`)的值，表示设备上报的功耗限档“不限”值。
+     * 限档等于该值表示供电充足；小于该值表示充电器供电功率不足。
      */
     const val FAN_LIMIT_UNLIMITED_8_PRO: Int = 8
 

@@ -3,10 +3,10 @@ package io.github.wxmyyds.coldfront.domain
 import java.util.UUID
 
 /**
- * RGB 灯效(逆向自官方 App,写入 0x1013 的命令格式 [mode][R][G][B]):
- * 1=炫彩 2=全彩呼吸 3=单色呼吸 4=常亮 6=关闭。
- * 官方另有 0x05=场景灯效,仅由场景联动(`sendScenarioCmd`)下发,8 Pro 灯效页不提供;
- * 本 App 不暴露该选项,0x05 因此按未知处理。
+ * RGB 灯效(根据官方 App 逆向结果，写入 0x1013 的命令格式为 [mode][R][G][B])：
+ * 1=炫彩，2=全彩呼吸，3=单色呼吸，4=常亮，6=关闭。
+ * 官方另有 0x05=场景灯效，仅由场景联动(`sendScenarioCmd`)下发，8 Pro 灯效页不提供。
+ * 本 App 不暴露该选项，因此 0x05 按未知处理。
  */
 enum class LightEffect(val code: Byte, val labelZh: String, val labelEn: String) {
     COLORFUL(0x01, "炫彩", "Colorful"),
@@ -21,7 +21,7 @@ enum class LightEffect(val code: Byte, val labelZh: String, val labelEn: String)
     OFF(0x06, "关闭", "Off"),
     ;
 
-    /** 设备回报/旧档案里的单色呼吸，统一按「呼吸」呈现 */
+    /** 设备回报或旧档案中的单色呼吸，统一按「呼吸」呈现 */
     val uiEffect: LightEffect
         get() = if (this == BREATH_SINGLE) BREATH_FULLCOLOR else this
 
@@ -129,7 +129,9 @@ data class CoolerLiveState(
     val connection: ConnectionState = ConnectionState.DISCONNECTED,
     val temperatureC: Float? = null,
     val fanPercent: Int = 0,
-    /** Preserve the device byte: percentage rounding must not change the displayed gear. */
+    /**
+     * 保留设备上报的原始字节，避免百分比四舍五入后改变显示档位。
+     */
     val fanRaw: Int? = null,
     /** Pending slider target; distinct from the last acknowledged/device-reported speed. */
     val pendingFanPercent: Int? = null,
@@ -196,10 +198,10 @@ data class CoolerLiveState(
         get() = fanLimit?.takeIf { powerLimited }?.let(CoolerBleConstants::maxGearForFanLimit8Pro)
 
     /**
-     * Pending intent wins until acknowledged; otherwise use the unrounded device byte.
-     * 供电功率不足时钳到限档:官方把滑条压回 `maxSelectableProgress` 并下发该档位,
-     * 所以显示值与之后实际可选的档位保持一致。
-     * 8 Pro 与 6 Pro+ 均为官方 9 档(1–9),档位表见 CoolerBleConstants 两个型号各自的函数。
+     * 在收到确认前使用待发送的目标值；否则使用设备确认的原始字节。
+     * 供电功率不足时钳到限档：官方会将滑条压回 `maxSelectableProgress` 并下发该档位，
+     * 因此显示值与之后实际可选的档位保持一致。
+     * 8 Pro 与 6 Pro+ 均为官方 9 档(1–9)，档位表见 CoolerBleConstants 中对应型号的函数。
      */
     val fanGear: Int?
         get() {

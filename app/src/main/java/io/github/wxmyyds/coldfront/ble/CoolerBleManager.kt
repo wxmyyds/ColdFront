@@ -58,11 +58,11 @@ private const val READ_TIMEOUT_MS = 2500L
 private const val CONNECT_TIMEOUT_MS = 15000L
 private const val DISCOVERY_TIMEOUT_MS = 10000L
 private const val INIT_TIMEOUT_MS = 30000L
-/** 灯效未知时的 read 重试限流；通道何时可安全重用由队列回调状态决定，而非这段间隔。 */
+/** 灯效未知时重试读取的最小间隔。通道能否安全复用由队列回调状态决定，与该间隔无关。 */
 private const val LIGHT_READ_RETRY_MS = 4000L
-/** 下发默认灯(官方未知模式兑底)的最小间隔,避免设备持续返回未知值时写入风暴 */
+/** 设备返回未知灯效时，下发默认灯效命令的最小间隔，避免反复写入。 */
 private const val LIGHT_DEFAULT_MIN_INTERVAL_MS = 3000L
-/** 每次连接下发默认灯的次数上限 */
+/** 每次连接下发默认灯效命令的次数上限。 */
 private const val MAX_LIGHT_DEFAULT_ATTEMPTS = 3
 
 data class ScanState(
@@ -80,7 +80,7 @@ data class ScanState(
  */
 @SuppressLint("MissingPermission")
 class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
-    // Process-reusable: release resets transports/state, never cancels this scope.
+    // The scope survives release so the manager can be reused; release resets transport and state.
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val handler = Handler(Looper.getMainLooper())
     private val bluetoothAdapter: BluetoothAdapter? =
@@ -99,8 +99,8 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         var initializing = false
         val controls = MutableStateFlow(0)
         val telemetryChanges = MutableStateFlow(0L)
-        // Readable configuration characteristics to read back after connecting.
-        // Best-effort: a failed or unparsed read must not block CONNECTED.
+        // Readable configuration characteristics are read once after connection.
+        // A failed or unparsed read must not prevent CONNECTED.
         var requiredConfiguration = emptySet<UUID>()
         var temperatureWatchStartedAtMs = 0L
         var lastTempUpdateMs: Long? = null
@@ -123,7 +123,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             session?.takeIf { it.gatt === owner }?.let { fail(it, "GATT callback timeout") }
         },
         onQuarantined = { owner ->
-            // Keep isolation intact; expose the loss instead of silently showing frozen telemetry.
+            // Preserve the queue boundary and report the loss instead of showing stale telemetry.
             session?.takeIf { it.gatt === owner && ready(it) }?.let {
                 _state.update { state -> state.copy(telemetryDegraded = true) }
             }
@@ -213,7 +213,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
     }
 
     private fun acceptScanResult(result: ScanResult) {
-        // Permission may have been revoked after scan start.
+        // The scan permission may have been revoked after scanning began.
         try {
             recordRaw(result)
             val device = identify(result) ?: return
@@ -278,8 +278,8 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             )
         } else null
         val type = msdType ?: CoolerDeviceType.fromBleName(name) ?: return null
-        // The official 6-family scanner requires both its MSD type and the 4a41 family UUID.
-        // Do not broaden that rule to legacy/name fallback devices.
+        // The official 6-family scanner requires both the MSD type and the 4a41 family UUID.
+        // Keep legacy and name-only fallback devices out of this path.
         if (type.usesJacket6ProFamilyProtocol &&
             !Jacket6ProProtocol.isAdvertisement(
                 msd?.getOrNull(CoolerBleConstants.MSD_INDEX_MAIN_TYPE)?.toInt()?.and(0xFF) ?: -1,
@@ -293,7 +293,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
     private fun entryName(advertised: String?, device: BluetoothDevice): String? =
         advertised ?: device.safeName()
 
-    // All entry points share permission, address, adapter and exception handling.
+    // All entry points use the same permission, address, adapter, and exception handling.
     fun connect(device: CoolerDevice) = onMain {
         // connectInternal is always Main-confined, so clearing here cannot race resume.
         lastLinkLoss = null
@@ -313,9 +313,9 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
     }
 
     private fun connectInternal(address: String, type: CoolerDeviceType, name: String?) {
-        // connectInternal owns any transition out of DISCONNECTED/FAILED, and it always owns
-        // the fresh session field. The single internal resume path consumes its own record
-        // before calling here; explicit entries clear theirs on the Main entry above.
+        // connectInternal owns transitions out of DISCONNECTED and FAILED and always creates the
+        // new session. The internal resume path consumes its record before calling here;
+        // explicit entry points clear theirs on Main before calling it.
         stopScanInternal()
         disconnectInternal()
         val s = Session(++nextSessionId, scope)
@@ -433,7 +433,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         }
     }
 
-    // Always post, even on Main: connectGatt may callback before returning its GATT.
+    // Always post, including on Main, because connectGatt may invoke the callback before it returns a GATT.
     private fun dispatch(s: Session, g: BluetoothGatt, block: () -> Unit) {
         handler.post { if (owns(s) && s.gatt === g) block() }
     }
@@ -479,8 +479,8 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                 return@dispatch
             }
             try {
-                // Official 6-family models bind every normal register from their main service
-                // only. Other models retain UUID-wide discovery for their firmware variants.
+                // 6-family models bind normal registers from the main service only.
+                // Other models keep UUID-wide discovery for firmware variants.
                 val type = _state.value.deviceType
                 val is6Family = type?.usesJacket6ProFamilyProtocol == true
                 val mainService = g.getService(CoolerBleConstants.MAIN_SERVICE_UUID)
@@ -559,7 +559,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         @Deprecated("Legacy Android callback")
         @Suppress("DEPRECATION")
         override fun onCharacteristicRead(g: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
-            // Snapshot Binder-owned mutable bytes before posting.
+            // Copy Binder-owned mutable bytes before posting.
             readCallback(s, g, characteristic, characteristic.value?.copyOf() ?: byteArrayOf(), status)
         }
 
@@ -606,14 +606,13 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             if (!owns(s)) return
             if (!subscribed) Log.w(TAG, "Optional subscription unavailable: $uuid")
         }
-        // Read back every discovered readable configuration once after connecting. A
-        // failed or unparsed reply never blocks CONNECTED: the corresponding control
-        // stays unknown/unavailable until a later read or notification confirms it.
+        // Read each discovered readable configuration once after connection. A failed or unparsed
+        // reply leaves that control unknown or unavailable until a later read or notification.
         for (uuid in s.requiredConfiguration) {
             if (!owns(s)) return
             val ch = s.characteristics[uuid] ?: continue
-            // A timed-out lane stays blocked until its old callback drains. The poller
-            // waits for that availability event rather than probing/promoting the marker.
+            // A timed-out lane remains blocked until its old callback drains. The poller waits for
+            // the availability event instead of probing or promoting the marker.
             val ok = readIfReadable(s, ch, poisonOnTimeout = false, quarantineOnTimeout = false)
             if (!owns(s)) return
             if (!ok) Log.w(TAG, "Initial configuration read unavailable: $uuid")
@@ -624,7 +623,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         _state.update {
             it.copy(
                 connection = ConnectionState.CONNECTED,
-                // Startup timeouts happened before onQuarantined could publish a warning.
+                // A startup timeout occurred before onQuarantined could publish the warning.
                 telemetryDegraded = it.telemetryDegraded || s.gatt?.let(operations::hasTimedOut) == true,
             )
         }
@@ -672,8 +671,8 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
     }
 
     /**
-     * 对齐官方灯光兑底:设备回报的灯效字节无法解析(非 1/2/3/4/6)且数组非空时,下发官方默认灯
-     * (`n0.a()`)。节流并限制每次连接的次数；写超时不终止会话，旧回调排空后才可重试。
+     * 官方灯效回读返回非空数据，且首字节不是已知模式 1、2、3、4 或 6 时，发送默认命令 `n0.a()`。
+     * 写入按间隔限流，并限制每次连接的次数。写入超时不会结束会话；旧回调排空后才能重试。
      */
     private fun maybeSendDefaultLight(s: Session) {
         if (!ready(s)) return
@@ -691,9 +690,8 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         }
     }
 
-    /** Missing read property is a deliberate skip, not a failed read. Data commits only in matching callbacks.
-     * [poisonOnTimeout] defaults to true for setup/control reads: a missing callback there means
-     * the session cannot complete initialization, so the timeout fails it explicitly.
+    /** read 能力缺失时跳过，不算读取失败。只有匹配的回调才能提交数据。
+     * [poisonOnTimeout] 默认用于 setup 和控制读取：缺少回调会阻止初始化完成，因此超时会使会话失败。
      */
     private suspend fun readIfReadable(
         s: Session,
@@ -705,8 +703,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
     ): Boolean {
         val g = s.gatt ?: return false
         if (!owns(s) || !fresh()) return false
-        // A missing READ property is a deliberate skip, not a failed read: the caller
-        // only asked because the characteristic might be readable.
+        // READ 权限缺失时跳过，不视为读取失败；调用方只会在特征可能可读时请求读取。
         if (ch.properties and BluetoothGattCharacteristic.PROPERTY_READ == 0) return true
         return operations.execute(g, ch, GattOperationQueue.Kind.READ, READ_TIMEOUT_MS,
             isCurrent = { owns(s) && s.characteristics[ch.uuid] === ch && fresh() },
@@ -766,7 +763,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
 
     private fun startPollLoop(s: Session) {
         if (!ready(s)) return
-        // This is the first-report grace period, not an invented temperature report.
+        // This is the grace period for the first report, not a fabricated temperature value.
         s.temperatureWatchStartedAtMs = SystemClock.elapsedRealtime()
         val targets = telemetryUuids.mapNotNull { s.characteristics[it] }
         val temperatures = listOf(CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID, CoolerBleConstants.STATUS_UUID)
@@ -779,7 +776,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                 isCurrent = { ready(s) },
                 nowMs = SystemClock::elapsedRealtime,
                 nextReadableAt = {
-                    // READ-only and READ+Notify retain exactly the same sampling policy.
+                    // READ-only and READ+Notify characteristics use the same sampling policy.
                     targets.filter { canPollRead(s, it) }.minOfOrNull { ch ->
                         if (ch.uuid == CoolerBleConstants.LIGHT_CONTROL_UUID) {
                             s.lastLightReadMs?.plus(LIGHT_READ_RETRY_MS) ?: 0L
@@ -798,7 +795,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             )
         }
         s.rssiJob = scope.launch {
-            // RSSI remains best-effort 2 s sampling, independent of configuration reads.
+            // RSSI is sampled on a best-effort two-second schedule, independently of configuration reads.
             runRssiSchedule(
                 availabilityChanges = operations.availabilityChanges,
                 isCurrent = { ready(s) },
@@ -819,7 +816,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         }
     }
 
-    /** Due work only: blocked lanes await a queue event, throttled light reads their deadline. */
+    /** Run due work only. Blocked lanes wait for a queue event; light reads wait for their deadline. */
     private suspend fun pollTelemetryOnce(
         s: Session,
         targets: List<BluetoothGattCharacteristic>,
@@ -838,8 +835,8 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             var started = false
             val light = ch.uuid == CoolerBleConstants.LIGHT_CONTROL_UUID
             val success = readIfReadable(s, ch,
-                // A queued passive read may be superseded, but an accepted read is never
-                // cancelled to make room for control. Freshness is checked before dispatch.
+                // A queued passive read may be superseded, but an accepted read is never cancelled to
+                // make room for control. Check freshness before dispatch.
                 fresh = { canPollRead(s, ch) && (!recovery || temperatureStale(s)) },
                 poisonOnTimeout = false, quarantineOnTimeout = !light,
                 beforeRead = {
@@ -871,12 +868,11 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         if (!owns(s)) return
         val previous = _state.value
         val update = CoolerTelemetryReducer.reduce(previous, uuid, value)
-        // Official refreshLightModeView else-branch: a non-empty 0x1013 reply whose
-        // effect byte is not a known mode (1/2/3/4/6) cannot be displayed, so the
-        // official app pushes the default effect to bring the device to a known state.
-        // A known mode whose colour bytes are missing is parsed as null by
-        // [RGBConfig.fromNotification] (so no colour is invented) but it is still a known
-        // mode: the official page displays it without a fallback, so neither do we.
+        // A non-empty 0x1013 reply with an unknown effect byte, anything other than 1, 2, 3, 4, or 6,
+        // cannot be displayed. The official app writes the default effect to restore a known state.
+        // If the mode is known but color bytes are missing, [RGBConfig.fromNotification] returns
+        // null without inventing a color. The mode is still known, so the official page displays
+        // it without a fallback and we do the same.
         if (uuid == CoolerBleConstants.LIGHT_CONTROL_UUID && update == null &&
             value.isNotEmpty() && LightEffect.fromCode(value[0]) == null
         ) {
@@ -886,10 +882,10 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         val committed = confirmedConfigurationState(previous, uuid, update)
         _state.value = committed
         if (update?.temperatureReported == true || uuid == CoolerBleConstants.LIGHT_CONTROL_UUID) {
-            // Even an identical temperature report changes the watchdog deadline.
+            // Even an unchanged temperature report extends the watchdog deadline.
             s.telemetryChanges.value++
         }
-        // Repeat limits stay quiet, but a limit received before readiness must not be lost.
+        // Keep quiet for repeated limits, but preserve a limit received before readiness.
         if (powerLimitNeedsEnforcement(previous, committed)) enforcePowerLimit()
     }
 
@@ -906,8 +902,8 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         val maxRaw = state.fanRawLimit ?: return
         val s = session ?: return
         scope.launch {
-            // A charger limit is safety policy, not a newer user mode selection. Serialize
-            // with mode transitions, including an accepted ON not reflected in telemetry yet.
+            // A charger limit is safety policy, not a newer user mode request. Serialize it with mode
+            // transitions, including an accepted ON that telemetry has not reported yet.
             s.modeCommands.enforceOff(
                 mode = Mode.BOOST,
                 isCurrent = { ready(s) && _state.value.powerLimited },
@@ -920,19 +916,20 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             )
         }
         val type = state.deviceType ?: return
-        // 待确认的拖动目标优先于回读值(与 fanGear 同一口径):刚拖到超限档位、限档随后才上报时,
-        // 只比回读值会漏掉本次拖动。
+        // Prefer a pending drag target to the read-back value, as with fanGear. If the user reaches
+        // an over-limit value before the limit report arrives, comparing only read-back would miss it.
         val intendedRaw = state.pendingFanPercent
             ?.let { CoolerBleConstants.percentageToRaw(it, type) }
             ?: state.fanRaw ?: return
         if (intendedRaw <= maxRaw) return
-        // 破坏神已在上面关掉(状态随后回读确认),所以按破坏神关闭后的口径判断是否有手动档位可写;
-        // 否则限档上报那一刻正开着破坏神时会直接 return,边缘触发的这次压档就永远丢失了。
+        // BOOST was disabled above, although its read-back has not arrived. Evaluate the manual-level
+        // gate as if BOOST were off; otherwise the limit event could return here and be lost.
         if (!state.copy(boostOn = false).manualLevelEnabled) return
         Log.i(TAG, "Power limit ${state.fanLimit} clamps fan raw $intendedRaw -> $maxRaw")
-        // 不能调公开的 setFanSpeed:它按当前快照再查一次 manualLevelEnabled,而此时
-        // 破坏神关闭的回读还没回来(boostOn 仍为 true),压档会被直接吞掉且边沿不再补发。
-        // 手动闸上面已经评估过,这里只做钳制和发写;onMain 则是因为 enforce 可能跑在 binder 线程。
+        // Do not call the public setFanSpeed here. It would recheck manualLevelEnabled while boostOn
+        // still reads true, swallow this one-time clamp, and provide no later edge to retry it.
+        // The manual gate was already evaluated above. This path only clamps and writes; onMain
+        // is needed because enforcePowerLimit may run from a Binder thread.
         val percent = CoolerBleConstants.rawToPercentage(maxRaw, type)
         onMain { writeFanSpeed(percent, enforceManual = false) }
     }
@@ -974,8 +971,8 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                 compositeFresh = compositeFresh,
                 write = { enqueueWrite(s, command.characteristic, value, beforeWrite = beforeWrite, fresh = it) },
                 readBack = {
-                    // A GATT write callback confirms delivery only. Read-back remains the
-                    // source of configuration, but its failure must not kill the session.
+                    // A GATT write callback confirms delivery only. Read-back remains the configuration source,
+                    // and a read-back failure must not end the session.
                     readIfReadable(s, command.characteristic, fresh = it, poisonOnTimeout = false,
                         quarantineOnTimeout = command.characteristic.uuid != CoolerBleConstants.LIGHT_CONTROL_UUID)
                 },
@@ -987,7 +984,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
 
     fun setFanSpeed(percent: Int) = onMain { writeFanSpeed(percent, enforceManual = true) }
 
-    /** 6 Pro's official slider is expressed directly as fan raw 40..80, not as 8 Pro gears. */
+        // 6 Pro 的官方滑条直接使用 fan raw 40..80，不使用 8 Pro 档位。
     fun setFanRaw(raw: Int) = onMain {
         if (_state.value.deviceType != CoolerDeviceType.JACKET_6_PRO) return@onMain
         if (!_state.value.manualLevelEnabled) return@onMain
@@ -1002,8 +999,8 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
     private fun writeFanSpeed(percent: Int, enforceManual: Boolean) {
         if (enforceManual && !_state.value.manualLevelEnabled) return
         val type = _state.value.deviceType ?: return
-        // 供电功率不足时把请求钳到限档 raw 对应的百分比:整数换算只能往下取整,
-        // 所以钳后重新算出的 raw 不会超过限档值。
+        // Convert the power limit to a percentage before clamping. Integer conversion rounds down,
+        // so converting the clamped percentage back to raw cannot exceed the limit.
         val maxPercent = _state.value.fanRawLimit
             ?.let { CoolerBleConstants.rawToPercentage(it, type) } ?: 100
         val clamped = percent.coerceIn(0, maxPercent)
@@ -1014,8 +1011,9 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         val command = command(Control.FAN, CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID) ?: return
         val type = _state.value.deviceType ?: return
         val clampedRaw = raw.coerceIn(type.rawMin, type.rawMax)
-        // 6 Pro+ 官方界面只会写 9 个档位 raw(c(I) 取档 → d(I) 回 raw),没有连续滑条的证据,
-        // 因此任意目标一律归一到档位格点再下发。
+        // The 6 Pro+ official UI writes nine raw-value steps (c(I) selects a step, then d(I)
+        // returns its raw value). There is no evidence of a continuous slider, so normalize
+        // every target to a step before writing.
         val effectiveRaw = if (type == CoolerDeviceType.JACKET_6_PRO_PLUS) {
             CoolerBleConstants.snapToGearRaw6ProPlus(clampedRaw)
         } else clampedRaw
@@ -1065,8 +1063,8 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
 
     private fun startMode(mode: Mode, on: Boolean) = modeCommand(mode)?.let { target ->
         val coordinator = target.session.modeCommands
-        // Register before launching: a queued ON can already threaten mutual exclusion,
-        // even when the last reported state still says OFF (e.g. concurrent tile requests).
+        // Register before launching work. A queued ON can already threaten mutual exclusion even when
+        // the last reported state is OFF, for example when tile requests arrive concurrently.
         val request = coordinator.request(mode, on)
         scope.async {
             coordinator.execute(
@@ -1076,8 +1074,8 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                 },
                 reportedOn = { if (it == Mode.SMART) _state.value.smartOn else _state.value.boostOn },
                 write = { writeMode, writeOn, ticketFresh ->
-                    // The attached OFF retains per-control freshness but MUST NOT register
-                    // a new mode ticket: both writes belong to the original request.
+                    // The attached OFF keeps per-control freshness but must not register a new mode ticket;
+                    // both writes belong to the original request.
                     val command = if (writeMode == mode) target else modeCommand(writeMode)
                     val value = if (_state.value.deviceType?.usesJacket6ProFamilyProtocol == true) {
                         if (writeMode == Mode.SMART) Jacket6ProProtocol.autoCommand(writeOn)
@@ -1094,7 +1092,8 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
     }
 
     fun setBoost(on: Boolean) = onMain {
-        // 官方 Jacket8ProActivityV3.u5:功耗限档低于"不限档"时,开启破坏神的请求被否决。
+        // Official Jacket8ProActivityV3.u5 rejects a BOOST request when the power limit is below
+        // the unrestricted level.
         if (on && _state.value.powerLimited) {
             Log.i(TAG, "Boost on refused: charger power limited (limit=${_state.value.fanLimit})")
             return@onMain

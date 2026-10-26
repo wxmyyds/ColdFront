@@ -5,7 +5,7 @@ import io.github.wxmyyds.coldfront.domain.ConnectionState
 import io.github.wxmyyds.coldfront.domain.CoolerLiveState
 import io.github.wxmyyds.coldfront.domain.CoolerProfile
 
-/** Route is deliberately absent: opening scan with an existing connection is not a new success. */
+/** 扫描页已有连接时不视为新的连接成功，因此不会自动离开。 */
 internal data class ConnectionNavigationKey(val connection: ConnectionState, val sessionId: Long)
 
 internal fun connectionNavigationKey(state: CoolerLiveState): ConnectionNavigationKey =
@@ -22,9 +22,6 @@ internal fun shouldLeaveScanOnConnection(
     isScanDestination: Boolean,
 ): Boolean = previous != current && current.connection == ConnectionState.CONNECTED && isScanDestination
 
-/**
- * App start may dial the configured default device, but never steals a running session: the
- * foreground service or a connection the user started earlier already owns that one.
- */
+// 启动时可以连接默认设备，但不会抢占已有的服务或用户连接。
 internal fun startupConnectTarget(profile: CoolerProfile?, hasRunningSession: Boolean): CoolerProfile? =
     if (hasRunningSession) null else profile

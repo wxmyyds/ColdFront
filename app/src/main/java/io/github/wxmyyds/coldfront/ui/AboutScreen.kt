@@ -73,7 +73,7 @@ fun AboutScreen(onBack: () -> Unit) {
                     .padding(horizontal = 24.dp, vertical = 32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                // 关于页图标使用当前主题角色，跟随动态取色、调色板和深浅模式。
+                // 关于页图标颜色取自当前主题，会随动态取色、调色板和深浅模式变化。
                 Surface(
                     shape = CircleShape,
                     color = MaterialTheme.colorScheme.primary,

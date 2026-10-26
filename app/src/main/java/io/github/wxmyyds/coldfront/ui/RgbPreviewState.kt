@@ -1,5 +1,5 @@
 package io.github.wxmyyds.coldfront.ui
 
-/** Kept-composed tabs still share the Activity lifecycle; resume alone does not mean visible. */
+/** A tab kept in composition still shares the Activity lifecycle. The Activity being resumed does not mean that tab is visible. */
 internal fun isRgbPreviewActive(isPageActive: Boolean, isResumed: Boolean): Boolean =
     isPageActive && isResumed

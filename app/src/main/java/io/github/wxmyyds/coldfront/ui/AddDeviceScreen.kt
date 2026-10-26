@@ -94,7 +94,7 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
     val canConnect = resumed && scanReady && !connecting
 
     fun connect(request: ScanConnectionRequest) {
-        // Check the source too: a second tap can arrive before the StateFlow recomposes this screen.
+        // 检查实时状态，避免第二次点击发生在 StateFlow 重组之前。
         val current = vm.liveState.value.connection
         val conditions = vm.scanState.value
         if (!resumed || !conditions.permissionGranted || !vm.bluetoothEnabled.value ||
@@ -126,12 +126,12 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
         if (connectionRequest != null) listState.animateScrollToItem(0)
     }
 
-    // 重新授权启动器（授权后刷新条件，扫描由下方 LaunchedEffect 重启）
+    // 授权后刷新条件，下面的 LaunchedEffect 会按新条件重启扫描。
     val permLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
     ) { vm.refreshBluetoothState() }
 
-    // Settings/permission screens can pause us without removing this composition.
+    // 设置或权限页面可能暂停当前组合，但不会移除它。
     LifecycleResumeEffect(vm) {
         vm.refreshBluetoothState()
         resumed = true
@@ -144,7 +144,7 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
         vm, resumed, btEnabled, scanState.bluetoothOn, scanState.permissionGranted,
         scanState.locationServiceEnabled, connecting, scanRequested,
     ) {
-        // Re-read after refresh: lifecycle-collected UI values may still be one frame behind.
+        // 刷新后重新读取条件，避免生命周期收集的 UI 值落后一帧。
         val conditions = vm.scanState.value
         val current = vm.liveState.value.connection
         if (resumed && scanRequested && scanReady && conditions.permissionGranted &&
@@ -189,7 +189,7 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // Recovery is always first, including permission denial with Bluetooth also off.
+            // 恢复项始终排在最前面，包括权限被拒且蓝牙关闭的情况。
             if (diagMode || !scanReady || scanState.errorCode != null) {
                 item(key = "scanStatus") {
                     ScanStatusCard(
@@ -220,7 +220,7 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
                         retryEnabled = canConnect,
                         retryLabel = if (connectionRequest != null) strings.retry else strings.scanRescan,
                         onRetry = {
-                            // The callback is intentionally not saveable; after rotation rescan instead.
+                            // 回调不保存；旋转后改为重新扫描。
                             val request = connectionRequest
                             if (request != null) connect(request) else rescan()
                         },
@@ -228,11 +228,13 @@ fun AddDeviceScreen(vm: CoolerViewModel, onBack: () -> Unit = {}) {
                 }
             }
             when {
-                !scanState.permissionGranted -> Unit // The status card owns permission recovery.
+                // 权限恢复由状态卡处理。
+                !scanState.permissionGranted -> Unit
                 !btEnabled || !scanState.bluetoothOn -> item(key = "bluetoothOff") {
                     BluetoothOffState(strings)
                 }
-                !locationReady -> Unit // Android <= 30 must enable location before scanning.
+                // Android 30 及更低版本扫描前必须开启定位。
+                !locationReady -> Unit
                 diagMode -> {
                     if (rawDevices.isEmpty()) {
                         item(key = "diagnosticEmpty") {
@@ -334,7 +336,7 @@ private fun ConnectionStatusCard(
     }
 }
 
-/** 扫描条件状态卡：权限/扫描器/定位/蓝牙，一项异常给对应修复按钮 */
+/** 扫描条件状态卡：显示权限、扫描器、定位和蓝牙状态。 */
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ScanStatusCard(
@@ -358,7 +360,7 @@ private fun ScanStatusCard(
                 style = if (scanState.permissionGranted) {
                     MaterialTheme.typography.bodySmall
                 } else {
-                    // 异常项用 emphasized 加重，而不是在调用点散写字重
+                    // 异常项使用强调字重，避免在调用点重复设置。
                     EmphasizedTypography.bodySmall
                 },
                 color = if (scanState.permissionGranted) MaterialTheme.colorScheme.onSurface
@@ -435,15 +437,14 @@ private fun DiagnosticCard(
     val coolerType = entry.coolerType
     val isCooler = coolerType != null
     Card(
-        // Card 官方 onClick 重载：整卡涟漪 + 按钮语义 + 状态层，不再 Modifier.clickable 手工拼
+        // 卡片本身负责点击、涟漪和可选择语义。
         onClick = { onSelect(entry) },
         enabled = enabled,
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(
             containerColor = if (isCooler) {
-                // 已识别的散热器是扫描结果的「重点目标」，用对比强调角色；
-                // secondaryContainer 语义是次要/低强调，与此意图相反。
+                // 已识别设备使用更高对比度的容器，突出可连接目标。
                 MaterialTheme.colorScheme.tertiaryContainer
             } else {
                 MaterialTheme.colorScheme.surfaceContainerLowest
@@ -464,7 +465,7 @@ private fun DiagnosticCard(
                 itemVerticalAlignment = Alignment.CenterVertically,
             ) {
                 if (isCooler) {
-                    // 静态徽标保持不可交互，避免在可选择的设备卡内产生假按钮语义。
+                    // 徽标保持静态，避免在可选择的设备卡中产生按钮语义。
                     Surface(
                         shape = MaterialTheme.shapes.small,
                         color = MaterialTheme.colorScheme.primary,

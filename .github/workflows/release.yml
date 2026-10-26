@@ -27,7 +27,7 @@ env:
 permissions:
   contents: write
 
-# 正式版与预发布共享同一并发组：两者都会写 tag / versionCode 水位，必须串行
+# Stable and prerelease releases share this group. Both update tags and the versionCode high-water mark, so they must run one at a time.
 concurrency:
   group: release-versioning
   cancel-in-progress: false
@@ -37,8 +37,8 @@ jobs:
     name: Build, tag and publish (${{ inputs.mode }})
     runs-on: ubuntu-latest
     steps:
-      # 正式版固定检出 main；预发布检出指定分支或 SHA。
-      # 发布分支（release / prerelease）模型已废弃：不再维护任何长期发布分支。
+      # Stable releases use main; prereleases use the selected branch or SHA.
+      # Tags track release versions, so release/prerelease branches are no longer maintained.
       - name: Checkout source
         uses: actions/checkout@v7
         with:
@@ -54,17 +54,13 @@ jobs:
       - name: Set up Gradle (with dependency cache)
         uses: gradle/actions/setup-gradle@v6
 
-      # compileSdk 37 可能不在 runner 预装 SDK 里，先接受许可以便 AGP 自动补装
+      # Accept licenses so AGP can install compileSdk 37 if the runner does not have it.
       - name: Accept Android SDK licenses
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
-      # ---------------------------------------------------------------------------
-      # 版本号解析
-      #
-      # 版本水位来自 tag，而不是分支：正式版 tag = vX.Y.Z，预发布 tag = vX.Y.Z-rc.N。
-      # 每次发布都会把 versionName / versionCode 写进一个只被 tag 引用的提交，
-      # main 因此永远不含版本号改动，也不需要任何长期发布分支。
-      # ---------------------------------------------------------------------------
+      # Resolve versions from tags: vX.Y.Z for stable releases and vX.Y.Z-rc.N for prereleases.
+      # Each release stores versionName and versionCode in a commit referenced only by its tag;
+      # main therefore stays unchanged, and no long-lived release branches are needed.
       - name: Resolve version
         id: resolve
         shell: bash
@@ -75,7 +71,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          # grep 无匹配时退出 1，在 set -e 下会静默终结整步，故一律 || true 兜住后显式校验
+          # grep returns 1 when there is no match, which would stop set -e. Handle that case here and validate the result below.
           read_version() {
             git show "$1:app/build.gradle.kts" 2>/dev/null \
               | grep -oP 'versionName\s*=\s*"\K[0-9][0-9A-Za-z.\-]*' || true
@@ -87,7 +83,7 @@ jobs:
 
           git fetch --tags --force origin >/dev/null 2>&1 || true
 
-          # 最近一个正式版 tag（按版本排序，排除 rc）
+          # Latest stable tag, sorted by version and excluding rc tags.
           LATEST_STABLE_TAG=$(git tag --list --sort=-v:refname \
             | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
 
@@ -107,7 +103,7 @@ jobs:
           fi
           echo "基线版本：v$STABLE_VERSION（versionCode $CODE）"
 
-          # 全局 versionCode 水位：扫描近期预发布 tag，取最大值，保证 versionCode 单调递增
+          # Scan recent prerelease tags and use the highest versionCode to keep it increasing globally.
           HIGH_WATER="$CODE"
           for T in $(git tag --list --sort=-v:refname 'v*-rc.*' | head -20); do
             C=$(read_code "$T")
@@ -117,10 +113,10 @@ jobs:
             echo "预发布 tag 水位更高：versionCode $HIGH_WATER"
           fi
 
-          # ---- 分流：正式版 ----
+          # Stable release path
           if [[ "$MODE" == "stable" ]]; then
             if [[ -z "$INPUT" ]]; then
-              # 留空仅在从未发过正式版时可用（等价于用 main 上的初始版本号）
+              # An empty version is allowed only before the first stable release; use main's initial version.
               if [[ -n "$LATEST_STABLE_TAG" ]]; then
                 echo "::error::已存在正式版 $LATEST_STABLE_TAG，请填写更高的版本号（X.Y.Z）"
                 exit 1
@@ -144,7 +140,7 @@ jobs:
               BUMPED=true
             fi
             TAG="v${VERSION}"
-          # ---- 分流：预发布 ----
+          # Prerelease path
           else
             if ! git check-ref-format --branch "$SOURCE_REF" >/dev/null 2>&1 &&
               ! [[ "$SOURCE_REF" =~ ^[0-9a-f]{40}$ ]]; then
@@ -167,13 +163,13 @@ jobs:
             TAG="v${VERSION}"
           fi
 
-          # tag 去重，防止重复发布
+          # Reject an existing tag to prevent duplicate releases.
           if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
             echo "::error::tag $TAG 已存在，拒绝重复发布"
             exit 1
           fi
 
-          # 写入版本号（只在工作区改动，随后由一个仅被 tag 引用的提交固化）
+          # Apply version changes in the worktree; the following tag-only commit records them.
           if [[ "$BUMPED" == "true" ]]; then
             sed -i "s/versionName = \".*\"/versionName = \"$VERSION\"/" app/build.gradle.kts
             sed -i "s/versionCode = [0-9]*/versionCode = $NEW_CODE/" app/build.gradle.kts
@@ -196,8 +192,7 @@ jobs:
       - name: Run tests and lint
         run: ./gradlew testDebugUnitTest testReleaseUnitTest lintRelease --stacktrace
 
-      # 发布必须带签名：密钥库只存在于 Secrets，不落仓库。缺密钥直接失败，
-      # 避免静默发出未签名（实际上无法安装）的 APK。
+      # 所有发布版本都必须签名。密钥库保存在 Secrets 中；缺失时直接失败，避免发布无法安装的未签名 APK。
       - name: Materialize release keystore
         shell: bash
         env:
@@ -223,11 +218,11 @@ jobs:
         run: |
           set -euo pipefail
           ./gradlew assembleRelease --stacktrace
-          # 签名生效时 AGP 产出 app-release.apk；未签名会以 -unsigned 结尾，此处直接卡住
+          # AGP names signed APKs app-release.apk and unsigned APKs with an -unsigned suffix; require the signed file.
           test -f app/build/outputs/apk/release/app-release.apk \
             || { echo "::error::未生成已签名 APK"; ls -l app/build/outputs/apk/release/; exit 1; }
 
-      # 发布前校对签名：确认 APK 真的带证书且是预期的那把
+      # Verify that the APK has a certificate and that apksigner accepts it before publishing.
       - name: Verify APK signature
         shell: bash
         run: |
@@ -237,12 +232,8 @@ jobs:
           echo "使用 $APKSIGNER"
           "$APKSIGNER" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk
 
-      # ---------------------------------------------------------------------------
-      # 打 tag 并发布
-      #
-      # 版本号改动提交只被 tag 引用、不进入任何分支，因此 main 保持干净。
-      # 正式版 tag 直接落在 main 的最新提交之上；预发布 tag 落在被检出的来源 SHA 之上。
-      # ---------------------------------------------------------------------------
+      # Version changes go in a commit referenced only by the tag, leaving main unchanged.
+      # Stable tags are based on the latest main commit; prerelease tags use the selected source SHA.
       - name: Tag and publish GitHub release
         shell: bash
         env:
@@ -273,7 +264,7 @@ jobs:
           echo "已推送 tag $TAG"
 
           if [[ "$MODE" == "stable" ]]; then
-            # 上一个正式版 tag（不含本次），用于生成变更清单
+            # Previous stable tag, used to build the changelog range.
             PREV=$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)
             RANGE="${PREV:+$PREV..}HEAD"
             echo "变更范围：$RANGE（上一个正式版：${PREV:-无}）"

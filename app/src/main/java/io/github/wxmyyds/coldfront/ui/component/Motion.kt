@@ -18,7 +18,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.IntOffset
 
 internal object AppMotion {
-    /** Restrained spatial continuity for connection/empty-content state changes. */
+    /** Use restrained spatial motion when connection or empty-content states change. */
     fun contentChange(motionScheme: MotionScheme): ContentTransform =
         contentChange(
             spatialSpec = motionScheme.defaultSpatialSpec<IntOffset>(),
@@ -35,7 +35,7 @@ internal object AppMotion {
                 slideOutVertically(animationSpec = spatialSpec) { -it / 24 })
 }
 
-/** Crossfade a changing row icon (drawable resource) without adding arbitrary rotation or scale to state semantics. */
+/** Crossfade row icons when the drawable changes; avoid rotation or scaling that could imply a state change. */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun AnimatedRowIcon(

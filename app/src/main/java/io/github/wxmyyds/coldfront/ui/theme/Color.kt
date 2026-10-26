@@ -18,13 +18,11 @@ internal object ThemeSeed {
 }
 
 /**
- * 页面层级：底色与选项容器分离。
+ * 页面底色使用 `surfaceContainer`（tone 94/9）。SPEC_2025 会将 `background` 映射到
+ * `surface`（tone 98/4），颜色较浅，与内容容器几乎相同。`surfaceContainerLowest` 的 tone
+ * 是 100/0，chroma 为 0，呈纯白或纯黑，因此不适合作为页面底色。
  *
- * 页面底色用 `surfaceContainer`（tone 94/9），不用 `background`：SPEC_2025 把
- * `background` 重映射到 `surface`（tone 98/4），过浅，与内容容器几乎同色。
- * 不用 `surfaceContainerLowest`：那是 tone 100/0 的纯白/纯黑，chroma 为 0。
- *
- * `onBackground` 同步换成 `onSurface`，保证底色变化后文字对比度仍然可读。
+ * 将页面底色改为 `surfaceContainer` 后，`onBackground` 也改为 `onSurface`，以维持文字对比度。
  */
 internal fun pageLayerScheme(scheme: ColorScheme): ColorScheme = scheme.copy(
     background = scheme.surfaceContainer,
@@ -32,10 +30,10 @@ internal fun pageLayerScheme(scheme: ColorScheme): ColorScheme = scheme.copy(
 )
 
 /**
- * 选项行与分组卡片的容器角色：比页面底色（surfaceContainer）更亮一档。
+ * 选项行和分组卡片使用的容器色，比页面底色（surfaceContainer）亮一档。
  *
- * SPEC_2025 下 surfaceBright 为 tone 98/18，而页面底色 surfaceContainer 为 94/9，
- * 因此行容器比底色更浅/更亮，与“卡片浮在页面上”的观感一致。
+ * SPEC_2025 中，surfaceBright 的 tone 是 98/18，页面底色 surfaceContainer 是 94/9，
+ * 因此选项行比页面底色更浅，形成卡片浮在页面上的层次。
  */
 internal fun optionContainerColor(scheme: ColorScheme): Color = scheme.surfaceBright
 /**

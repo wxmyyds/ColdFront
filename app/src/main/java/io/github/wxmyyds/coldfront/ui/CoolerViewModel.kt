@@ -31,7 +31,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 
-/** UI state bridge. Transport lifetime and successful-connection bookkeeping have explicit owners. */
+/** UI 状态桥接；传输生命周期和成功连接记录由各自的所有者管理。 */
 class CoolerViewModel(app: Application) : AndroidViewModel(app) {
     private val ble = BleManagerHolder.acquire(app, this)
     private val profileRepo = ProfileRepository(app)
@@ -52,8 +52,7 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
     private val _bluetoothEnabled = MutableStateFlow(ble.isBluetoothEnabled)
     val bluetoothEnabled: StateFlow<Boolean> = _bluetoothEnabled.asStateFlow()
 
-    // A transient read failure keeps the last good value and retries, rather than replacing
-    // persisted data with defaults or permanently killing an eagerly collected StateFlow.
+    // 短暂读取失败时保留上次有效值并重试，不用默认值覆盖已存数据，也不终止持续收集的 StateFlow。
     private fun <T> Flow<T>.uiState(initial: T): StateFlow<T> =
         storageStateIn(viewModelScope, initial, ::reportStorageError)
 
@@ -62,7 +61,7 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
     val profiles = profileRepo.observeProfiles(::reportStorageError)
         .onEach { _profilesLoaded.value = true }
         .uiState(emptyList())
-    // null is a real value here ("no startup default"), so readiness is reported separately.
+    // null 是有效值，表示没有启动默认设备；加载完成状态单独记录。
     private val _defaultDeviceLoaded = MutableStateFlow(false)
     val defaultDeviceLoaded: StateFlow<Boolean> = _defaultDeviceLoaded.asStateFlow()
     val defaultDevice: StateFlow<CoolerProfile?> = profileRepo.observeDefaultProfile(::reportStorageError)
@@ -75,15 +74,13 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
         hasRunningSession = ble::hasRunningSession,
         connect = ble::connectByAddress,
     )
-    // null means no successful disk read yet. Readiness and all settings move atomically.
+    // null 表示尚未成功读盘；设置值和加载状态一起更新。
     val settings: StateFlow<AppSettings?> = settingsRepo.settings.uiState<AppSettings?>(null)
 
     init {
         backgroundResume.attach()
         viewModelScope.launch {
-            // App start dials the configured default device once. A default can only be chosen
-            // after a successful connection, so permissions and the adapter were already usable
-            // then; a missing one here is reported like any other failed attempt, without retries.
+            // 启动时只尝试连接一次配置的默认设备。默认设备只能在成功连接后设置，权限和适配器当时已可用；本次失败只报告错误，不会重试。
             val profile = try {
                 profileRepo.loadDefaultProfile()
             } catch (e: IOException) {
@@ -97,8 +94,7 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
             liveState.filter { it.isConnected }
                 .distinctUntilChangedBy { it.connectionSessionId }
                 .collect { state ->
-                    // All connection entry points share this commit-on-success path. No profile
-                    // is created by a failed attempt, and metadata is retained on reconnect.
+                    // 所有连接入口都在成功后记录；失败不会新建档案，重新连接时保留已有元数据。
                     try {
                         profileMutations.recordConnection(state)
                     } catch (e: IOException) {
@@ -154,14 +150,14 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
         stopAuto(switchToManual = true)
     }
 
-    /** Cancel same-device background recovery; BLE owns the mutually exclusive mode writes. */
+    // 取消同一设备的后台恢复；BLE 负责互斥模式写入。
     private fun stopAuto(switchToManual: Boolean) {
         val requested = ManualControlTarget.from(liveState.value) ?: return
         saveSetting {
             val target = profileRepo.loadServiceProfile()
             if (!requested.matches(liveState.value)) return@saveSetting
             if (target != null && target.macAddress.equals(requested.address, ignoreCase = true)) {
-                // Service owns background opt-out and validates this session again on delivery.
+                // Service 负责后台退出，并在发送时再次校验会话。
                 if (switchToManual) CoolerService.switchToManual(getApplication(), requested)
                 else CoolerService.stopForTarget(getApplication(), requested)
             } else if (switchToManual) {
@@ -172,7 +168,7 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setBoost(on: Boolean) {
         if (on && !liveState.value.powerLimited) stopAuto(switchToManual = false)
-        // Do not enqueue a delayed Smart OFF here: it could supersede the Boost transition.
+        // 不在这里排队延迟的 Smart OFF，避免覆盖 Boost 切换。
         ble.setBoost(on)
     }
     fun setOvercoldProtection(on: Boolean) = ble.setOvercoldProtection(on)

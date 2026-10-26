@@ -6,8 +6,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 /**
- * M3 字号阶梯（15 级 baseline）。
- * MD3E 的完整 type scale 是 15 baseline + 15 emphasized，见 [EmphasizedTypography]。
+ * MD3 字号阶梯，共 15 个 baseline 样式。
+ * MD3E 另有 15 个 emphasized 样式，详见 [EmphasizedTypography]。
  */
 val AppTypography = Typography(
     displayLarge = TextStyle(fontWeight = FontWeight.Normal, fontSize = 57.sp, lineHeight = 64.sp, letterSpacing = (-0.25).sp),
@@ -28,17 +28,18 @@ val AppTypography = Typography(
 )
 
 /**
- * MD3E 的 emphasized 字号阶梯（15 级）。
+ * MD3E 的 emphasized 字号阶梯，共 15 级。
  *
- * Compose 的 [Typography] 只有 baseline 的 15 个槽位，emphasized 得自己定义。规范用法：
- * 标题、选中态、关键数值、主要操作——即「本来就该加重的文字」
+ * Compose 的 [Typography] 只有 15 个 baseline 样式，因此 emphasized 样式需单独定义。
+ * 规范建议将其用于本身已通过字重表达强调的文字，例如标题、选中态、关键数值和主要操作
  * （type-scale-tokens.md：Use the emphasized styles on text that already uses weight）。
  *
- * 取值规则：比 baseline 高一档字重（Normal 400 → Bold 700，Medium 500 → SemiBold 600），
- * **字号 / 行高 / 字距一律不变**——这样 emphasized 与 baseline 混排时基线节奏与换行位置一致。
+ * baseline 的字重提高一档（Normal 400 → Bold 700，Medium 500 → SemiBold 600），
+ * 字号、行高和字距保持不变。这样两类样式混排时，基线节奏和换行位置一致。
  *
- * 用法：把 `style = MaterialTheme.typography.headlineSmall` + `fontWeight = FontWeight.SemiBold`
- * 这种散写换成 `style = EmphasizedTypography.headlineSmall`，字重只在这里集中定义。
+ * 使用 `EmphasizedTypography.headlineSmall` 等样式，替代分散设置
+ * `style = MaterialTheme.typography.headlineSmall` 和 `fontWeight = FontWeight.SemiBold`。
+ * 字重定义集中在这里。
  */
 object EmphasizedTypography {
     // baseline Normal(400) → Bold(700)

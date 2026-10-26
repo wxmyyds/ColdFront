@@ -62,9 +62,9 @@ internal fun TopLevelPager(
 }
 
 /**
- * Animate only tab selection. On a detail preview the selected page is already at offset zero,
- * even if the detail was opened before a tab animation finished. NavHost owns that whole return;
- * the strip must neither continue its own motion nor replay it when MAIN is recomposed.
+ * The strip animates tab changes, not detail navigation. On a detail route, the selected page is already
+ * at offset zero, even if the route opened before the tab animation finished. NavHost handles the
+ * return transition; keep the strip still so MAIN recomposition does not replay its animation.
  */
 @Composable
 internal fun PrimaryPageStrip(
@@ -110,7 +110,7 @@ internal fun PrimaryPageStrip(
                     if (target != selectedPage) {
                         onSelectPage(target)
                     } else {
-                        // The selected state did not change, so LaunchedEffect will not restart.
+                        // Since selectedPage did not change, LaunchedEffect will not restart.
                         pageScope.launch {
                             pagePosition.animateTo(
                                 target.toFloat(),
@@ -124,7 +124,8 @@ internal fun PrimaryPageStrip(
             repeat(pageCount) { index ->
                 Box(
                     Modifier.width(pageWidth).fillMaxHeight().offset {
-                        // Use the settled position immediately, not one frame after the effect.
+                        // Use the selected page position immediately while inactive; do not wait for
+                        // the effect to snap the animation state.
                         val position = if (isActive) pagePosition.value else selectedPage.toFloat()
                         IntOffset(((index - position) * pageWidthPx).roundToInt(), 0)
                     },

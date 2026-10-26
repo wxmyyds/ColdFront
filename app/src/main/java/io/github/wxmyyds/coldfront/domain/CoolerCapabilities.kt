@@ -2,7 +2,7 @@ package io.github.wxmyyds.coldfront.domain
 
 import java.util.UUID
 
-/** Discovered GATT capabilities, not an optimistic assumption based on the model name. */
+/** Capabilities confirmed from discovered GATT characteristics. */
 data class CoolerCapabilities(
     val hasCoolingSwitch: Boolean = false,
     val coolingControl: Boolean = false,

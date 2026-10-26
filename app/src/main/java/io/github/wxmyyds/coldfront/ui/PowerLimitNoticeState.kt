@@ -15,7 +15,7 @@ internal data class PowerLimitNoticeState(
             this
         }
 
-    /** Call on the normalized state, before rendering the existing notice. */
+    /** Call this after normalization and before rendering the notice. */
     fun shouldShow(powerLimited: Boolean, limit: Int?): Boolean =
         powerLimited && limit != null && acknowledgedLimit != limit
 }

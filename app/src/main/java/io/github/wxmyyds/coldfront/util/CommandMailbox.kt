@@ -9,10 +9,9 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 
 /**
- * A lifecycle-owned, single-consumer mailbox for complete suspending commands, not lock permits.
- * Producers submit work; only the consumer executes it. Cancelling a reply skips work that has
- * not started, but cannot cancel an already-started transaction or accepted device operation.
- * Callers must not recursively await this same mailbox from one of its commands.
+ * A lifecycle-owned mailbox with one consumer for complete suspending commands. Cancelling a
+ * reply skips queued work, while an admitted transaction and accepted device operation continue.
+ * Do not await this mailbox recursively from one of its commands.
  */
 internal class CommandMailbox(scope: CoroutineScope) {
     private class Command<T>(val action: suspend () -> T) {
@@ -24,8 +23,7 @@ internal class CommandMailbox(scope: CoroutineScope) {
                 reply.complete(action())
             } catch (cause: CancellationException) {
                 reply.cancel(cause)
-                // A command-local cancellation does not kill unrelated queued commands.
-                // Lifecycle cancellation, however, must terminate the consumer.
+                // A command cancellation affects its reply only. Scope cancellation stops the consumer.
                 currentCoroutineContext().ensureActive()
             } catch (cause: Exception) {
                 reply.completeExceptionally(cause)
@@ -51,7 +49,7 @@ internal class CommandMailbox(scope: CoroutineScope) {
                 commands.cancel()
             }
         }.invokeOnCompletion {
-            // Also close replies if the scope was cancelled before launch could run.
+            // Close replies if cancellation happens before the consumer starts.
             commands.cancel()
         }
     }
@@ -68,7 +66,7 @@ internal class CommandMailbox(scope: CoroutineScope) {
         }
     }
 
-    /** Stop accepting new commands and drain admitted ones, then release the consumer. */
+    /** Stop accepting commands, drain admitted work, and then release the consumer. */
     fun close() {
         commands.close()
     }

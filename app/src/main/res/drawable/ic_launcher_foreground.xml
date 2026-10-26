@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- AdaptiveIcon 前景：白色雪花，由 1536 网格设计稿缩放到 108dp 居中（安全区内）。 -->
+<!-- Adaptive icon 前景：雪花按 1536 网格设计稿缩放到 108dp，并居中于安全区。 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"

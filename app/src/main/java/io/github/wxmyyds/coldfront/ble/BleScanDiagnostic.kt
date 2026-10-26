@@ -3,12 +3,12 @@ package io.github.wxmyyds.coldfront.ble
 import io.github.wxmyyds.coldfront.domain.CoolerDeviceType
 
 /**
- * 一次 BLE 扫描结果的原始诊断数据(不做任何识别过滤)。
- * 用于「显示全部设备」诊断模式:排查识别失败、查看散热器真实广播内容。
+ * 一次 BLE 扫描结果的原始诊断数据，不经过设备识别筛选。
+ * 用于“显示全部设备”模式，排查未识别设备并查看其广播内容。
  *
- * @param msd 厂商数据:公司 ID → payload 十六进制
- * @param serviceData 服务数据:UUID → payload 十六进制
- * @param coolerType 若 MSD 匹配到已知散热器型号则非空(卡片高亮,可直接连接)
+ * @param msd 厂商 ID 到十六进制 payload 的映射
+ * @param serviceData 服务 UUID 到十六进制 payload 的映射
+ * @param coolerType MSD 匹配已知型号时非空，诊断列表会高亮该设备并允许直接连接
  */
 data class BleScanDiagnostic(
     val address: String,
@@ -20,6 +20,6 @@ data class BleScanDiagnostic(
     val coolerType: CoolerDeviceType? = null,
 )
 
-/** 十六进制工具 */
+/** 将字节数组转为以空格分隔的大写十六进制字符串。 */
 internal fun ByteArray.toHex(): String =
     joinToString(" ") { "%02X".format(it) }

@@ -10,9 +10,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 private data class TelemetryWake(val controls: Int, val availability: Long, val reports: Long)
 
 /**
- * Keep the existing sampling cadence, but never manufacture a pass just to check busy,
- * blocked or not-yet-due targets. Events only recalculate deadlines, not bypass them.
- * All predicates and event mutations share the caller's confinement (Main in production).
+ * Preserve the sampling cadence. Recheck deadlines when state changes, but do not run a pass
+ * solely because a target is busy, blocked, or not yet due. Predicates and event updates run in
+ * the caller's confinement, Main in production.
  */
 internal suspend fun runTelemetrySchedule(
     controls: StateFlow<Int>,
@@ -27,7 +27,7 @@ internal suspend fun runTelemetrySchedule(
     var nextSampleAt = nowMs()
     var failedPasses = 0
     while (currentCoroutineContext().isActive && isCurrent()) {
-        // Snapshot before inspecting eligibility so a change before suspension is not lost.
+        // Capture the wake state before checking eligibility so an early change is observed.
         val observed = TelemetryWake(controls.value, availabilityChanges.value, reportChanges.value)
         val readAt = if (observed.controls == 0) nextReadableAt()?.coerceAtLeast(nextSampleAt) else null
         val recoveryAt = if (observed.controls == 0) nextRecoveryAt() else null
@@ -46,12 +46,12 @@ internal suspend fun runTelemetrySchedule(
             failedPasses = if (result.successfulReads > 0) 0 else (failedPasses + 1).coerceAtMost(3)
             nextSampleAt = nowMs() + if (failedPasses >= 3) 4000L else 500L
         }
-        // An empty pass is not a failure. Its changed eligibility/control event will make
-        // the next iteration suspend; recovery attempts advance their own deadline.
+        // An empty pass is normal. Eligibility changes will wake the next iteration, and
+        // recovery attempts advance their own deadline.
     }
 }
 
-/** Report freshness and recovery pacing are independent: attempts never invent samples. */
+/** Report freshness and recovery pacing are independent; attempts never create samples. */
 internal fun temperatureRecoveryAt(
     watchStartedAtMs: Long,
     lastReportAtMs: Long?,
@@ -61,7 +61,7 @@ internal fun temperatureRecoveryAt(
     lastAttemptAtMs?.plus(2000L) ?: Long.MIN_VALUE,
 )
 
-/** RSSI has no unsolicited update event. Keep its 2 s sampling, but park blocked lanes. */
+/** RSSI has no unsolicited update. Sample every two seconds and wait while its lane is blocked. */
 internal suspend fun runRssiSchedule(
     availabilityChanges: StateFlow<Long>,
     isCurrent: () -> Boolean,

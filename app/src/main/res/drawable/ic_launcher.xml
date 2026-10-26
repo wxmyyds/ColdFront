@@ -1,16 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 应用图标：紫灰圆角方块 + 白色雪花（设计稿 SVG 1536 网格原样转换）。
-     非逻辑资源，仅作 API 24–25 与清单兜底；API 26+ 走 mipmap-anydpi-v26 adaptive-icon。 -->
+<!-- 紫灰圆角底与白色雪花，按设计稿的 1536 网格转换。此图标供 API 24–25 和清单回退使用；API 26+ 使用 mipmap-anydpi-v26 中的自适应图标。 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="1536"
     android:viewportHeight="1536">
-    <!-- 圆角方块底（rx=294） -->
+    <!-- 圆角方形背景（rx=294） -->
     <path
         android:fillColor="#5A5A8B"
         android:pathData="M376,79 L1158,79 A294,294 0 0 1 1452,373 L1452,1146 A294,294 0 0 1 1158,1440 L376,1440 A294,294 0 0 1 82,1146 L82,373 A294,294 0 0 1 376,79 Z" />
-    <!-- 白色雪花（4 段，来自设计稿），比背景缩小 20% -->
+    <!-- 设计稿中的白色雪花由 4 个部分组成，整体缩小 20%。 -->
     <group
         android:scaleX="0.8"
         android:scaleY="0.8"

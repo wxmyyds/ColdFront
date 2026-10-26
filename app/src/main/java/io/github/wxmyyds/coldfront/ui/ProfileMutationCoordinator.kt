@@ -6,8 +6,8 @@ import io.github.wxmyyds.coldfront.util.CommandMailbox
 import kotlinx.coroutines.CoroutineScope
 
 /**
- * One event lane owns connection bookkeeping and deletion suppression. DataStore transactions
- * alone cannot order the in-memory session check with a deletion that is still committing.
+ * A single mailbox serializes connection bookkeeping and deletion suppression. A DataStore
+ * transaction cannot order the in-memory session check against a deletion that is still in progress.
  */
 internal class ProfileMutationCoordinator(
     scope: CoroutineScope,
@@ -17,7 +17,7 @@ internal class ProfileMutationCoordinator(
     data class Deletion(val profile: CoolerProfile?, val state: CoolerLiveState)
 
     private val mailbox = CommandMailbox(scope)
-    // Only mailbox actions access this set, including after a suspended storage operation.
+    // Mailbox actions are the only code that accesses this set, even when storage suspends.
     private val ignoredSessions = mutableSetOf<Long>()
 
     suspend fun recordConnection(state: CoolerLiveState) {
@@ -27,15 +27,15 @@ internal class ProfileMutationCoordinator(
     }
 
     suspend fun deleteProfile(id: String, currentState: () -> CoolerLiveState): Deletion = mailbox.execute {
-        // Capture only after earlier commands finish: a replacement session may have appeared
-        // while this deletion was queued. Keep that snapshot across the suspended transaction.
+        // Take this snapshot after earlier mailbox commands finish. A replacement session may have
+        // appeared while deletion waited in the queue; keep the snapshot across the suspended transaction.
         val stateAtStart = currentState()
         val removed = delete(id)
-        // A same-address reconnect may complete while DataStore is suspended. The mailbox
-        // prevents its queued record event from running until this post-commit snapshot is owned.
+        // A reconnect to the same address may finish while DataStore is suspended. The mailbox holds
+        // its queued record event until this post-commit snapshot has been captured.
         val state = currentState()
-        // Trust the committed deletion, not a possibly stale UI snapshot. Failed deletions
-        // must leave this session eligible for recording; a later session is always distinct.
+        // Use the committed deletion, not a potentially stale UI snapshot. If deletion fails, this
+        // session remains eligible for recording; a later session has a distinct ID.
         if (removed != null && removed.macAddress.equals(state.deviceAddress, ignoreCase = true)) {
             ignoredSessions.add(state.connectionSessionId)
         }

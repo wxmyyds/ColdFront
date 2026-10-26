@@ -12,10 +12,7 @@ import org.json.JSONTokener
 import java.io.IOException
 import java.util.Locale
 
-/**
- * The JSON array is also the preservation envelope: unsupported/malformed rows are hidden from
- * callers, not discarded. Never rebuild an existing document from only its decoded profiles.
- */
+/** JSON 数组也用于保留调用方无法解码的未知或格式错误记录；更新文档时应将这些记录原样写回。 */
 internal object ProfileJson {
     data class Entry(val raw: Any, val profile: CoolerProfile?)
 
@@ -27,7 +24,7 @@ internal object ProfileJson {
         }.toString()
     }
 
-    /** An absent preference means empty; an empty/invalid stored document is an I/O error. */
+    /** 缺少偏好项表示空文档；已存文档为空或格式无效时会抛出 I/O 错误。 */
     fun parse(json: String?): Document {
         if (json == null) return Document(emptyList())
         val array = try {
@@ -66,7 +63,7 @@ internal object ProfileJson {
         return Entry(raw, profile)
     }
 
-    /** Only connection metadata changes; retain unknown fields and even unreadable optional RGB. */
+    /** Updates connection metadata while preserving unknown fields and unreadable optional RGB data. */
     fun connectedEntry(entry: Entry, profile: CoolerProfile): Entry {
         val raw = JSONObject(entry.raw.toString())
             .put("deviceType", profile.deviceType.name)
@@ -101,7 +98,7 @@ internal object ProfileJson {
         )
     }
 
-    /** Invalid optional colors do not hide an otherwise usable profile. */
+    /** Profiles remain usable when optional color data is invalid. */
     private fun decodeRgb(raw: JSONObject): RGBConfig? {
         val effect = LightEffect.entries.firstOrNull { it.name == raw.opt("effect") } ?: return null
         fun channel(key: String): Int? {

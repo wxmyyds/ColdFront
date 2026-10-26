@@ -70,15 +70,7 @@ import io.github.wxmyyds.coldfront.ui.theme.EmphasizedTypography
 import io.github.wxmyyds.coldfront.ui.theme.optionContainerColor
 import kotlin.math.roundToInt
 
-/**
- * 首页 —— 按 MD3E 七条表达性战术设计:
- *
- * - 战术 2/4(色彩层次 + 容器分组):温度英雄卡用 primaryContainer(制冷中)
- *   ↔ surfaceBright(待机)之间过渡,与选项容器同一档明度，不制造孤立的深色块。
- * - 战术 3(排印引导):温度用 displayLarge + SemiBold 强调。
- * - 战术 5(流体动效):颜色过渡走 MaterialTheme.motionScheme 的 effects spec。
- * - 电源和模式控制沿用 SegmentedSwitchRow 的原生开关与分组形态。
- */
+/** 首页内容状态，用于切换已连接、连接中、失败和空闲界面。 */
 private enum class HomeContentState { Connected, Connecting, Failed, Idle }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
@@ -120,7 +112,7 @@ fun HomeScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
                     ConnectedContent(vm, state)
                 }
             } else {
-                // 保留视口最小高度以正常居中，短窗口允许内容向下展开并滚动。
+                // 短窗口仍保持最小高度，内容超出时允许向下滚动。
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -168,9 +160,7 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
 
     TempHero(state)
 
-    // 官方 Jacket8ProActivityV3.N4 只在限档变化时提示一次(重复上报不重复提示):
-    // 同一限档值只弹一次；限档变化,或解除限档后再次受限,才重新提示。
-    // 重连会换 connectionSessionId,随之重置已确认记录；同会话旋转保留确认。
+    // 同一限档只提示一次。限档变化或解除后再次受限时会重新提示；connectionSessionId 变化（新连接）会重置确认记录，同会话重组时保留。
     var savedNotice by rememberSaveable(stateSaver = PowerLimitNoticeStateSaver) {
         mutableStateOf(PowerLimitNoticeState(state.connectionSessionId))
     }
@@ -207,8 +197,7 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
         )
     }
 
-    // 按设备能力显示带说明的开关:分段选项列表(SegmentedGroup)——
-    // 外角 16dp / 内角 4dp / 缝隙 / 触感反馈全部由组件统一处理
+    // 按设备能力显示分段开关。组件统一处理分组形状、间距和触感反馈。
     SegmentedGroup {
         item(key = "smart", visible = state.hasConfirmedConfiguration(CoolerBleConstants.AUTO_MODE_CONTROL_UUID) && state.capabilities.smartControl && state.deviceType?.supportsAutoMode == true) {
             SegmentedSwitchRow(
@@ -248,12 +237,15 @@ private fun ConnectedContent(vm: CoolerViewModel, state: CoolerLiveState) {
     LevelSection(vm, state, strings)
 }
 
-/** 温度英雄卡:表面容器分层 + 强调排印 + 指标胶囊 */
+/**
+ * 温度卡：制冷时使用 primaryContainer，待机时使用 surfaceBright；温度采用 displayLarge 和 SemiBold，
+ * 颜色过渡使用主题 motionScheme 的 effects spec。
+ */
 @Composable
 private fun TempHero(state: CoolerLiveState) {
     val strings = LocalStrings.current
     val scheme = MaterialTheme.colorScheme
-    // 制冷中 → primaryContainer；待机 → surfaceBright，与选项容器同档
+    // 制冷时使用 primaryContainer，待机时使用与选项相同的 surfaceBright。
     val container by animateColorAsState(
         targetValue = if (state.coolingOn) scheme.primaryContainer
         else optionContainerColor(scheme),
@@ -305,9 +297,9 @@ private fun TempHero(state: CoolerLiveState) {
                     color = onContainer,
                 )
             }
-            // 单位与数值同行同字号(仅字重不同)后,固定开销是这行宽度的主要变数:
-            // 图标 16→14、内边距 10→8、图标间隔 6→4、胶囊间 8→6,固定开销
-            // 142dp→110dp,360dp 屏(可用 280dp)三个胶囊整体约 247dp,余量约 33dp。
+            // 固定开销从 142dp 降到 110dp：图标从 16dp 缩到 14dp，内边距从 10dp 缩到 8dp，
+            // 图标间距从 6dp 缩到 4dp，胶囊间距从 8dp 缩到 6dp。360dp 屏幕可用宽度为 280dp，
+            // 三个胶囊约占 247dp，余量约 33dp。
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -323,13 +315,9 @@ private fun TempHero(state: CoolerLiveState) {
 }
 
 /**
- * 单个指标胶囊:图标 + 数值 + 单位,同处一行同一胶囊容器。
- *
- * 数值与单位同字号(12sp),只用字重拉开主次(数值 SemiBold / 单位 Medium)、间距 2dp:
- * 胶囊宽度因此吃满行内空白,不会三个小胶囊挤在左侧、右边缘留出一大块。
- *
- * 注意:数值与单位仍是两个 Text——单位字号一降就会在行尾留下过宽的空白,
- * 降字号不是这行腾宽度的手段(真正的手段是固定开销与换行策略)。
+ * 单个指标胶囊：图标、数值和单位位于同一容器。数值与单位均为 12sp，仅字重不同，二者间距 2dp。
+ * 保持同字号可利用行内空白，避免三个胶囊挤在左侧；单独缩小单位字号会在行尾留下空白，
+ * 因此通过降低固定开销和换行策略适配。
  */
 @Composable
 private fun MetricPill(@DrawableRes resId: Int, value: String, unit: String, content: Color) {
@@ -350,9 +338,7 @@ private fun MetricPill(@DrawableRes resId: Int, value: String, unit: String, con
 
 @Composable
 private fun MetricPillContent(icon: @Composable () -> Unit, value: String, unit: String, content: Color) {
-    // 胶囊底是对 content 的装饰性淡色叠加:英雄卡容器会在 primaryContainer 与
-    // surfaceBright 之间过渡,没有单一角色色能同时适配,故保留 alpha 写法。
-    // 但文字与图标不再做 alpha(那直接影响对比度),一律用全强度 content。
+    // 仅底色使用透明度，文字和图标保持完整对比度。
     Surface(
         shape = CircleShape,
         color = content.copy(alpha = 0.12f),
@@ -369,7 +355,7 @@ private fun MetricPillContent(icon: @Composable () -> Unit, value: String, unit:
             ) {
                 Text(
                     value,
-                    // tnum:等宽数字,数值位数变化时字形宽度不抖。
+                    // tnum 让数值位数变化时保持稳定宽度。
                     style = EmphasizedTypography.labelMedium.copy(fontFeatureSettings = "tnum"),
                     color = content,
                     maxLines = 1,
@@ -387,7 +373,7 @@ private fun MetricPillContent(icon: @Composable () -> Unit, value: String, unit:
     }
 }
 
-/** 制冷档位:强调数字 + 滑条(8 Pro/6 Pro+ 均为官方 1–9 离散档;6 Pro 为 40–80 raw) */
+/** 制冷档位：8 Pro/6 Pro+ 使用 1–9 档，6 Pro 使用 40–80 raw。 */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: AppStrings) {
@@ -400,8 +386,7 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
         ?: state.fanRaw?.takeIf { isJacket6Pro }
         ?: CoolerBleConstants.percentageToRaw(displayedPercent, CoolerDeviceType.JACKET_6_PRO)
     val displayedGear = state.fanGear ?: 1
-    // 官方把滑条的 maxSelectableProgress 设为功耗限档,超出的拖动会被弹回并提示
-    // (`LimitedSeekBar.a.onProgressChanged`)。这里同样保留整条 1–9 轨道,只把可选上限钳住。
+    // 官方将 maxSelectableProgress 设为限档值，超出后会弹回并提示；这里保留完整 1–9 档轨道，只钳制可选上限。
     val maxGear = state.fanGearLimit ?: 9
 
     if (state.isConnected && state.hasConfirmedConfiguration(CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID) && state.capabilities.fanControl && state.coolingAllowsControl && state.smartOn) {
@@ -434,7 +419,7 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            // 尺寸/展开类动画统一从主题取 spec，不在业务代码里硬编码 spring
+            // 尺寸动画使用主题 spec，避免在业务代码中固定 spring。
             .animateContentSize(MaterialTheme.motionScheme.defaultSpatialSpec<IntSize>()),
         shape = MaterialTheme.shapes.large,
         // 与其他选项行使用同一档容器色；Card 默认会用 surfaceContainerHigh，
@@ -452,7 +437,7 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
             ) {
                 Icon(painterResource(R.drawable.materialsymbols_ic_speed_rounded_filled), contentDescription = null)
                 Text(strings.homeLevel, style = MaterialTheme.typography.titleMedium)
-                // 设备档位可能随实时回读更新，保持数值即时，避免每次遥测都重启动效。
+                // 档位随遥测回读更新时直接刷新数值，不重新启动动效。
                 Text(
                     when {
                         isGear -> strings.homeLevelGear.format(displayedGear)
@@ -463,8 +448,7 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
-            // MD3E:Slider 走 SliderState(alpha28 起 Slider(value=…) 无状态重载已弃用)。
-            // 拖动期间以滑条为准,松手后再由设备回读值同步,避免两边互相打架。
+            // 拖动时显示滑条值，松手后再与设备回读同步。
             var dragging by remember { mutableStateOf(false) }
             val gear = displayedGear.toFloat()
             val percent = displayedPercent.toFloat()
@@ -579,7 +563,7 @@ private fun NotConnectedContent(strings: AppStrings, onAddDevice: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // 色调圆底图标章(参考图的克制风格,不用整块灰卡)
+        // 使用圆形底色图标，避免空状态变成整块卡片。
         Surface(
             shape = CircleShape,
             color = optionContainerColor(MaterialTheme.colorScheme),

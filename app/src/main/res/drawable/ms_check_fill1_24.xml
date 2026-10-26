@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Google Material Symbols Rounded "check" FILL=1, from
      google/material-design-icons → symbols/android/check/materialsymbolsrounded
-     (Apache 2.0, © Google LLC). Coordinates are the official 960-grid as-is;
-     only android:tint=?attr/colorControlNormal was dropped (AppCompat-free
-     project — the Icon composable applies tint). -->
+     (Apache 2.0, © Google LLC). Uses the original coordinates on the official 960 grid.
+     The android:tint=?attr/colorControlNormal attribute is omitted because this project
+     has no AppCompat; the Icon composable applies tint. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"

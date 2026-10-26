@@ -1,12 +1,12 @@
 package io.github.wxmyyds.coldfront.ble
 
-/** Counts relevant read outcomes, not unavailable/throttled targets or CCCD writes. */
+/** Count relevant read outcomes, excluding unavailable targets, throttled reads, and CCCD writes. */
 internal data class TelemetryPollResult(val attemptedReads: Int = 0, val successfulReads: Int = 0)
 
 /**
- * A single due pass. Null results mean skipped/superseded work, not failed samples.
- * Accepted operations finish normally; [isCurrent] stops adding work after control starts.
- * Recovery pacing is recorded after real work completes, never merely for an eligible target.
+ * A null result means skipped or superseded work, not a failed sample. Accepted operations still
+ * complete; [isCurrent] prevents adding work after a control starts. Record recovery pacing only
+ * after real work finishes, never merely because a target is eligible.
  */
 internal suspend fun <T> pollTelemetry(
     targets: Iterable<T>,
@@ -40,9 +40,9 @@ internal suspend fun <T> pollTelemetry(
     }
     for (target in temperatureTargets) {
         if (!isCurrent() || !temperatureStale()) return result()
-        // A notify-only source can be recovered without pretending it supports READ.
+        // Subscription can recover a notify-only source without treating it as readable.
         if (isSubscribable(target) && subscribe(target) != null) recoveryAttempted = true
-        // A valid report during subscription ends this recovery, including queued reads.
+        // A valid report ends recovery, including one produced by a queued read.
         if (!isCurrent() || !temperatureStale()) return result()
         if (isReadable(target)) sample(target, recovery = true)
     }

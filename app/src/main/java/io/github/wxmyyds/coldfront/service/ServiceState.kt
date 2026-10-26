@@ -7,9 +7,9 @@ import io.github.wxmyyds.coldfront.ui.i18n.AppStrings
 import kotlinx.coroutines.flow.Flow
 
 /**
- * Queue invalidations even while a start command is still loading its target. Validation is
- * serialized behind that command, so it sees the latest persisted intent rather than a stale
- * flow emission. The initial empty snapshot before the first start must not stop the service.
+ * Queue service-target invalidations while a start command is still loading its target.
+ * Commands are serialized, so validation runs afterward and rereads persisted intent. This avoids
+ * stopping the service on the initial empty snapshot emitted before the first start.
  */
 internal suspend fun Flow<CoolerProfile?>.collectTargetInvalidations(
     latestStartId: () -> Int,
@@ -21,7 +21,7 @@ internal suspend fun Flow<CoolerProfile?>.collectTargetInvalidations(
     }
 }
 
-/** Identity captured by UI/tile actions before storage or Android's service queue can suspend them. */
+/** Capture the address and connection session before a UI or tile action can suspend. */
 internal data class ManualControlTarget(val address: String, val sessionId: Long) {
     fun matches(state: CoolerLiveState): Boolean = state.isConnected &&
         sessionId == state.connectionSessionId && address.equals(state.deviceAddress, ignoreCase = true)
@@ -33,7 +33,7 @@ internal data class ManualControlTarget(val address: String, val sessionId: Long
     }
 }
 
-/** A tile click must not replace a newer connection or fall back to a different saved device. */
+/** Reject a tile action if the connection changed or points at another saved device. */
 internal fun tileStartProfile(
     requested: CoolerLiveState,
     current: CoolerLiveState,
@@ -55,7 +55,7 @@ internal fun tileStartProfile(
     return active
 }
 
-/** Explicit activation/reconnect must replace a quarantined GATT, even if still CONNECTED. */
+/** Explicit activation and reconnect replace a quarantined GATT session, even if state is still CONNECTED. */
 internal fun serviceNeedsConnection(profile: CoolerProfile, state: CoolerLiveState): Boolean =
     state.telemetryDegraded || !profile.matches(state) || state.connection !in setOf(
         ConnectionState.CONNECTED, ConnectionState.CONNECTING, ConnectionState.DISCOVERING,
@@ -64,7 +64,7 @@ internal fun serviceNeedsConnection(profile: CoolerProfile, state: CoolerLiveSta
 internal fun CoolerProfile.matches(state: CoolerLiveState): Boolean =
     macAddress.equals(state.deviceAddress, ignoreCase = true) && deviceType == state.deviceType
 
-/** Every visible notification field, including actions, participates in deduplication. */
+/** Every visible notification field, including actions, is part of deduplication. */
 internal data class ServiceNotification(
     val text: String,
     val fanPercent: Int,
