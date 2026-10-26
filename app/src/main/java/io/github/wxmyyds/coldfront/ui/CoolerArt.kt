@@ -32,8 +32,8 @@ fun CoolerArt(
         CoolerDeviceType.JACKET_4 -> R.drawable.img_cooler_4pro
         CoolerDeviceType.JACKET_6,
         CoolerDeviceType.JACKET_6_PRO,
-        CoolerDeviceType.JACKET_6_PRO_PLUS,
         -> R.drawable.img_cooler_6pro
+        CoolerDeviceType.JACKET_6_PRO_PLUS -> R.drawable.img_cooler_6proplus
         CoolerDeviceType.JACKET_1 -> R.drawable.img_cooler_dual
         CoolerDeviceType.JACKET_2 -> R.drawable.img_cooler_turbo
         CoolerDeviceType.JACKET_3 -> R.drawable.img_cooler_gen3
