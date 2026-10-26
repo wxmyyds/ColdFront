@@ -9,7 +9,7 @@ import java.util.UUID
  * 详见 docs/protocol-8pro.md。关键点:
  * - 温度在 0x1014(单字节有符号;固件 8.4.7 为 [0x04, 温度] 包),无偏移;
  * - 0x1011 是散热总开关(写 0x02 开 / 0x03 关)——不写它风扇不会转;
- * - 0x1012 风扇 raw 40–80(8 Pro,8 档);旧型号 40–200;
+ * - 0x1012 风扇 raw 40–80(8 Pro/6 Pro+ 均为官方 9 档);旧型号 40–200;
  * - 特征值不依赖特定服务 UUID:遍历所有服务查找(兼容服务 UUID 变体)。
  */
 object CoolerBleConstants {
@@ -116,20 +116,27 @@ object CoolerBleConstants {
 
     // —— 风扇调速换算:百分比 ↔ raw(逐型号范围) ——
 
-    /** Official 8 Pro raw boundaries, presented as 1..8 rather than firmware's 0..7. */
+    /**
+     * Official 8 Pro raw boundaries (`Jacket8ProManagerV2$a.d(I)`), presented as UI gears
+     * 1..9: 40–43/43–49/49–55/55–61/61–67/67–71/71–74/74–78/78+（与 6 Pro+ 同边界）。
+     */
     fun rawToGear8Pro(raw: Int): Int = when {
-        raw <= 42 -> 1
-        raw <= 48 -> 2
-        raw <= 54 -> 3
-        raw <= 60 -> 4
-        raw <= 66 -> 5
-        raw <= 70 -> 6
+        raw <= 43 -> 1
+        raw <= 49 -> 2
+        raw <= 55 -> 3
+        raw <= 61 -> 4
+        raw <= 67 -> 5
+        raw <= 71 -> 6
         raw <= 74 -> 7
-        else -> 8
+        raw <= 78 -> 8
+        else -> 9
     }
 
-    /** Even representatives survive the integer percentage round-trip; endpoints reach 40/80. */
-    fun gearToRaw8Pro(gear: Int): Int = when (gear.coerceIn(1, 8)) {
+    /**
+     * Official `Jacket8ProManagerV2$a.e(I)` gear→raw table as UI gears 1..9
+     * (40/46/52/58/64/68/72/76/80);与官方 0..8 索引一一对应(+1),含此前被 UI 跳过的 76 档。
+     */
+    fun gearToRaw8Pro(gear: Int): Int = when (gear.coerceIn(1, 9)) {
         1 -> 40
         2 -> 46
         3 -> 52
@@ -137,6 +144,7 @@ object CoolerBleConstants {
         5 -> 64
         6 -> 68
         7 -> 72
+        8 -> 76
         else -> 80
     }
 
@@ -160,17 +168,55 @@ object CoolerBleConstants {
     }
 
     /**
-     * 功耗限档索引 → 本应用 UI 档位(1–8)上限。
+     * 功耗限档索引(0–8) → 本应用 UI 档位(1–9)上限。
      *
-     * 官方的滑条本身就是 0–8 的档位索引,所以直接 `setMaxSelectableProgress(索引)` 即可;
-     * 本应用的档位是 1–8 且第 8 档代表 raw 80,与官方索引并非一一对应
-     * (官方索引 7 = raw 76 在 UI 上没有对应档位),因此按"raw 不超过限档 raw"取最高档位:
-     * 索引 7 → 档位 7(raw 72),索引 6 → 档位 7,索引 5 → 档位 6,……,索引 0 → 档位 1。
+     * 本应用档位 1–9 与官方索引 0–8 一一对应(+1),因此限档索引 N 的最高可用档位就是 N+1;
+     * 仍按"raw 不超过限档 raw"取最高档位实现,与官方 `setMaxSelectableProgress(索引)` 等效。
      */
     fun maxGearForFanLimit8Pro(index: Int): Int {
         val maxRaw = fanLimitToRaw8Pro(index)
-        return (8 downTo 1).first { gearToRaw8Pro(it) <= maxRaw }
+        return (9 downTo 1).first { gearToRaw8Pro(it) <= maxRaw }
     }
+
+    // —— 红魔散热器 6 Pro+:官方 Jacket6ProPlusManagerV2$a 的 9 档风扇 ——
+
+    /**
+     * 官方 `Jacket6ProPlusManagerV2$a.d(I)`:档位索引 0–8 → 风扇 raw
+     * (40/46/52/58/64/68/72/76/80)。本应用 UI 用 1–9 档,与官方索引一一对应(+1)。
+     */
+    fun gearToRaw6ProPlus(gear: Int): Int = when (gear.coerceIn(1, 9)) {
+        1 -> 40
+        2 -> 46
+        3 -> 52
+        4 -> 58
+        5 -> 64
+        6 -> 68
+        7 -> 72
+        8 -> 76
+        else -> 80
+    }
+
+    /**
+     * 官方 `Jacket6ProPlusManagerV2$a.c(I)` 的 raw→档位边界
+     * (40–43/43–49/49–55/55–61/61–67/67–71/71–74/74–78/78+),换算为本应用 1–9 档。
+     */
+    fun rawToGear6ProPlus(raw: Int): Int = when {
+        raw <= 43 -> 1
+        raw <= 49 -> 2
+        raw <= 55 -> 3
+        raw <= 61 -> 4
+        raw <= 67 -> 5
+        raw <= 71 -> 6
+        raw <= 74 -> 7
+        raw <= 78 -> 8
+        else -> 9
+    }
+
+    fun gearToPercentage6ProPlus(gear: Int): Int =
+        rawToPercentage(gearToRaw6ProPlus(gear), CoolerDeviceType.JACKET_6_PRO_PLUS)
+
+    /** 任意 raw 归一到官方档位格点(c(I) 取档 → d(I) 回 raw):官方界面只会写这 9 个字节。 */
+    fun snapToGearRaw6ProPlus(raw: Int): Int = gearToRaw6ProPlus(rawToGear6ProPlus(raw))
 
     /** 百分比(0–100)→ 该型号 raw */
     fun percentageToRaw(percentage: Int, type: CoolerDeviceType): Int {

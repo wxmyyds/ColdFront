@@ -3,12 +3,14 @@ package io.github.wxmyyds.coldfront.domain
 import java.util.UUID
 
 /**
- * RedMagic Cooler 6 Pro protocol extracted from the official application's smali.
+ * RedMagic Cooler 6 Pro / 6 Pro+ ("Jacket6Pro" 家族) protocol extracted from the official
+ * application's smali. The 6-family V2 stack (Jacket6ProProcessor) is shared by both models:
+ * same GATT register UUID family, same 0x1015 status envelope and fan raw bounds 0x28..0x50;
+ * the Pro+ only differs in its 9-gear fan UI (see CoolerBleConstants' 6 Pro+ gear helpers).
  *
- * This type is deliberately separate from the 8 Pro power-limit protocol. The official 6 Pro
- * uses the same GATT register UUID family, but its 0x1015 status envelope and fan range differ.
- * No checksum or extra framing is added: the official write paths pass these byte arrays directly
- * to BluetoothGattCharacteristic.writeCharacteristic().
+ * This type is deliberately separate from the 8 Pro power-limit protocol.
+ * No checksum or extra framing is added: the official write paths pass these byte arrays
+ * directly to BluetoothGattCharacteristic.writeCharacteristic().
  */
 object Jacket6ProProtocol {
     val MAIN_SERVICE_UUID: UUID = CoolerBleConstants.MAIN_SERVICE_UUID
@@ -90,6 +92,8 @@ object Jacket6ProProtocol {
             0x05 -> when (payload.firstOrNull()?.toInt()?.and(0xFF)) {
                 0x80, 0x81 -> CoolerTelemetryReducer.Update(state.copy(outputHasLoad = true))
                 0x00, 0x01 -> CoolerTelemetryReducer.Update(state.copy(outputHasLoad = false))
+                // 官方 Pro+ onOutputHasLoad 识别 0x7f 但对应协程是空实现:不改变负载状态。
+                0x7f -> null
                 else -> null
             }
             else -> null
@@ -121,7 +125,11 @@ object Jacket6ProProtocol {
         return CoolerTelemetryReducer.Update(
             state.copy(
                 fanRaw = raw,
-                fanPercent = CoolerBleConstants.rawToPercentage(raw, CoolerDeviceType.JACKET_6_PRO),
+                fanPercent = CoolerBleConstants.rawToPercentage(
+                    raw,
+                    state.deviceType?.takeIf { it.usesJacket6ProFamilyProtocol }
+                        ?: CoolerDeviceType.JACKET_6_PRO,
+                ),
             ),
         )
     }

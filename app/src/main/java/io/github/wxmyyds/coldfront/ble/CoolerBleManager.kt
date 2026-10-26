@@ -278,9 +278,9 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             )
         } else null
         val type = msdType ?: CoolerDeviceType.fromBleName(name) ?: return null
-        // The official 6 Pro scanner requires both its MSD type and the 4a41 family UUID.
+        // The official 6-family scanner requires both its MSD type and the 4a41 family UUID.
         // Do not broaden that rule to legacy/name fallback devices.
-        if (type == CoolerDeviceType.JACKET_6_PRO &&
+        if (type.usesJacket6ProFamilyProtocol &&
             !Jacket6ProProtocol.isAdvertisement(
                 msd?.getOrNull(CoolerBleConstants.MSD_INDEX_MAIN_TYPE)?.toInt()?.and(0xFF) ?: -1,
                 msd?.getOrNull(CoolerBleConstants.MSD_INDEX_SUB_TYPE)?.toInt()?.and(0xFF) ?: -1,
@@ -479,15 +479,16 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                 return@dispatch
             }
             try {
-                // Official 6 Pro binds every normal register from its main service only.
-                // Other models retain UUID-wide discovery for their firmware variants.
+                // Official 6-family models bind every normal register from their main service
+                // only. Other models retain UUID-wide discovery for their firmware variants.
                 val type = _state.value.deviceType
+                val is6Family = type?.usesJacket6ProFamilyProtocol == true
                 val mainService = g.getService(CoolerBleConstants.MAIN_SERVICE_UUID)
-                if (type == CoolerDeviceType.JACKET_6_PRO && mainService == null) {
+                if (is6Family && mainService == null) {
                     fail(s, "Missing 6 Pro main service")
                     return@dispatch
                 }
-                val orderedServices = if (type == CoolerDeviceType.JACKET_6_PRO) {
+                val orderedServices = if (is6Family) {
                     listOfNotNull(mainService)
                 } else {
                     g.services.sortedBy {
@@ -495,12 +496,12 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                     }
                 }
                 for (service in orderedServices) for (ch in service.characteristics) {
-                    if (type == CoolerDeviceType.JACKET_6_PRO &&
+                    if (is6Family &&
                         ch.uuid in Jacket6ProProtocol.UNSUPPORTED_CHARACTERISTICS
                     ) continue
                     s.characteristics.putIfAbsent(ch.uuid, ch)
                 }
-                val required = if (type == CoolerDeviceType.JACKET_6_PRO) {
+                val required = if (is6Family) {
                     Jacket6ProProtocol.REQUIRED_CHARACTERISTICS
                 } else setOf(
                     CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID,
@@ -1013,13 +1014,18 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         val command = command(Control.FAN, CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID) ?: return
         val type = _state.value.deviceType ?: return
         val clampedRaw = raw.coerceIn(type.rawMin, type.rawMax)
-        val percent = CoolerBleConstants.rawToPercentage(clampedRaw, type)
+        // 6 Pro+ 官方界面只会写 9 个档位 raw(c(I) 取档 → d(I) 回 raw),没有连续滑条的证据,
+        // 因此任意目标一律归一到档位格点再下发。
+        val effectiveRaw = if (type == CoolerDeviceType.JACKET_6_PRO_PLUS) {
+            CoolerBleConstants.snapToGearRaw6ProPlus(clampedRaw)
+        } else clampedRaw
+        val percent = CoolerBleConstants.rawToPercentage(effectiveRaw, type)
         _state.update { it.copy(pendingFanPercent = percent) }
         scope.launch {
             try {
-                val payload = if (type == CoolerDeviceType.JACKET_6_PRO) {
-                    Jacket6ProProtocol.fanCommand(clampedRaw)
-                } else byteArrayOf(clampedRaw.toByte())
+                val payload = if (type.usesJacket6ProFamilyProtocol) {
+                    Jacket6ProProtocol.fanCommand(effectiveRaw)
+                } else byteArrayOf(effectiveRaw.toByte())
                 executeCommand(command, payload, 150)
             } finally {
                 if (fresh(command)) _state.update { it.copy(pendingFanPercent = null) }
@@ -1028,7 +1034,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
     }
 
     fun setHallMode(mode: HallMode) = onMain {
-        if (_state.value.deviceType != CoolerDeviceType.JACKET_6_PRO) return@onMain
+        if (_state.value.deviceType?.usesJacket6ProFamilyProtocol != true) return@onMain
         val command = command(Control.COOLING, Jacket6ProProtocol.HALL_UUID) ?: return@onMain
         scope.launch { executeCommand(command, Jacket6ProProtocol.hallCommand(mode)) }
     }
@@ -1073,7 +1079,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                     // The attached OFF retains per-control freshness but MUST NOT register
                     // a new mode ticket: both writes belong to the original request.
                     val command = if (writeMode == mode) target else modeCommand(writeMode)
-                    val value = if (_state.value.deviceType == CoolerDeviceType.JACKET_6_PRO) {
+                    val value = if (_state.value.deviceType?.usesJacket6ProFamilyProtocol == true) {
                         if (writeMode == Mode.SMART) Jacket6ProProtocol.autoCommand(writeOn)
                         else Jacket6ProProtocol.overClockingCommand(writeOn)
                     } else if (writeMode == Mode.SMART) {
@@ -1098,7 +1104,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
     }
 
     fun setOvercoldProtection(on: Boolean) = onMain {
-        if (_state.value.deviceType == CoolerDeviceType.JACKET_6_PRO) return@onMain
+        if (_state.value.deviceType?.usesJacket6ProFamilyProtocol == true) return@onMain
         val command = command(Control.PROTECTION, CoolerBleConstants.PROTECTION_UUID) ?: return@onMain
         val value = byteArrayOf(
             if (on) CoolerBleConstants.PROTECTION_FLAG_ON else CoolerBleConstants.PROTECTION_FLAG_OFF,

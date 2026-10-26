@@ -14,10 +14,13 @@
 | 型号 | 支持情况 |
 |---|---|
 | 红魔散热器 1–6 代 | 按广播名及厂商数据兼容旧协议 |
-| Cryo Cooler 6 Pro | 独立协议实现；仅静态分析验证，未完成实机验证 |
-| Cryo Cooler 8 Pro | 含功耗限档等专属行为；协议见 [8 Pro 文档](docs/protocol-8pro.md) |
+| RM Magcooler 6 Pro | 独立协议实现；仅静态分析验证，未完成实机验证 |
+| RM Magcooler 6 Pro+ | 6 Pro 家族协议 + 官方 9 档风扇；仅静态分析验证，未完成实机验证；协议见 [6 Pro+ 文档](docs/protocol-6pro-plus.md) |
+| RM Magcooler 8 Pro | 含功耗限档等专属行为；协议见 [8 Pro 文档](docs/protocol-8pro.md) |
 
-6 Pro 依据 MSD `(0x05,0x05)/(0x05,0x06)`、广播服务 UUID `4a41` 和名称识别。6 Pro+ 是独立型号；本次分析的官方旧版 App 不支持它，因此 6 Pro 协议资料不涵盖该型号。详见 [6 Pro 文档](docs/protocol-6pro.md)。
+6 Pro 依据 MSD `(0x05,0x05)/(0x05,0x06)`、广播服务 UUID `4a41` 和名称识别。6 Pro+ 与 6/6 Pro 广播同一组 MSD，仅靠名称（`REDMAGIC Cooler 6 pro+`）区分；协议与 6 Pro 同族，风扇为官方 9 档（40–80 raw 中取 9 个档位格点）。详见 [6 Pro 文档](docs/protocol-6pro.md) 与 [6 Pro+ 文档](docs/protocol-6pro-plus.md)。
+
+全系列统一命名：展示名为 `RM Magcooler {代数}[ 变体]`（如 `RM Magcooler 6`、`RM Magcooler 6 Pro`、`RM Magcooler 8 Pro`），别名为 `Cryo Cooler {代数}[ 变体]`（历史展示名，如 `Cryo Cooler 6`、`Cryo Cooler 6 Pro`）。
 
 ## 构建
 

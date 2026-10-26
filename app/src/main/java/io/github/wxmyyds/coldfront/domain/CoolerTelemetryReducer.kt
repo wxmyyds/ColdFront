@@ -7,10 +7,10 @@ internal object CoolerTelemetryReducer {
     data class Update(val state: CoolerLiveState, val temperatureReported: Boolean = false)
 
     fun reduce(state: CoolerLiveState, uuid: UUID, value: ByteArray): Update? = when (uuid) {
-        CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID -> if (state.deviceType == CoolerDeviceType.JACKET_6_PRO) {
+        CoolerBleConstants.TEMPERATURE_NOTIFICATION_UUID -> if (state.deviceType?.usesJacket6ProFamilyProtocol == true) {
             temperatureWithoutCalibration(state, value)
         } else temperature(state, value)
-        CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID -> if (state.deviceType == CoolerDeviceType.JACKET_6_PRO) {
+        CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID -> if (state.deviceType?.usesJacket6ProFamilyProtocol == true) {
             Jacket6ProProtocol.fanUpdate(state, value)
         } else state.deviceType?.let { type ->
             CoolerTelemetryParser.fanPercent(value, type)?.let {
@@ -20,14 +20,14 @@ internal object CoolerTelemetryReducer {
         CoolerBleConstants.LIGHT_CONTROL_UUID -> RGBConfig.fromNotification(value, state.rgb)?.let {
             Update(state.copy(rgb = it))
         }
-        CoolerBleConstants.COOLING_SWITCH_UUID -> if (state.deviceType == CoolerDeviceType.JACKET_6_PRO) {
+        CoolerBleConstants.COOLING_SWITCH_UUID -> if (state.deviceType?.usesJacket6ProFamilyProtocol == true) {
             value.firstOrNull()?.let { Jacket6ProProtocol.hallUpdate(state, it) }
         } else when (value.firstOrNull()) {
             CoolerBleConstants.COOLING_SWITCH_ON -> Update(state.copy(coolingOn = true).withFanMode())
             CoolerBleConstants.COOLING_SWITCH_OFF -> Update(state.copy(coolingOn = false).withFanMode())
             else -> null
         }
-        CoolerBleConstants.STATUS_UUID -> if (state.deviceType == CoolerDeviceType.JACKET_6_PRO) {
+        CoolerBleConstants.STATUS_UUID -> if (state.deviceType?.usesJacket6ProFamilyProtocol == true) {
             Jacket6ProProtocol.statusUpdate(state, value)
         } else when (CoolerTelemetryParser.unsignedByte(value)) {
             // 1015 is always tagged. Unlike 1014, [04] alone is not a temperature sample.

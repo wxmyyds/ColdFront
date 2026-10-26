@@ -146,7 +146,8 @@ fun DevicesScreen(vm: CoolerViewModel, onAddDevice: () -> Unit) {
             title = { Text(strings.devicesDelete) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(profile.name)
+                    // 与卡片标题同口径:显示规范展示名而非原始广播名。
+                    Text(profile.deviceType.deviceName)
                     Text(profile.macAddress)
                 }
             },
@@ -208,13 +209,16 @@ private fun SavedDeviceCard(
                     else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    profile.name,
+                    // 卡片标题用规范展示名:profile.name 存的是配对时的原始广播名
+                    // (如官方小写 "RM Magcooler 8pro"),直接显示会破坏命名规范。
+                    profile.deviceType.deviceName,
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.bodyLarge,
                 )
             }
             Text(
-                profile.deviceType.deviceName + " · " + profile.macAddress,
+                (profile.deviceType.aliases.firstOrNull() ?: profile.deviceType.deviceName) +
+                    " · " + profile.macAddress,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
