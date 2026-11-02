@@ -148,6 +148,7 @@ enum class CoolerDeviceType(
             val name = bleName.orEmpty()
             return when {
                 mainType != 0x05 -> null
+                subType == 0x05 && JACKET_5_LITE.matchesBleName(name) -> JACKET_5_LITE
                 subType in setOf(0x05, 0x06) && name.matchesJacket6ProPlus() -> JACKET_6_PRO_PLUS
                 subType in setOf(0x05, 0x06) &&
                     name.contains("6", ignoreCase = true) &&
