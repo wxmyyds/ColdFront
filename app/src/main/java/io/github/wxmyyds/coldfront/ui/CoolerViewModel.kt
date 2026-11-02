@@ -139,6 +139,7 @@ class CoolerViewModel(app: Application) : AndroidViewModel(app) {
         ble.connectByAddress(target.address, target.type)
     }
     fun setFanSpeed(percent: Int) = ble.setFanSpeed(percent)
+    fun setFanGear(gear: Int) = ble.setFanGear(gear)
     fun setFanRaw(raw: Int) = ble.setFanRaw(raw)
     fun setHallMode(mode: HallMode) = ble.setHallMode(mode)
     fun setCooling(on: Boolean) = ble.setCooling(on)

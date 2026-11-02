@@ -214,8 +214,28 @@ object CoolerBleConstants {
     fun gearToPercentage6ProPlus(gear: Int): Int =
         rawToPercentage(gearToRaw6ProPlus(gear), CoolerDeviceType.JACKET_6_PRO_PLUS)
 
-    /** 任意 raw 归一到官方档位格点(c(I) 取档 → d(I) 回 raw):官方界面只会写这 9 个字节。 */
-    fun snapToGearRaw6ProPlus(raw: Int): Int = gearToRaw6ProPlus(rawToGear6ProPlus(raw))
+    /** Map each model's configured slider position to its protocol raw value. */
+    fun gearToRaw(gear: Int, type: CoolerDeviceType): Int {
+        val selected = gear.coerceIn(1, type.fanGearCount)
+        return when (type) {
+            CoolerDeviceType.JACKET_6_PRO_PLUS, CoolerDeviceType.JACKET_8_PRO -> gearToRaw8Pro(selected)
+            else -> type.rawMin + selected - 1
+        }
+    }
+
+    /** Map a reported raw value to that model's discrete slider position. */
+    fun rawToGear(raw: Int, type: CoolerDeviceType): Int {
+        if (type == CoolerDeviceType.JACKET_6_PRO_PLUS || type == CoolerDeviceType.JACKET_8_PRO) {
+            return rawToGear8Pro(raw)
+        }
+        return raw.coerceIn(type.rawMin, type.rawMax) - type.rawMin + 1
+    }
+
+    fun gearToPercentage(gear: Int, type: CoolerDeviceType): Int =
+        rawToPercentage(gearToRaw(gear, type), type)
+
+    fun snapToGearRaw(raw: Int, type: CoolerDeviceType): Int =
+        gearToRaw(rawToGear(raw, type), type)
 
     /** 百分比(0–100)→ 该型号 raw */
     fun percentageToRaw(percentage: Int, type: CoolerDeviceType): Int {

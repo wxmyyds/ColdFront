@@ -12,8 +12,8 @@ package io.github.wxmyyds.coldfront.domain
  *
  * @param mainType MSD byte0(全系 0x05)
  * @param subType MSD byte1(型号编号)
- * @param rawMin 风扇 raw 下限(6/8 Pro 为 40)
- * @param rawMax 风扇 raw 上限(6/8 Pro 为 80，旧型号 200)
+ * @param rawMin 风扇 raw 下限
+ * @param rawMax 风扇 raw 上限
  */
 enum class CoolerDeviceType(
     val deviceName: String,
@@ -25,8 +25,6 @@ enum class CoolerDeviceType(
     val rawMax: Int = 200,
     val supportsRgb: Boolean = true,
     val supportsAutoMode: Boolean = true,
-    /** 6 Pro uses the official 40–80 raw slider; 8 Pro/6 Pro+ are the discrete gear UIs. */
-    val usesRawFanSlider: Boolean = false,
     /**
      * 全系覆盖的其它已知叫法(历史展示名 Cryo 系)。仅作元数据与展示兼容,
      * 广播名识别规则(contains,见 [matchesBleName])不受此列表限制。
@@ -48,6 +46,8 @@ enum class CoolerDeviceType(
         mainType = 0x05, subType = 0x02,
         generation = 2,
         description = "红魔散热器第二代(旧协议)",
+        rawMin = 1,
+        rawMax = 3,
         supportsRgb = false,
         supportsAutoMode = false,
         aliases = listOf("Cryo Cooler 2"),
@@ -58,6 +58,8 @@ enum class CoolerDeviceType(
         mainType = 0x05, subType = 0x03,
         generation = 3,
         description = "第三代(官方名称就叫「红魔散热器」)",
+        rawMin = 40,
+        rawMax = 80,
         aliases = listOf("Cryo Cooler 3"),
     ),
 
@@ -66,6 +68,8 @@ enum class CoolerDeviceType(
         mainType = 0x05, subType = 0x04,
         generation = 4,
         description = "第四代专业版",
+        rawMin = 40,
+        rawMax = 80,
         aliases = listOf("Cryo Cooler 4 Pro"),
     ),
 
@@ -74,6 +78,8 @@ enum class CoolerDeviceType(
         mainType = 0x05, subType = 0x05,
         generation = 5,
         description = "第五代,RGB 控制",
+        rawMin = 40,
+        rawMax = 80,
         aliases = listOf("Cryo Cooler 5 Pro"),
     ),
 
@@ -82,6 +88,8 @@ enum class CoolerDeviceType(
         mainType = 0x05, subType = 0x05,
         generation = 5,
         description = "第五代紧凑版(与 5 Pro 同识别码)",
+        rawMin = 40,
+        rawMax = 80,
         aliases = listOf("Cryo Cooler 5"),
     ),
 
@@ -90,6 +98,8 @@ enum class CoolerDeviceType(
         mainType = 0x05, subType = 0x06,
         generation = 6,
         description = "第六代(与 6 Pro 同识别码,官方双管理器)",
+        rawMin = 40,
+        rawMax = 93,
         aliases = listOf("Cryo Cooler 6"),
     ),
 
@@ -100,7 +110,6 @@ enum class CoolerDeviceType(
         description = "第六代专业版(官方 40–80 raw 协议)",
         rawMin = 40,
         rawMax = 80,
-        usesRawFanSlider = true,
         aliases = listOf("Cryo Cooler 6 Pro"),
     ),
 
@@ -133,6 +142,10 @@ enum class CoolerDeviceType(
         rawMax = 80,
         aliases = listOf("Cryo Cooler 8 Pro"),
     );
+
+    /** The discrete slider count follows the model's raw range or verified official gear table. */
+    val fanGearCount: Int
+        get() = if (this == JACKET_6_PRO_PLUS || this == JACKET_8_PRO) 9 else rawMax - rawMin + 1
 
     companion object {
         /** 按 MSD [mainType, subType] 精确匹配 */

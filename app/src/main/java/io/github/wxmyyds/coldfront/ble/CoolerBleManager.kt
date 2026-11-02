@@ -921,8 +921,8 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         val type = state.deviceType ?: return
         // Prefer a pending drag target to the read-back value, as with fanGear. If the user reaches
         // an over-limit value before the limit report arrives, comparing only read-back would miss it.
-        val intendedRaw = state.pendingFanPercent
-            ?.let { CoolerBleConstants.percentageToRaw(it, type) }
+        val intendedRaw = state.pendingFanRaw
+            ?: state.pendingFanPercent?.let { CoolerBleConstants.percentageToRaw(it, type) }
             ?: state.fanRaw ?: return
         if (intendedRaw <= maxRaw) return
         // BOOST was disabled above, although its read-back has not arrived. Evaluate the manual-level
@@ -1002,9 +1002,14 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
 
     fun setFanSpeed(percent: Int) = onMain { writeFanSpeed(percent, enforceManual = true) }
 
-        // 6 Pro 的官方滑条直接使用 fan raw 40..80，不使用 8 Pro 档位。
+    fun setFanGear(gear: Int) = onMain {
+        if (!_state.value.manualLevelEnabled) return@onMain
+        val type = _state.value.deviceType ?: return@onMain
+        val selectedGear = gear.coerceAtMost(_state.value.fanGearLimit ?: type.fanGearCount)
+        writeFanRaw(CoolerBleConstants.gearToRaw(selectedGear, type))
+    }
+
     fun setFanRaw(raw: Int) = onMain {
-        if (_state.value.deviceType != CoolerDeviceType.JACKET_6_PRO) return@onMain
         if (!_state.value.manualLevelEnabled) return@onMain
         writeFanRaw(raw)
     }
@@ -1029,14 +1034,10 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         val command = command(Control.FAN, CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID) ?: return
         val type = _state.value.deviceType ?: return
         val clampedRaw = raw.coerceIn(type.rawMin, type.rawMax)
-        // The 6 Pro+ official UI writes nine raw-value steps (c(I) selects a step, then d(I)
-        // returns its raw value). There is no evidence of a continuous slider, so normalize
-        // every target to a step before writing.
-        val effectiveRaw = if (type == CoolerDeviceType.JACKET_6_PRO_PLUS) {
-            CoolerBleConstants.snapToGearRaw6ProPlus(clampedRaw)
-        } else clampedRaw
+        val limitedRaw = _state.value.fanRawLimit?.let { minOf(clampedRaw, it) } ?: clampedRaw
+        val effectiveRaw = CoolerBleConstants.snapToGearRaw(limitedRaw, type)
         val percent = CoolerBleConstants.rawToPercentage(effectiveRaw, type)
-        _state.update { it.copy(pendingFanPercent = percent) }
+        _state.update { it.copy(pendingFanPercent = percent, pendingFanRaw = effectiveRaw) }
         scope.launch {
             try {
                 val payload = if (type.usesJacket6ProFamilyProtocol) {
@@ -1044,7 +1045,9 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                 } else byteArrayOf(effectiveRaw.toByte())
                 executeCommand(command, payload, 150)
             } finally {
-                if (fresh(command)) _state.update { it.copy(pendingFanPercent = null) }
+                if (fresh(command)) _state.update {
+                    it.copy(pendingFanPercent = null, pendingFanRaw = null)
+                }
             }
         }
     }

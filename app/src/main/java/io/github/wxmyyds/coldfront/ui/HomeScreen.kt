@@ -373,21 +373,15 @@ private fun MetricPillContent(icon: @Composable () -> Unit, value: String, unit:
     }
 }
 
-/** 制冷档位：8 Pro/6 Pro+ 使用 1–9 档，6 Pro 使用 40–80 raw。 */
+/** 制冷档位：按型号支持的 raw 档数显示离散滑条。 */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: AppStrings) {
-    val isProPlus = state.deviceType == CoolerDeviceType.JACKET_6_PRO_PLUS
-    val isGear = state.deviceType?.generation == 8 || isProPlus
-    val isJacket6Pro = state.deviceType == CoolerDeviceType.JACKET_6_PRO
-    val displayedPercent = state.pendingFanPercent ?: state.fanPercent
-    val displayedRaw = state.pendingFanPercent
-        ?.let { CoolerBleConstants.percentageToRaw(it, CoolerDeviceType.JACKET_6_PRO) }
-        ?: state.fanRaw?.takeIf { isJacket6Pro }
-        ?: CoolerBleConstants.percentageToRaw(displayedPercent, CoolerDeviceType.JACKET_6_PRO)
-    val displayedGear = state.fanGear ?: 1
-    // 官方将 maxSelectableProgress 设为限档值，超出后会弹回并提示；这里保留完整 1–9 档轨道，只钳制可选上限。
-    val maxGear = state.fanGearLimit ?: 9
+    val deviceType = state.deviceType
+    val gearCount = deviceType?.fanGearCount ?: 2
+    val displayedGear = state.fanGear?.coerceIn(1, gearCount) ?: 1
+    // 8 Pro reports a power limit; other models expose their full model-specific slider range.
+    val maxGear = state.fanGearLimit ?: gearCount
 
     if (state.isConnected && state.hasConfirmedConfiguration(CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID) && state.capabilities.fanControl && state.coolingAllowsControl && state.smartOn) {
         Surface(
@@ -439,11 +433,7 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
                 Text(strings.homeLevel, style = MaterialTheme.typography.titleMedium)
                 // 档位随遥测回读更新时直接刷新数值，不重新启动动效。
                 Text(
-                    when {
-                        isGear -> strings.homeLevelGear.format(displayedGear)
-                        isJacket6Pro -> strings.homeLevelRaw.format(displayedRaw)
-                        else -> strings.homeLevelPercent.format(displayedPercent)
-                    },
+                    strings.homeLevelGear.format(displayedGear),
                     style = EmphasizedTypography.headlineLarge,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -451,66 +441,27 @@ private fun LevelSection(vm: CoolerViewModel, state: CoolerLiveState, strings: A
             // 拖动时显示滑条值，松手后再与设备回读同步。
             var dragging by remember { mutableStateOf(false) }
             val gear = displayedGear.toFloat()
-            val percent = displayedPercent.toFloat()
-            val gearSlider = rememberSliderState(value = gear, steps = 7, trackRange = 1f..9f)
-            val percentSlider = rememberSliderState(value = percent, trackRange = 0f..100f)
-            val rawSlider = rememberSliderState(value = displayedRaw.toFloat(), steps = 39, trackRange = 40f..80f)
+            val gearSlider = rememberSliderState(
+                value = gear,
+                steps = (gearCount - 2).coerceAtLeast(0),
+                trackRange = 1f..gearCount.toFloat(),
+            )
             LaunchedEffect(gear, dragging) { if (!dragging) gearSlider.value = gear }
-            LaunchedEffect(percent, dragging) { if (!dragging) percentSlider.value = percent }
-            LaunchedEffect(displayedRaw, dragging) { if (!dragging) rawSlider.value = displayedRaw.toFloat() }
-            if (isJacket6Pro) {
-                Slider(
-                    state = rawSlider,
-                    modifier = Modifier.semantics {
-                        contentDescription = strings.homeLevel
-                        stateDescription = strings.homeLevelRaw.format(rawSlider.value.roundToInt())
-                    },
-                    onValueChange = {
-                        dragging = true
-                        rawSlider.value = it
-                        vm.setFanRaw(it.roundToInt())
-                    },
-                    onValueChangeFinished = { dragging = false },
-                    enabled = !state.smartOn && !state.boostOn,
-                )
-            } else if (isGear) {
-                Slider(
-                    state = gearSlider,
-                    modifier = Modifier.semantics {
-                        contentDescription = strings.homeLevel
-                        stateDescription = strings.homeLevelGear.format(gearSlider.value.roundToInt())
-                    },
-                    onValueChange = {
-                        dragging = true
-                        val capped = it.coerceAtMost(maxGear.toFloat())
-                        gearSlider.value = capped
-                        vm.setFanSpeed(
-                            if (isProPlus) {
-                                CoolerBleConstants.gearToPercentage6ProPlus(capped.roundToInt())
-                            } else {
-                                CoolerBleConstants.gearToPercentage8Pro(capped.roundToInt())
-                            },
-                        )
-                    },
-                    onValueChangeFinished = { dragging = false },
-                    enabled = !state.smartOn,
-                )
-            } else {
-                Slider(
-                    state = percentSlider,
-                    modifier = Modifier.semantics {
-                        contentDescription = strings.homeLevel
-                        stateDescription = strings.homeLevelPercent.format(percentSlider.value.toInt())
-                    },
-                    onValueChange = {
-                        dragging = true
-                        percentSlider.value = it
-                        vm.setFanSpeed(it.toInt())
-                    },
-                    onValueChangeFinished = { dragging = false },
-                    enabled = !state.smartOn,
-                )
-            }
+            Slider(
+                state = gearSlider,
+                modifier = Modifier.semantics {
+                    contentDescription = strings.homeLevel
+                    stateDescription = strings.homeLevelGear.format(gearSlider.value.roundToInt())
+                },
+                onValueChange = {
+                    dragging = true
+                    val capped = it.coerceAtMost(minOf(maxGear, gearCount).toFloat())
+                    gearSlider.value = capped
+                    vm.setFanGear(capped.roundToInt())
+                },
+                onValueChangeFinished = { dragging = false },
+                enabled = !state.smartOn,
+            )
         }
     }
 }

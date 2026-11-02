@@ -135,6 +135,7 @@ data class CoolerLiveState(
     val fanRaw: Int? = null,
     /** Pending slider target; distinct from the last acknowledged/device-reported speed. */
     val pendingFanPercent: Int? = null,
+    val pendingFanRaw: Int? = null,
     val fanMode: FanMode = FanMode.OFF,
     val rgb: RGBConfig? = null,
     /** Increases for every parsed light report, even when its value is unchanged. */
@@ -198,23 +199,17 @@ data class CoolerLiveState(
         get() = fanLimit?.takeIf { powerLimited }?.let(CoolerBleConstants::maxGearForFanLimit8Pro)
 
     /**
-     * 在收到确认前使用待发送的目标值；否则使用设备确认的原始字节。
-     * 供电功率不足时钳到限档：官方会将滑条压回 `maxSelectableProgress` 并下发该档位，
-     * 因此显示值与之后实际可选的档位保持一致。
-     * 8 Pro 与 6 Pro+ 均为官方 9 档(1–9)，档位表见 CoolerBleConstants 中对应型号的函数。
+     * UI presents each supported raw position as one discrete slider stop. The confirmed 40–80 models
+     * expose 41 positions, the standard 6 model exposes its 40–93 range, and 6 Pro+/8 Pro retain
+     * their verified nine-position tables.
      */
     val fanGear: Int?
         get() {
-            val type = deviceType
-                ?.takeIf { it.generation == 8 || it == CoolerDeviceType.JACKET_6_PRO_PLUS }
-                ?: return null
-            val raw = pendingFanPercent?.let { CoolerBleConstants.percentageToRaw(it, type) }
+            val type = deviceType ?: return null
+            val raw = pendingFanRaw
+                ?: pendingFanPercent?.let { CoolerBleConstants.percentageToRaw(it, type) }
                 ?: fanRaw ?: CoolerBleConstants.percentageToRaw(fanPercent, type)
-            val gear = if (type == CoolerDeviceType.JACKET_6_PRO_PLUS) {
-                CoolerBleConstants.rawToGear6ProPlus(raw)
-            } else {
-                CoolerBleConstants.rawToGear8Pro(raw)
-            }
+            val gear = CoolerBleConstants.rawToGear(raw, type)
             return fanGearLimit?.let { minOf(gear, it) } ?: gear
         }
 }

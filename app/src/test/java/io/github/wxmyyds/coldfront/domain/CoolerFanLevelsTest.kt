@@ -58,8 +58,55 @@ class CoolerFanLevelsTest {
         for (gear in 1..9) {
             assertEquals(gear, state.copy(pendingFanPercent = CoolerBleConstants.gearToPercentage8Pro(gear)).fanGear)
         }
-        assertEquals(1, state.copy(pendingFanPercent = null).fanGear)
-        assertNull(state.copy(deviceType = CoolerDeviceType.JACKET_5).fanGear)
+        assertEquals(1, state.copy(pendingFanPercent = null, pendingFanRaw = null).fanGear)
+        assertEquals(2, state.copy(
+            deviceType = CoolerDeviceType.JACKET_5,
+            fanRaw = 40,
+            pendingFanRaw = 41,
+        ).fanGear)
+        assertEquals(1, state.copy(deviceType = CoolerDeviceType.JACKET_5, fanRaw = 40).fanGear)
+    }
+
+    @Test
+    fun `all models use their configured discrete raw positions`() {
+        CoolerDeviceType.entries.forEach { model ->
+            val levels = (1..model.fanGearCount).map { CoolerBleConstants.gearToRaw(it, model) }
+            assertEquals("$model endpoints", model.rawMin, levels.first())
+            assertEquals("$model endpoints", model.rawMax, levels.last())
+            assertEquals(model.fanGearCount, levels.size)
+            assertTrue("$model has distinct gears", levels.zipWithNext().all { (a, b) -> a < b })
+            levels.forEachIndexed { index, raw ->
+                assertEquals("$model gear=${index + 1}", index + 1, CoolerBleConstants.rawToGear(raw, model))
+            }
+            for (raw in model.rawMin..model.rawMax) {
+                val snapped = CoolerBleConstants.snapToGearRaw(raw, model)
+                assertTrue("$model raw=$raw", snapped in levels)
+            }
+        }
+        assertEquals(9, CoolerDeviceType.JACKET_8_PRO.fanGearCount)
+        assertEquals(9, CoolerDeviceType.JACKET_6_PRO_PLUS.fanGearCount)
+        assertEquals(3, CoolerDeviceType.JACKET_2.fanGearCount)
+        assertEquals(41, CoolerDeviceType.JACKET_6_PRO.fanGearCount)
+        assertEquals(54, CoolerDeviceType.JACKET_6.fanGearCount)
+    }
+
+    @Test
+    fun `legacy model gear mapping retains every raw position`() {
+        val legacy = CoolerDeviceType.JACKET_5
+        assertEquals(41, legacy.fanGearCount)
+        assertEquals(40, CoolerBleConstants.gearToRaw(1, legacy))
+        assertEquals(60, CoolerBleConstants.gearToRaw(21, legacy))
+        assertEquals(80, CoolerBleConstants.gearToRaw(41, legacy))
+        assertEquals(21, CoolerBleConstants.rawToGear(60, legacy))
+    }
+
+    @Test
+    fun `six pro gear positions follow official raw slider range`() {
+        val sixPro = CoolerDeviceType.JACKET_6_PRO
+        assertEquals(41, sixPro.fanGearCount)
+        for (gear in 1..sixPro.fanGearCount) {
+            assertEquals(39 + gear, CoolerBleConstants.gearToRaw(gear, sixPro))
+        }
     }
 
     @Test
@@ -175,8 +222,8 @@ class CoolerFanLevelsTest {
             3,
             state.copy(pendingFanPercent = CoolerBleConstants.gearToPercentage6ProPlus(3)).fanGear,
         )
-        // 九档显示只用于 6 Pro+；6 Pro 使用连续 raw 滑条。
-        assertNull(state.copy(deviceType = CoolerDeviceType.JACKET_6_PRO).fanGear)
-        assertNull(state.copy(deviceType = CoolerDeviceType.JACKET_6).fanGear)
+        // All models expose discrete positions; 6 Pro+/8 Pro use their verified nine-gear tables.
+        assertEquals(1, state.copy(deviceType = CoolerDeviceType.JACKET_6_PRO, fanRaw = 40).fanGear)
+        assertEquals(1, state.copy(deviceType = CoolerDeviceType.JACKET_6, fanRaw = 40).fanGear)
     }
 }
