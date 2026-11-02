@@ -179,6 +179,7 @@ jobs:
             echo "首次正式版：沿用 $BASE_REF 上的版本号，无改动"
           fi
 
+          echo "prevStableTag=$LATEST_STABLE_TAG" >> "$GITHUB_OUTPUT"
           echo "sourceSha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "sourceRef=$SOURCE_REF" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -239,6 +240,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           MODE: ${{ inputs.mode }}
+          PREV_TAG: ${{ steps.resolve.outputs.prevStableTag }}
           VERSION: ${{ steps.resolve.outputs.version }}
           VERSION_CODE: ${{ steps.resolve.outputs.versionCode }}
           TAG: ${{ steps.resolve.outputs.tag }}
@@ -264,8 +266,10 @@ jobs:
           echo "已推送 tag $TAG"
 
           if [[ "$MODE" == "stable" ]]; then
-            # Previous stable tag, used to build the changelog range.
-            PREV=$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)
+            # Reuse the previous stable tag that Resolve picked by version order.
+            # Do not use git describe here: the version commit is reachable only from its tag,
+            # not from main, so describe never finds it and falls back to v1.0.0, repeating old entries.
+            PREV="$PREV_TAG"
             RANGE="${PREV:+$PREV..}HEAD"
             echo "变更范围：$RANGE（上一个正式版：${PREV:-无}）"
             LOG=$(git log "$RANGE" --no-merges --pretty=format:'%s' 2>/dev/null \
