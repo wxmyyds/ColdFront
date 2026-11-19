@@ -7,8 +7,10 @@ import org.junit.Test
 class CoolerTelemetryParserTest {
     @Test
     fun `fan raw bytes above signed range reach full speed on older models`() {
-        assertEquals(100, CoolerTelemetryParser.fanPercent(byteArrayOf(200.toByte()), CoolerDeviceType.JACKET_6))
-        assertEquals(55, CoolerTelemetryParser.fanPercent(byteArrayOf(128.toByte()), CoolerDeviceType.JACKET_6))
+        assertEquals(100, CoolerTelemetryParser.fanPercent(byteArrayOf(200.toByte()), CoolerDeviceType.JACKET_1))
+        assertEquals(55, CoolerTelemetryParser.fanPercent(byteArrayOf(128.toByte()), CoolerDeviceType.JACKET_1))
+        assertEquals(100, CoolerTelemetryParser.fanPercent(byteArrayOf(93), CoolerDeviceType.JACKET_6))
+        assertEquals(0, CoolerTelemetryParser.fanPercent(byteArrayOf(40), CoolerDeviceType.JACKET_6))
         assertEquals(100, CoolerTelemetryParser.fanPercent(byteArrayOf(80), CoolerDeviceType.JACKET_8_PRO))
         assertEquals(0, CoolerTelemetryParser.fanPercent(byteArrayOf(40), CoolerDeviceType.JACKET_8_PRO))
         assertNull(CoolerTelemetryParser.fanPercent(byteArrayOf(), CoolerDeviceType.JACKET_8_PRO))

@@ -65,14 +65,6 @@ private const val LIGHT_DEFAULT_MIN_INTERVAL_MS = 3000L
 /** 每次连接下发默认灯效命令的次数上限。 */
 private const val MAX_LIGHT_DEFAULT_ATTEMPTS = 3
 
-data class ScanState(
-    val scanning: Boolean = false,
-    val permissionGranted: Boolean = false,
-    val locationServiceEnabled: Boolean = true,
-    val bluetoothOn: Boolean = false,
-    val errorCode: Int? = null,
-)
-
 /**
  * Main-confined BLE owner. Public fire-and-forget methods dispatch to Main.immediate;
  * all Android callbacks (including legacy Binder callbacks) are posted to the main Handler.
@@ -169,7 +161,11 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         refreshScanConditionsInternal()
         if (scanSession != null) return@onMain
         if (!_scanState.value.permissionGranted || !isBluetoothEnabled) return@onMain
-        val scanner = runCatching { bluetoothAdapter?.bluetoothLeScanner }.getOrNull() ?: return@onMain
+        val scanner = runCatching { bluetoothAdapter?.bluetoothLeScanner }.getOrNull()
+        if (scanner == null) {
+            failScan(ScanCallback.SCAN_FAILED_INTERNAL_ERROR)
+            return@onMain
+        }
         lateinit var scan: ScanSession
         val callback = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
@@ -184,8 +180,7 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             override fun onScanFailed(errorCode: Int) {
                 handler.post {
                     if (scanSession !== scan) return@post
-                    stopScanInternal()
-                    _scanState.update { it.copy(errorCode = errorCode) }
+                    failScan(errorCode)
                 }
             }
         }
@@ -198,11 +193,16 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             scanner.startScan(null, ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(), callback)
         } catch (e: Exception) {
             Log.e(TAG, "startScan failed", e)
-            stopScanInternal()
+            failScan(ScanCallback.SCAN_FAILED_INTERNAL_ERROR)
         }
     }
 
     fun stopScan() = onMain { stopScanInternal() }
+
+    private fun failScan(errorCode: Int) {
+        stopScanInternal()
+        _scanState.update { it.failed(errorCode) }
+    }
 
     private fun stopScanInternal() {
         val old = scanSession
@@ -678,15 +678,23 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         if (!ready(s)) return
         val ch = s.characteristics[CoolerBleConstants.LIGHT_CONTROL_UUID] ?: return
         if (!writable(ch)) return
+        if (_rgbWriteState.value?.status == RgbWriteStatus.WRITING) return
         if (s.lightDefaultAttempts >= MAX_LIGHT_DEFAULT_ATTEMPTS) return
         val now = SystemClock.elapsedRealtime()
         if (now - s.lastLightDefaultMs < LIGHT_DEFAULT_MIN_INTERVAL_MS) return
         s.lastLightDefaultMs = now
         s.lightDefaultAttempts++
+        val rgbGeneration = s.generations[Control.RGB] ?: 0L
         scope.launch {
-            if (!owns(s)) return@launch
-            enqueueWrite(s, ch, CoolerBleConstants.defaultLightCommand(),
-                poisonOnTimeout = false, quarantineOnTimeout = false)
+            if (!owns(s) || (s.generations[Control.RGB] ?: 0L) != rgbGeneration) return@launch
+            val command = command(Control.RGB, CoolerBleConstants.LIGHT_CONTROL_UUID) ?: return@launch
+            executeCommand(
+                command,
+                CoolerBleConstants.defaultLightCommand(),
+                readBackAfterWrite = false,
+                writePoisonOnTimeout = false,
+                writeQuarantineOnTimeout = false,
+            )
         }
     }
 
@@ -868,19 +876,14 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         if (!owns(s)) return
         val previous = _state.value
         val update = CoolerTelemetryReducer.reduce(previous, uuid, value)
-        // A non-empty 0x1013 reply with an unknown effect byte, anything other than 1, 2, 3, 4, or 6,
-        // cannot be displayed. The official app writes the default effect to restore a known state.
-        // If the mode is known but color bytes are missing, [RGBConfig.fromNotification] returns
-        // null without inventing a color. The mode is still known, so the official page displays
-        // it without a fallback and we do the same.
+        if (update?.temperatureReported == true) s.lastTempUpdateMs = SystemClock.elapsedRealtime()
+        val committed = confirmedConfigurationState(previous, uuid, update)
+        _state.value = committed
         if (uuid == CoolerBleConstants.LIGHT_CONTROL_UUID && update == null &&
             value.isNotEmpty() && LightEffect.fromCode(value[0]) == null
         ) {
             maybeSendDefaultLight(s)
         }
-        if (update?.temperatureReported == true) s.lastTempUpdateMs = SystemClock.elapsedRealtime()
-        val committed = confirmedConfigurationState(previous, uuid, update)
-        _state.value = committed
         if (update?.temperatureReported == true || uuid == CoolerBleConstants.LIGHT_CONTROL_UUID) {
             // Even an unchanged temperature report extends the watchdog deadline.
             s.telemetryChanges.value++
@@ -918,8 +921,8 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         val type = state.deviceType ?: return
         // Prefer a pending drag target to the read-back value, as with fanGear. If the user reaches
         // an over-limit value before the limit report arrives, comparing only read-back would miss it.
-        val intendedRaw = state.pendingFanPercent
-            ?.let { CoolerBleConstants.percentageToRaw(it, type) }
+        val intendedRaw = state.pendingFanRaw
+            ?: state.pendingFanPercent?.let { CoolerBleConstants.percentageToRaw(it, type) }
             ?: state.fanRaw ?: return
         if (intendedRaw <= maxRaw) return
         // BOOST was disabled above, although its read-back has not arrived. Evaluate the manual-level
@@ -961,6 +964,9 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         debounceMs: Long = 0,
         additionalFresh: () -> Boolean = { true },
         beforeWrite: () -> Unit = {},
+        readBackAfterWrite: Boolean = true,
+        writePoisonOnTimeout: Boolean = true,
+        writeQuarantineOnTimeout: Boolean = true,
     ): Boolean {
         val s = command.session
         val compositeFresh = { fresh(command) && additionalFresh() }
@@ -969,12 +975,24 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
             if (debounceMs > 0) delay(debounceMs)
             return executeFreshCommand(
                 compositeFresh = compositeFresh,
-                write = { enqueueWrite(s, command.characteristic, value, beforeWrite = beforeWrite, fresh = it) },
+                write = {
+                    enqueueWrite(
+                        s,
+                        command.characteristic,
+                        value,
+                        beforeWrite = beforeWrite,
+                        fresh = it,
+                        poisonOnTimeout = writePoisonOnTimeout,
+                        quarantineOnTimeout = writeQuarantineOnTimeout,
+                    )
+                },
                 readBack = {
-                    // A GATT write callback confirms delivery only. Read-back remains the configuration source,
-                    // and a read-back failure must not end the session.
-                    readIfReadable(s, command.characteristic, fresh = it, poisonOnTimeout = false,
-                        quarantineOnTimeout = command.characteristic.uuid != CoolerBleConstants.LIGHT_CONTROL_UUID)
+                    if (readBackAfterWrite) {
+                        // A GATT write callback confirms delivery only. Read-back remains the configuration source,
+                        // and a read-back failure must not end the session.
+                        readIfReadable(s, command.characteristic, fresh = it, poisonOnTimeout = false,
+                            quarantineOnTimeout = command.characteristic.uuid != CoolerBleConstants.LIGHT_CONTROL_UUID)
+                    }
                 },
             )
         } finally {
@@ -984,9 +1002,14 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
 
     fun setFanSpeed(percent: Int) = onMain { writeFanSpeed(percent, enforceManual = true) }
 
-        // 6 Pro 的官方滑条直接使用 fan raw 40..80，不使用 8 Pro 档位。
+    fun setFanGear(gear: Int) = onMain {
+        if (!_state.value.manualLevelEnabled) return@onMain
+        val type = _state.value.deviceType ?: return@onMain
+        val selectedGear = gear.coerceAtMost(_state.value.fanGearLimit ?: type.fanGearCount)
+        writeFanRaw(CoolerBleConstants.gearToRaw(selectedGear, type))
+    }
+
     fun setFanRaw(raw: Int) = onMain {
-        if (_state.value.deviceType != CoolerDeviceType.JACKET_6_PRO) return@onMain
         if (!_state.value.manualLevelEnabled) return@onMain
         writeFanRaw(raw)
     }
@@ -1011,14 +1034,10 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
         val command = command(Control.FAN, CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID) ?: return
         val type = _state.value.deviceType ?: return
         val clampedRaw = raw.coerceIn(type.rawMin, type.rawMax)
-        // The 6 Pro+ official UI writes nine raw-value steps (c(I) selects a step, then d(I)
-        // returns its raw value). There is no evidence of a continuous slider, so normalize
-        // every target to a step before writing.
-        val effectiveRaw = if (type == CoolerDeviceType.JACKET_6_PRO_PLUS) {
-            CoolerBleConstants.snapToGearRaw6ProPlus(clampedRaw)
-        } else clampedRaw
+        val limitedRaw = _state.value.fanRawLimit?.let { minOf(clampedRaw, it) } ?: clampedRaw
+        val effectiveRaw = CoolerBleConstants.snapToGearRaw(limitedRaw, type)
         val percent = CoolerBleConstants.rawToPercentage(effectiveRaw, type)
-        _state.update { it.copy(pendingFanPercent = percent) }
+        _state.update { it.copy(pendingFanPercent = percent, pendingFanRaw = effectiveRaw) }
         scope.launch {
             try {
                 val payload = if (type.usesJacket6ProFamilyProtocol) {
@@ -1026,7 +1045,9 @@ class CoolerBleManager(private val context: Context) : BackgroundLinkLossStore {
                 } else byteArrayOf(effectiveRaw.toByte())
                 executeCommand(command, payload, 150)
             } finally {
-                if (fresh(command)) _state.update { it.copy(pendingFanPercent = null) }
+                if (fresh(command)) _state.update {
+                    it.copy(pendingFanPercent = null, pendingFanRaw = null)
+                }
             }
         }
     }

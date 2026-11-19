@@ -56,6 +56,14 @@ class CoolerDeviceTest {
     }
 
     @Test
+    fun `MSD matching preserves the 5 Lite name distinction`() {
+        assertEquals(CoolerDeviceType.JACKET_5_LITE, CoolerDeviceType.fromMsdType(5, 5, "RM Magcooler 5 Lite"))
+        assertEquals(CoolerDeviceType.JACKET_5_LITE, CoolerDeviceType.fromMsdType(5, 5, "Cryo Cooler 5 Lite"))
+        assertEquals(CoolerDeviceType.JACKET_5, CoolerDeviceType.fromMsdType(5, 5, "RM Magcooler 5 Pro"))
+        assertEquals(CoolerDeviceType.JACKET_5, CoolerDeviceType.fromMsdType(5, 5, null))
+    }
+
+    @Test
     fun `every model carries a display name and non-empty aliases`() {
         // 展示名 + 别名两层覆盖全部设备;别名为官方广播名/历史展示名。
         CoolerDeviceType.entries.forEach { type ->
