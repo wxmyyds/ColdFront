@@ -48,8 +48,8 @@ android {
         applicationId = "io.github.wxmyyds.coldfront"
         minSdk = 24
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 6
+        versionName = "1.0.3"
     }
 
     // 仅凭据齐全时创建 release 签名配置，避免 AGP 因配置为空而报错
