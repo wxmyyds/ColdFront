@@ -5,9 +5,9 @@ import android.content.Context
 import android.os.Looper
 import androidx.annotation.MainThread
 
-/** One transport shared by explicit Activity/ViewModel and foreground-service owners. */
+/** One transport shared by the Activity/ViewModel and foreground service. */
 object BleManagerHolder {
-    // The singleton receives applicationContext only; never an Activity or Service context.
+    // Keep only the application context so the singleton does not retain an Activity or Service.
     @SuppressLint("StaticFieldLeak")
     private var instance: CoolerBleManager? = null
     private val owners = mutableSetOf<Any>()

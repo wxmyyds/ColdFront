@@ -78,21 +78,21 @@ import kotlinx.coroutines.flow.collect
 import io.github.wxmyyds.coldfront.R
 import io.github.wxmyyds.coldfront.ui.theme.optionContainerColor
 /**
- * MD3E 分段选项列表 —— ColdFront 自有实现。
+ * ColdFront 的 MD3E 分段选项列表实现。
  *
- * 全部基于 androidx 原生原语（[SegmentedListItem] / [ListItemDefaults.segmentedShapes] /
- * [ListItemDefaults.segmentedColors]），观感对齐 Material 3 Expressive 列表规格：
+ * 组件使用 androidx 原生原语（[SegmentedListItem] / [ListItemDefaults.segmentedShapes] /
+ * [ListItemDefaults.segmentedColors]），并遵循 Material 3 Expressive 列表规格：
  *
- * - 分组外角 16dp、内角 4dp，由 segmentedShapes(index, count) 生成；按压形变只属于
- *   可见项 ≥ 2 的分组（pressed/focused 取 large 16dp，由组件按主题 motionScheme 补间），
- *   单项分组与独立单行全取 large 16dp、即无形变——反馈只留涟漪与状态层；
- * - 行间留分段缝隙；
- * - 行容器用 surfaceBright，页面用 surfaceContainer —— 靠明度分层，不靠阴影；
- * - 下拉行 trailing 直接显示当前值（bodyMedium + onSurfaceVariant，单行省略），不再放
- *   下三角图标；整行仍是点击区域，菜单逻辑不变；
- * - 组标题 titleSmall + primary；
- * - 整行可点，勾选/选中带 VirtualKey 触感；
- * - 尾随 Switch 只做视觉指示（onCheckedChange = null），图标色由组件按 SwitchTokens 注入。
+ * - 分组外角 16dp、内角 4dp，由 segmentedShapes(index, count) 生成。只有可见项不少于 2
+ *   个的分组才启用按压形变，pressed/focused 使用 large 16dp，并按主题 motionScheme 补间。
+ *   单项分组和独立单行保持 large 16dp，不做形变，只显示涟漪与状态层；
+ * - 行间保留分段缝隙；
+ * - 行容器使用 surfaceBright，页面使用 surfaceContainer，通过明度形成层级；
+ * - 下拉行 trailing 直接显示当前值（bodyMedium + onSurfaceVariant，单行省略），不显示
+ *   下三角图标。整行仍可点击，菜单逻辑不变；
+ * - 组标题使用 titleSmall + primary；
+ * - 整行可点击，勾选或选中时提供 VirtualKey 触感；
+ * - 尾随 Switch 只显示状态（onCheckedChange = null），图标色由组件按 SwitchTokens 注入。
  *
  * 用法：
  * ```
@@ -105,7 +105,7 @@ import io.github.wxmyyds.coldfront.ui.theme.optionContainerColor
  *     }
  * }
  * ```
- * LazyColumn 里没法用 CompositionLocal 跨 item 传形状，改为显式传
+ * LazyColumn 无法通过 CompositionLocal 跨 item 传递形状，因此需显式传入
  * `shapes = segmentedRowShapes(index, count)`。
  */
 
@@ -119,10 +119,10 @@ val SegmentedRowGap = 2.dp
 val LocalSegmentedShapes = compositionLocalOf<ListItemShapes?> { null }
 
 /**
- * 行配色：容器 surfaceBright，正文 onSurface，其余槽位 onSurfaceVariant。
+ * 行配色：容器使用 surfaceBright，正文使用 onSurface，其余槽位使用 onSurfaceVariant。
  *
- * 页面底色用 surfaceContainer（见 theme 的 pageLayerScheme），行容器比它亮一档，
- * 靠明度分层。选中/开启态仍由行内控件（Switch、下拉勾）表达，故 selected* 保持常态值。
+ * 页面底色是 surfaceContainer（见 theme 的 pageLayerScheme），行容器亮一档，形成明度层级。
+ * 选中或开启状态由行内控件（Switch、下拉勾）表达，因此 selected* 保持常态值。
  */
 @Composable
 fun segmentedRowColors(): ListItemColors {
@@ -146,8 +146,8 @@ fun segmentedRowColors(): ListItemColors {
 }
 
 /**
- * 独立单行 / 单项分组：四角 large 16dp，且 pressed/focused/hovered 全部保持 16dp——
- * 按全局规则，1 个可交互选项的分组不用按压缩放形变，只留涟漪与状态层。
+ * 独立单行或单项分组使用四角 large 16dp。pressed、focused 和 hovered 状态也保持 16dp。
+ * 单项分组不做按压缩放，只显示涟漪与状态层。
  */
 @Composable
 fun staticStandaloneRowShapes(): ListItemShapes = ListItemDefaults.shapes(
@@ -159,19 +159,18 @@ fun staticStandaloneRowShapes(): ListItemShapes = ListItemDefaults.shapes(
 )
 
 /**
- * 分组中第 [index] 行（共 [count] 行）：外角 16dp、内角 4dp。
+ * 分组中第 [index] 行（共 [count] 行）：外角 16dp，内角 4dp。
  *
- * [count] 必须是分组实际可见的可交互项数（[SegmentedGroup] 已过滤 visible=false
- * 的行；LazyColumn 手写处调用方自行保证）：
- * - count <= 1（含独立单行）→ [staticStandaloneRowShapes]，无按压形变；
- * - count >= 2 → pressed / focused 取 large 16dp、hovered 取 medium 12dp，
- *   [SegmentedListItem] 会用主题 motionScheme 的空间动画在这些形状间补间，
- *   按下时内角 4dp 弹到 16dp，就是 M3E 列表的按压形变。
+ * [count] 必须是分组中实际可见且可交互的项数。[SegmentedGroup] 会过滤 visible=false 的行；
+ * 在 LazyColumn 中手动调用时，由调用方保证这一点：
+ * - count <= 1（含独立单行）时使用 [staticStandaloneRowShapes]，不做按压形变；
+ * - count >= 2 时，pressed / focused 使用 large 16dp，hovered 使用 medium 12dp。
+ *   [SegmentedListItem] 按主题 motionScheme 在这些形状间补间，按下时内角从 4dp 弹到
+ *   16dp，形成 M3E 列表的按压形变。
  * 判断只看分组实际可见项数，不看页面、名称或 ID。
  *
- * 只把 selected 压回基准形状：本项目的选中/开启态由行内 Switch、下拉勾选表达，
- * 容器在静止态不再额外形变，否则“开着的开关”那一行会长期顶着 16dp 圆角与邻行的
- * 4dp 内角错位。
+ * selectedShape 保持基准形状。选中或开启状态由行内 Switch、下拉勾选表达，因此容器静止时
+ * 不额外变形，避免开启行长期保持 16dp 圆角，与相邻行的 4dp 内角错位。
  */
 @Composable
 fun segmentedRowShapes(index: Int, count: Int): ListItemShapes {
@@ -191,13 +190,14 @@ private fun currentRowShapes(explicit: ListItemShapes?): ListItemShapes =
     explicit ?: LocalSegmentedShapes.current ?: staticStandaloneRowShapes()
 
 /**
- * 按压形变的唯一判断依据：分组实际可见的可交互项数。
+ * 按压形变是否启用，只由分组中实际可见的可交互项数决定。
  *
- * - 1 项（含独立单行）→ false，不做缩放形变，只留涟漪/状态层；
- * - ≥ 2 项 → true，统一启用 M3E 按压形变。
+ * - 1 项（含独立单行）时返回 false，不做缩放形变，只显示涟漪和状态层；
+ * - 2 项及以上时返回 true，启用 M3E 按压形变。
  *
- * 纯函数、可单测；调用方不得按页面、名称或 ID 另写判断。[SegmentedGroup]
- * 只收可交互行与静态配置面板，状态卡/空态/按钮本来就不进分组。
+ * 这是纯函数，可单独测试。调用方统一使用此判断，不按页面、名称或 ID 另行分支。
+ * [SegmentedGroup] 只接收可交互行和静态配置面板；状态卡、空态、按钮不计入分组，
+ * 因此这里的项数就是可交互选项数，无需再按 onClick 是否为空过滤。
  */
 internal fun segmentedGroupPressMorph(itemCount: Int): Boolean = itemCount >= 2
 
@@ -227,8 +227,8 @@ class SegmentedGroupScope {
     internal val entries = mutableListOf<Entry>()
 
     /**
-     * 加入一行。[visible] 为 false 的行不参与分组计数——
-     * 外角 16dp 会自动落到相邻的可见行上，不需要调用方重算 index/count。
+     * 加入一行。[visible] 为 false 时，该行不计入分组数量。外角 16dp 会自动应用到相邻的
+     * 可见行，调用方无需重新计算 index/count。
      */
     fun item(key: Any? = null, visible: Boolean = true, content: @Composable () -> Unit) {
         entries.add(Entry(key ?: entries.size, visible, content))
@@ -236,16 +236,14 @@ class SegmentedGroupScope {
 }
 
 /**
- * 一组选项行。[title] 非空时在组上方渲染 titleSmall + primary 的小标题。
- * 行的增减会让整组高度以 motionScheme 的空间动画过渡。
+ * 一组选项行。[title] 非空时，会在组上方显示 titleSmall + primary 的小标题。
+ * 行数变化时，整组高度会按 motionScheme 的空间动画过渡。
  *
- * 形状/按压规则只看 [SegmentedGroupScope] 里实际可见的项数：1 项用静态形状
- * （无按压形变），≥ 2 项用统一的表达性按压形状。调用方不要再按页面或名称
- * 另行判断。
+ * 形状和按压规则由 [SegmentedGroupScope] 中实际可见的项数决定：1 项使用静态形状，
+ * 不做按压形变；2 项及以上使用统一的表达性按压形状。调用方无需按页面或名称另行判断。
  *
- * [SegmentedGroup] 只收可交互行与 [SegmentedContainer] 这类静态配置面板；状态卡、
- * 空态、按钮不进分组计数，因此这里的“项数”天然等于可交互选项数，不需要再按
- * onClick 是否为空二次过滤。
+ * [SegmentedGroup] 只接收可交互行和 [SegmentedContainer] 这类静态配置面板。状态卡、
+ * 空态和按钮不计入分组，因此这里的项数就是可交互选项数，无需按 onClick 是否为空过滤。
  */
 @Composable
 fun SegmentedGroup(
@@ -351,8 +349,8 @@ fun SegmentedContainer(
 // ───────────────────── 行 ─────────────────────
 
 /**
- * 普通行：[onClick] 为 null 时纯展示，非 null 时整行可点（自带状态层/涟漪/语义 + 触感）。
- * [summary] 是次要文字的便捷写法，需要多段内容时改传 [supportingContent]。
+ * 普通行。[onClick] 为 null 时只显示内容；传入回调后整行可点，并提供状态层、涟漪、语义和触感反馈。
+ * [summary] 可快速设置次要文字；需要多段内容时使用 [supportingContent]。
  */
 @Composable
 fun SegmentedRow(
@@ -385,8 +383,8 @@ fun SegmentedRow(
             trailingContent = trailingContent,
             overlineContent = overlineSlot,
             supportingContent = supporting,
-            // 默认 verticalAlignment 在行高超过断点时改顶对齐——长文案(如英文)折行后
-            // 行首图标/尾随开关会贴顶；列表规格要求它们始终整行居中，显式覆盖。
+            // 行高超过断点时，默认 verticalAlignment 会改为顶对齐。长文案折行后，行首图标和
+            // 尾随开关会贴顶；这里显式设为垂直居中，符合列表规格。
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(title)
@@ -414,8 +412,8 @@ fun SegmentedRow(
 }
 
 /**
- * 开关行：整行点击即切换（checked 重载提供 toggle 语义与状态层），
- * 尾随 Switch 是纯指示器，图标色由组件注入，不要手写 tint。
+ * 开关行。点击整行即可切换状态，checked 重载会提供 toggle 语义和状态层。
+ * 尾随 Switch 只显示状态，图标色由组件注入，无需手动设置 tint。
  */
 @Composable
 fun SegmentedSwitchRow(
@@ -437,7 +435,7 @@ fun SegmentedSwitchRow(
     SegmentedListItem(
         checked = checked,
         onCheckedChange = {
-            // 开关用专用的 ToggleOn/ToggleOff 触感，比通用 VirtualKey 反馈更准
+            // 开关切换使用 ToggleOn/ToggleOff 专用触感，反馈比通用 VirtualKey 更准确
             haptic.performHapticFeedback(
                 if (it) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff
             )
@@ -449,12 +447,12 @@ fun SegmentedSwitchRow(
         colors = colors,
         leadingContent = leadingContent,
         supportingContent = supporting,
-        // 长文案折行使行高超过断点时，默认对齐会把开关贴到标题线；始终居中
+        // 长文案折行后，行高可能超过断点，默认对齐会使开关贴近标题。这里始终垂直居中。
         verticalAlignment = Alignment.CenterVertically,
         trailingContent = {
             Switch(
                 checked = checked,
-                // 指示器：交互交给整行；enabled 与行一致，否则行置灰时开关仍是可用态配色
+                // Switch 只作状态指示，交互由整行处理。enabled 与行同步，避免行置灰时开关仍显示可用态配色
                 onCheckedChange = null,
                 enabled = enabled,
                 thumbContent = {
@@ -475,13 +473,13 @@ fun SegmentedSwitchRow(
 }
 
 /**
- * 下拉选择行：整行点击弹菜单，trailing 直接显示当前值（[SegmentedTrailingValue]），
+ * 下拉选择行。点击整行打开菜单，trailing 显示当前值（[SegmentedTrailingValue]）；
  * supporting 只放可选的 [summary] 说明。
  *
- * 菜单用 MD3E 表达性组件栈（[DropdownMenuPopup] + [DropdownMenuGroup] +
- * [SelectableDropdownMenuItem]），并参考 KernelSU 的设置下拉交互：选项连成一体
- * （分段形状、无间隙），选中项以展开动画的勾选图标强调；菜单锚定在手指按下的
- * 位置展开，选项从按压点生长出来。
+ * 菜单使用 MD3E 表达性组件栈（[DropdownMenuPopup] + [DropdownMenuGroup] +
+ * [SelectableDropdownMenuItem]），并参考 KernelSU 的设置下拉交互：选项使用连续分段形状，
+ * 彼此贴合且没有间隙；选中项通过展开动画显示勾选图标。菜单锚定在手指按下的位置展开，
+ * 选项从按压点生长出来。
  */
 @Composable
 fun <T> SegmentedDropdownRow(

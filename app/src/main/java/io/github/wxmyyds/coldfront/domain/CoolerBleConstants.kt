@@ -5,12 +5,11 @@ import java.util.UUID
 /**
  * 红魔散热器 BLE 协议常量。
  *
- * 特征语义以实测可用的第三方 App(com.magcooler.cpucontrol)与官方 App 逆向交叉验证,
- * 详见 docs/protocol-8pro.md。关键点:
- * - 温度在 0x1014(单字节有符号;固件 8.4.7 为 [0x04, 温度] 包),无偏移;
- * - 0x1011 是散热总开关(写 0x02 开 / 0x03 关)——不写它风扇不会转;
- * - 0x1012 风扇 raw 40–80(8 Pro,8 档);旧型号 40–200;
- * - 特征值不依赖特定服务 UUID:遍历所有服务查找(兼容服务 UUID 变体)。
+ * 特征语义根据第三方 App(com.magcooler.cpucontrol)与官方 App 的逆向结果交叉验证，详见 docs/protocol-8pro.md：
+ * - 温度在 0x1014(单字节有符号；固件 8.4.7 为 [0x04, 温度] 包)，无偏移；
+ * - 0x1011 是散热总开关(写 0x02 开 / 0x03 关)，不写它风扇不会转；
+ * - 0x1012 风扇 raw 40–80(8 Pro/6 Pro+ 均为官方 9 档)，旧型号 40–200；
+ * - 特征 UUID 的服务归属会随型号和固件变化。6 Pro/6 Pro+ 只从主服务绑定；其他型号遍历服务以兼容 UUID 变体。
  */
 object CoolerBleConstants {
 
@@ -18,8 +17,8 @@ object CoolerBleConstants {
     val ADVERTISING_SERVICE_UUID: UUID = UUID.fromString("00004a41-0000-1000-8000-00805f9b34fb")
 
     /**
-     * 厂商数据(Manufacturer Specific Data)公司 ID:0x08CA(2250)。
-     * payload 前 2 字节 = [mainType, subType],用于精确识别型号(8 Pro = 0x05, 0x08)。
+     * 厂商数据(Manufacturer Specific Data)的公司 ID：0x08CA(2250)。
+     * payload 前 2 字节为 [mainType, subType]，用于精确识别型号(8 Pro = 0x05, 0x08)。
      */
     const val MSD_COMPANY_ID: Int = 0x08CA
 
@@ -42,15 +41,15 @@ object CoolerBleConstants {
     val LIGHT_CONTROL_UUID: UUID = UUID.fromString("00001013-0000-1000-8000-00805f9b34fb")
 
     /**
-     * 官方主服务(Jacket8ProProcessor.buildServiceAndCharacter 构造;其 onCharacteristicRead /
+     * 官方主服务(Jacket8ProProcessor.buildServiceAndCharacter 构造；其 onCharacteristicRead /
      * onCharacteristicChanged 只在 service == 此值时处理)。8 Pro 的全部控制/灯效特征都在该服务下。
-     * 其它服务里可能暴露同 UUID 但语义不同的特征,因此绑定特征时优先取主服务实例。
+     * 其它服务可能暴露相同 UUID 但语义不同的特征，因此绑定时优先使用主服务中的实例。
      */
     val MAIN_SERVICE_UUID: UUID = UUID.fromString("d52082ad-e805-9f97-9d4e-1c682d9c9ce6")
 
     /**
-     * 官方默认灯效字节(n0.a() = [0x01,0x00,0x00,0x00],炫彩)。官方 refreshLightModeView 在读到
-     * 非 1/2/3/4/6 的未知灯效字节且数组非空时,会下发该命令把设备纠正到已知状态。
+     * 官方默认灯效字节(n0.a() = [0x01,0x00,0x00,0x00]，炫彩)。读取到非 1/2/3/4/6 的未知灯效字节且数组非空时，
+     * 官方 refreshLightModeView 会下发该命令，将设备恢复到已知状态。
      */
     fun defaultLightCommand(): ByteArray = byteArrayOf(0x01, 0x00, 0x00, 0x00)
 
@@ -81,8 +80,8 @@ object CoolerBleConstants {
     const val STATUS_TAG_FAN_POWER: Int = 0x09
 
     /**
-     * 官方 `Jacket8ProManagerV2$a.b()`(即静态字段 `r0`)的值:设备上报的功耗限档"不限"值。
-     * 限档等于该值表示供电充足;小于该值表示充电器供电功率不足。
+     * 官方 `Jacket8ProManagerV2$a.b()`(即静态字段 `r0`)的值，表示设备上报的功耗限档“不限”值。
+     * 限档等于该值表示供电充足；小于该值表示充电器供电功率不足。
      */
     const val FAN_LIMIT_UNLIMITED_8_PRO: Int = 8
 
@@ -116,20 +115,27 @@ object CoolerBleConstants {
 
     // —— 风扇调速换算:百分比 ↔ raw(逐型号范围) ——
 
-    /** Official 8 Pro raw boundaries, presented as 1..8 rather than firmware's 0..7. */
+    /**
+     * Official 8 Pro raw boundaries (`Jacket8ProManagerV2$a.d(I)`), presented as UI gears
+     * 1..9: 40–43/43–49/49–55/55–61/61–67/67–71/71–74/74–78/78+（与 6 Pro+ 同边界）。
+     */
     fun rawToGear8Pro(raw: Int): Int = when {
-        raw <= 42 -> 1
-        raw <= 48 -> 2
-        raw <= 54 -> 3
-        raw <= 60 -> 4
-        raw <= 66 -> 5
-        raw <= 70 -> 6
+        raw <= 43 -> 1
+        raw <= 49 -> 2
+        raw <= 55 -> 3
+        raw <= 61 -> 4
+        raw <= 67 -> 5
+        raw <= 71 -> 6
         raw <= 74 -> 7
-        else -> 8
+        raw <= 78 -> 8
+        else -> 9
     }
 
-    /** Even representatives survive the integer percentage round-trip; endpoints reach 40/80. */
-    fun gearToRaw8Pro(gear: Int): Int = when (gear.coerceIn(1, 8)) {
+    /**
+     * Official `Jacket8ProManagerV2$a.e(I)` gear→raw table as UI gears 1..9
+     * (40/46/52/58/64/68/72/76/80);与官方 0..8 索引一一对应(+1),含此前被 UI 跳过的 76 档。
+     */
+    fun gearToRaw8Pro(gear: Int): Int = when (gear.coerceIn(1, 9)) {
         1 -> 40
         2 -> 46
         3 -> 52
@@ -137,6 +143,7 @@ object CoolerBleConstants {
         5 -> 64
         6 -> 68
         7 -> 72
+        8 -> 76
         else -> 80
     }
 
@@ -160,17 +167,55 @@ object CoolerBleConstants {
     }
 
     /**
-     * 功耗限档索引 → 本应用 UI 档位(1–8)上限。
+     * 功耗限档索引(0–8) → 本应用 UI 档位(1–9)上限。
      *
-     * 官方的滑条本身就是 0–8 的档位索引,所以直接 `setMaxSelectableProgress(索引)` 即可;
-     * 本应用的档位是 1–8 且第 8 档代表 raw 80,与官方索引并非一一对应
-     * (官方索引 7 = raw 76 在 UI 上没有对应档位),因此按"raw 不超过限档 raw"取最高档位:
-     * 索引 7 → 档位 7(raw 72),索引 6 → 档位 7,索引 5 → 档位 6,……,索引 0 → 档位 1。
+     * 本应用档位 1–9 与官方索引 0–8 一一对应(+1),因此限档索引 N 的最高可用档位就是 N+1;
+     * 仍按"raw 不超过限档 raw"取最高档位实现,与官方 `setMaxSelectableProgress(索引)` 等效。
      */
     fun maxGearForFanLimit8Pro(index: Int): Int {
         val maxRaw = fanLimitToRaw8Pro(index)
-        return (8 downTo 1).first { gearToRaw8Pro(it) <= maxRaw }
+        return (9 downTo 1).first { gearToRaw8Pro(it) <= maxRaw }
     }
+
+    // —— 红魔散热器 6 Pro+:官方 Jacket6ProPlusManagerV2$a 的 9 档风扇 ——
+
+    /**
+     * 官方 `Jacket6ProPlusManagerV2$a.d(I)`:档位索引 0–8 → 风扇 raw
+     * (40/46/52/58/64/68/72/76/80)。本应用 UI 用 1–9 档,与官方索引一一对应(+1)。
+     */
+    fun gearToRaw6ProPlus(gear: Int): Int = when (gear.coerceIn(1, 9)) {
+        1 -> 40
+        2 -> 46
+        3 -> 52
+        4 -> 58
+        5 -> 64
+        6 -> 68
+        7 -> 72
+        8 -> 76
+        else -> 80
+    }
+
+    /**
+     * 官方 `Jacket6ProPlusManagerV2$a.c(I)` 的 raw→档位边界
+     * (40–43/43–49/49–55/55–61/61–67/67–71/71–74/74–78/78+),换算为本应用 1–9 档。
+     */
+    fun rawToGear6ProPlus(raw: Int): Int = when {
+        raw <= 43 -> 1
+        raw <= 49 -> 2
+        raw <= 55 -> 3
+        raw <= 61 -> 4
+        raw <= 67 -> 5
+        raw <= 71 -> 6
+        raw <= 74 -> 7
+        raw <= 78 -> 8
+        else -> 9
+    }
+
+    fun gearToPercentage6ProPlus(gear: Int): Int =
+        rawToPercentage(gearToRaw6ProPlus(gear), CoolerDeviceType.JACKET_6_PRO_PLUS)
+
+    /** 任意 raw 归一到官方档位格点(c(I) 取档 → d(I) 回 raw):官方界面只会写这 9 个字节。 */
+    fun snapToGearRaw6ProPlus(raw: Int): Int = gearToRaw6ProPlus(rawToGear6ProPlus(raw))
 
     /** 百分比(0–100)→ 该型号 raw */
     fun percentageToRaw(percentage: Int, type: CoolerDeviceType): Int {

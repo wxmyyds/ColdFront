@@ -6,19 +6,19 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-// ---------- Release 签名 ----------
-// 密钥库与口令不入库，只在构建时注入：
-//   CI   ：GitHub Secrets → 环境变量 COLDFRONT_KEYSTORE_*（见 .github/workflows/release.yml）
-//   本机 ：-P 或 ~/.gradle/gradle.properties 中的 coldfront.* 属性
-// 环境变量优先于 Gradle 属性。取值一律经 providers，配置缓存才能正确跟踪并在口令轮换后失效重算。
-// 任一必填项缺失时回退为未签名构建，fork / PR（拿不到 Secrets）仍能正常编译。
+// Release 签名
+// 密钥库和口令不提交到仓库，构建时从以下位置读取：
+//   CI：从 GitHub Secrets 注入环境变量 COLDFRONT_KEYSTORE_*（见 .github/workflows/release.yml）
+//   本机：使用 -P 或 ~/.gradle/gradle.properties 中的 coldfront.* 属性
+// 环境变量优先。通过 providers 读取值，可让配置缓存跟踪凭据变化，并在口令轮换后重新计算。
+// 缺少任一必填项时生成未签名 APK；fork 和 PR 即使拿不到 Secrets 也可正常编译。
 fun signingValue(envName: String, propName: String): String? =
     providers.environmentVariable(envName).orNull ?: providers.gradleProperty(propName).orNull
 
 val releaseKeystoreFile = signingValue("COLDFRONT_KEYSTORE_FILE", "coldfront.keystoreFile")
 val releaseKeystorePassword = signingValue("COLDFRONT_KEYSTORE_PASSWORD", "coldfront.keystorePassword")
 val releaseKeyAlias = signingValue("COLDFRONT_KEY_ALIAS", "coldfront.keyAlias")
-// PKCS12 密钥库不支持与密钥库口令不同的条目口令，未单独提供时复用前者
+// PKCS12 密钥库要求条目口令与密钥库口令相同；未单独设置时复用密钥库口令
 val releaseKeyPassword =
     signingValue("COLDFRONT_KEY_PASSWORD", "coldfront.keyPassword") ?: releaseKeystorePassword
 
@@ -38,7 +38,7 @@ if (!releaseSigningReady) {
 android {
     namespace = "io.github.wxmyyds.coldfront"
     compileSdk {
-        // Compose 1.13-alpha（compose-bom-alpha）要求 compileSdk ≥ 37.1
+        // Compose 1.13-alpha（compose-bom-alpha）要求 compileSdk 至少为 37.1。
         version = release(37) {
             minorApiLevel = 1
         }
@@ -52,7 +52,7 @@ android {
         versionName = "1.0.0"
     }
 
-    // 仅有完整凭据时才创建 release 签名配置，避免 AGP 因空配置报错
+    // 仅凭据齐全时创建 release 签名配置，避免 AGP 因配置为空而报错
     signingConfigs {
         if (releaseSigningReady) {
             create("release") {
@@ -71,7 +71,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // 未配置密钥时保持 AGP 默认（未签名），产出 app-release-unsigned.apk
+            // 未配置密钥时沿用 AGP 默认行为，生成 app-release-unsigned.apk
             signingConfigs.findByName("release")?.let { signingConfig = it }
         }
     }
@@ -86,7 +86,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_21
     }
 
-    // Compose UI; XML resources contain the manifest and launcher vector, plus product images.
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -118,7 +117,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.material.kolor)
 
-    // Compose（版本由 alpha BOM 托管 → material3 1.5.0-alpha29）
+    // Compose 版本由 alpha BOM 管理；material3 当前为 1.5.0-alpha29。
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
@@ -131,7 +130,7 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
-    // Real JSON implementation for repository tests; Android's mockable JAR only has stubs.
+    // Repository tests need a real JSON implementation; Android's mockable JAR contains only stubs.
     testImplementation(libs.org.json)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }

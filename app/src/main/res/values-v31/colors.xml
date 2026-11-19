@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Android 12+ 用壁纸动态 accent；低版本由 values/colors.xml 提供品牌色回退。 -->
+    <!-- Android 12+ 使用壁纸提供的动态 accent 色；低版本回退到 values/colors.xml 中的品牌色。 -->
     <color name="ic_launcher_background">@android:color/system_accent1_500</color>
 </resources>

@@ -14,9 +14,7 @@ import kotlinx.coroutines.withTimeout
 
 private const val TAG = "BootReceiver"
 
-/**
- * 开机自启：若存在激活的自动模式档案，恢复前台服务。
- */
+/** Restore foreground auto mode when an active service profile exists. */
 class BootReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -24,10 +22,10 @@ class BootReceiver : BroadcastReceiver() {
         val pending = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
             try {
-                // An active device alone is not consent to start background auto mode.
+                // A saved profile is the explicit opt-in for boot recovery.
                 val profile = withTimeout(8_000) { ProfileRepository(context).loadServiceProfile() }
                 if (profile != null) {
-                    // Recovery is not a fresh opt-in: the service rechecks current persisted intent.
+                    // The service validates the saved intent again before reconnecting.
                     CoolerService.start(context, Intent(context, CoolerService::class.java).apply {
                         action = CoolerService.ACTION_RECONNECT
                     })

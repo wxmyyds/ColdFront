@@ -19,10 +19,10 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 
-/** Quick Settings auto-mode toggle; state follows the service, not an optimistic local flag. */
+/** Quick Settings auto-mode toggle; its state follows the service, not an optimistic local flag. */
 class CoolerTileService : TileService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    // Tile callbacks and this scope both run on Main, matching the holder's checked contract.
+    // Tile callbacks and this scope are both confined to Main, as required by the holder.
     private val ble by lazy(LazyThreadSafetyMode.NONE) { BleManagerHolder.get(applicationContext) }
     private var listening: Job? = null
     private var click: Job? = null
@@ -55,13 +55,12 @@ class CoolerTileService : TileService() {
                 }
                 val current = ble.state.value
                 if (current.isConnected && current.smartOn) {
-                    // Unlike notification Close, this is advertised as auto-mode OFF.
+                    // This action advertises auto mode OFF, unlike notification Close.
                     val target = ManualControlTarget.from(current) ?: return@launch
                     CoolerService.switchToManual(this@CoolerTileService, target)
                 } else {
                     val active = ProfileRepository(applicationContext).loadActiveProfile()
-                    // Reading storage suspends: both the selected device and the connection
-                    // session must still belong to this click when the result arrives.
+                    // Storage access suspends, so verify the selected device and session after it returns.
                     val profile = tileStartProfile(current, ble.state.value, active)
                     if (profile == null) {
                         showUnavailable()

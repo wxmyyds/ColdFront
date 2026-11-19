@@ -6,7 +6,7 @@ import io.github.wxmyyds.coldfront.domain.RGBConfig
 import io.github.wxmyyds.coldfront.domain.RgbWriteState
 import io.github.wxmyyds.coldfront.domain.RgbWriteStatus
 
-/** Device state and an unsent draft are separate; only the matching write may clear dirty. */
+/** Device state and the unsent draft stay separate. Only a matching write can clear the dirty flag. */
 internal data class RgbEditorState(
     val address: String?,
     val sessionId: Long,
@@ -35,8 +35,8 @@ internal data class RgbEditorState(
     }
 
     fun receive(device: CoolerLiveState, write: RgbWriteState?): RgbEditorState {
-        // Validate the saved identity as well as remember inputs: navigation restoration may
-        // restore a draft from a different connection without observing the intermediate states.
+        // Check the saved connection identity as well as the values used as remember inputs:
+        // navigation restoration may bring back a draft from another connection without exposing intermediate states.
         if (address != device.deviceAddress || sessionId != device.connectionSessionId ||
             connected != device.isConnected
         ) return fromDevice(device)
@@ -51,8 +51,8 @@ internal data class RgbEditorState(
         }
         val sent = currentWrite(write)?.takeIf { it.status == RgbWriteStatus.SENT }
         return if (sent != null && device.rgbRevision > sent.readbackRevisionAtWrite) {
-            // Delivery alone is not a new device value: a failed read leaves the old snapshot.
-            // A revision also handles StateFlow conflating a matching report with a newer one.
+            // A delivered write is not a new device value; a failed read leaves the previous snapshot.
+            // The revision check also catches StateFlow conflating a matching report with a newer one.
             if (received == config) copy(dirty = false) else copy(
                 config = received,
                 dirty = false,

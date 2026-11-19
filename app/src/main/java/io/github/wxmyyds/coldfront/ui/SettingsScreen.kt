@@ -52,20 +52,19 @@ fun SettingsScreen(vm: CoolerViewModel, settings: AppSettings, onAbout: () -> Un
     val contentScrollState = rememberScrollState()
     val supportsDynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
-    // (存储值, 展示文案)；MainActivity 按同一套 "system"/"light"/"dark" 解析
+    // 存储值和展示文案；MainActivity 使用相同的 "system"/"light"/"dark" 值。
     val themeOptions = listOf(
         "system" to strings.settingsFollowSystem,
         "light" to strings.settingsDarkModeLight,
         "dark" to strings.settingsDarkModeDark,
     )
-    // 语言选项用自称(endonym)：不管当前界面是什么语言，用户都能认出自己的语言，
-    // 所以 "中文"/"English" 故意不进双语表。
+    // 使用语言名称本身，让用户在任何界面语言下都能识别。
     val languageOptions = listOf(
         "system" to strings.settingsFollowSystem,
         "zh" to "中文",
         "en" to "English",
     )
-    // 存储里出现意外值时按「跟随系统」呈现，避免下拉行显示空白
+    // 未知存储值按跟随系统显示，避免下拉行为空。
     val themeMode = if (themeOptions.any { it.first == darkMode }) darkMode else "system"
     val language = if (languageOptions.any { it.first == appLanguage }) appLanguage else "system"
 
@@ -143,7 +142,7 @@ fun SettingsScreen(vm: CoolerViewModel, settings: AppSettings, onAbout: () -> Un
             }
 
             SegmentedGroup {
-                // 档案文档读完前不渲染：未加载的值不能冒充「不自动连接」。
+                // 加载完成前不显示档案，避免把未加载误显示成不自动连接。
                 item(key = "defaultDevice", visible = defaultDeviceLoaded) {
                     SegmentedDropdownRow(
                         title = strings.settingsDefaultDevice,
@@ -151,7 +150,7 @@ fun SettingsScreen(vm: CoolerViewModel, settings: AppSettings, onAbout: () -> Un
                         options = defaultDeviceOptions,
                         selected = defaultDeviceId,
                         onSelect = vm::setDefaultDevice,
-                        // 档案被删除时选中值本身已是 null，因此不会出现指向已删设备的文案。
+                        // 档案删除后选中值会变成 null，不会显示已删除设备。
                         optionLabel = { id ->
                             id?.let { profileId ->
                                 profiles.firstOrNull { it.id == profileId }?.displayName

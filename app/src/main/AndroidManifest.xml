@@ -1,30 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- 蓝牙：Android 11 及以下（API <= 30）旧权限 -->
+    <!-- 蓝牙：Android 11 及以下使用旧权限（API <= 30） -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
 
-    <!-- 蓝牙：Android 12+（API >= 31）新权限。neverForLocation：扫描结果不依赖定位服务，
-         否则系统把 BLE 结果当作位置数据，定位关闭时一个广播都不下发 -->
+    <!-- Android 12+ 使用 BLUETOOTH_SCAN 和 BLUETOOTH_CONNECT。neverForLocation 表示应用不会从扫描结果推断位置。 -->
     <uses-permission
         android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
-    <!-- BLE 扫描在 Android 11 及以下需要位置权限；部分 OEM ROM 在 12+ 也强制要求，保留可申请 -->
+    <!-- Android 11 及以下扫描 BLE 需要位置权限；部分 OEM 在 Android 12+ 也要求，故保留此权限。 -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
-    <!-- 要求 BLE 硬件 -->
+    <!-- 设备必须支持 BLE -->
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
 
-    <!-- 前台服务（持续监控与自动调速） -->
+    <!-- 前台服务：持续监控设备并自动调速 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- 开机自启（恢复自动模式服务） -->
+    <!-- 开机广播接收器：恢复已启用的自动模式服务 -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
@@ -46,14 +45,14 @@
             </intent-filter>
         </activity>
 
-        <!-- 自动模式前台服务 -->
+        <!-- 自动模式使用的前台服务 -->
         <service
             android:name=".service.CoolerService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
 
-        <!-- 快捷设置磁贴 -->
+        <!-- 快捷设置磁贴服务 -->
         <service
             android:name=".service.CoolerTileService"
             android:enabled="true"
@@ -66,7 +65,7 @@
             </intent-filter>
         </service>
 
-        <!-- 开机自启接收器 -->
+        <!-- 处理开机完成广播 -->
         <receiver
             android:name=".service.BootReceiver"
             android:enabled="true"

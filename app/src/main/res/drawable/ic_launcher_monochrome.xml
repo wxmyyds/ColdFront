@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- AdaptiveIcon monochrome（Android 13+ Themed Icons）：雪花剪影，系统按壁纸/主题着色，
-     开启系统"主题图标"后 launcher 图标颜色即跟随壁纸。 -->
+<!-- Adaptive icon 的单色雪花图层，供 Android 13+ 主题图标按壁纸着色。 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"

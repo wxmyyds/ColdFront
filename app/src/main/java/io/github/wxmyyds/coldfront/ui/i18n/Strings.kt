@@ -6,8 +6,8 @@ import androidx.compose.ui.platform.LocalConfiguration
 import java.util.Locale
 
 /**
- * 100% Kotlin 的双语字符串表（中文 + 英文）。按系统 locale 切换。
- * 不使用 strings.xml，保持工程尽量纯 Kotlin。
+ * 这里集中维护中文和英文文案，默认按系统语言切换。
+ * 字符串直接写在 Kotlin 中，不使用 strings.xml。
  */
 interface AppStrings {
     /** 当前文案是否中文(灯效等枚举名本地化用) */
@@ -477,11 +477,11 @@ object EnStrings : AppStrings {
 }
 
 /**
- * 当前生效的字符串表。
+ * 当前使用的文案表。
  *
- * @param override 用户在设置里选的语言："zh" / "en" 强制，其余（包括 "system"）跟随系统 locale。
- * 工程文案全在这张 Kotlin 表里、没有 strings.xml，所以覆盖语言不需要 per-app locale，
- * 换表即可。（副作用：系统级文案如权限弹框仍跟随系统语言。）
+ * @param override 设置中选择的语言。`"zh"` 和 `"en"` 强制指定语言；其他值（包括 `"system"`）使用系统 locale。
+ * 应用文案集中在这张 Kotlin 表中，切换语言时只需换表，不必设置 per-app locale。
+ * 系统级文案（例如权限弹窗）仍使用系统语言。
  */
 fun stringsFor(locale: Locale, override: String? = null): AppStrings = when (override) {
     "zh" -> ZhStrings

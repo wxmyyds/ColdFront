@@ -27,7 +27,7 @@ jobs:
       - name: Set up Gradle (with dependency cache)
         uses: gradle/actions/setup-gradle@v6
 
-      # compileSdk 37 可能不在 runner 预装 SDK 里，先接受许可以便 AGP 自动补装
+      # Accept licenses so AGP can install compileSdk 37 if it is missing from the runner.
       - name: Accept Android SDK licenses
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
@@ -59,8 +59,8 @@ jobs:
           name: ColdFront-debug
           path: app/build/outputs/apk/debug/app-debug.apk
 
-      # 校验构建不注入签名密钥（PR / fork 拿不到 Secrets），产出未签名 APK；
-      # 路径用通配符，日后若此流程也接上签名不会因文件名变化而失败
+      # This build has no signing Secrets for pull requests and forks, so the APK is unsigned.
+      # Upload any APK filename in the release output directory.
       - name: Upload release APK (unsigned)
         uses: actions/upload-artifact@v7
         with:

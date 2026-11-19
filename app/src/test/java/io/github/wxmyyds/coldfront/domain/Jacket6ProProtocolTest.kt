@@ -119,4 +119,45 @@ class Jacket6ProProtocolTest {
             ),
         )
     }
+
+    @Test
+    fun `six pro plus shares the six pro protocol path`() {
+        val proPlusState = state.copy(deviceType = CoolerDeviceType.JACKET_6_PRO_PLUS)
+        // 与 6 Pro 同族:温度无 8 Pro 校准、风扇 raw 40–80、Hall 三态、状态包 kinds 01–05。
+        assertEquals(
+            25f,
+            requireNotNull(
+                CoolerTelemetryReducer.reduce(proPlusState, CoolerBleConstants.STATUS_UUID, byteArrayOf(4, 25)),
+            ).state.temperatureC,
+        )
+        val fan = requireNotNull(
+            CoolerTelemetryReducer.reduce(
+                proPlusState,
+                CoolerBleConstants.FAN_SPEED_CHARACTERISTIC_UUID,
+                byteArrayOf(0x4c.toByte()),
+            ),
+        ).state
+        assertEquals(76, fan.fanRaw)
+        assertEquals(90, fan.fanPercent)
+        val hall = requireNotNull(
+            CoolerTelemetryReducer.reduce(proPlusState, CoolerBleConstants.COOLING_SWITCH_UUID, byteArrayOf(1)),
+        ).state
+        assertEquals(HallMode.AUTO, hall.hallMode)
+        assertTrue(hall.coolingOn)
+    }
+
+    @Test
+    fun `six pro plus output has load treats 0x7f as the official no-op`() {
+        val proPlusState = state.copy(deviceType = CoolerDeviceType.JACKET_6_PRO_PLUS)
+        // 官方 onOutputHasLoad 识别 0x7f 但协程为空实现:不变更负载状态,也不当作未知。
+        assertNull(Jacket6ProProtocol.statusUpdate(proPlusState, byteArrayOf(5, 0x7f)))
+        assertEquals(
+            true,
+            Jacket6ProProtocol.statusUpdate(proPlusState, byteArrayOf(5, 0x80.toByte()))?.state?.outputHasLoad,
+        )
+        assertEquals(
+            false,
+            Jacket6ProProtocol.statusUpdate(proPlusState, byteArrayOf(5, 1))?.state?.outputHasLoad,
+        )
+    }
 }

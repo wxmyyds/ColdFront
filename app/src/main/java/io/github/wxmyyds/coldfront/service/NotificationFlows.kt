@@ -6,9 +6,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.onStart
 
 /**
- * Seed notifications before the first language read so BLE updates never wait for storage.
- * Retry only language reads, not the BLE combine. onStart is outside retry so an outage after
- * a successful read retains that language rather than resetting notifications to system locale.
+ * Seed notifications before reading the stored language, so BLE updates do not wait on storage.
+ * Retry only language reads, not the combined BLE stream. Keep [onStart] outside the retry so a
+ * later storage outage retains the last language instead of resetting to the system locale.
  */
 internal fun Flow<String>.recoverNotificationLanguage(
     reportError: (IOException) -> Unit,

@@ -86,7 +86,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         WindowCompat.enableEdgeToEdge(window)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // 关掉系统对导航栏的强制对比度遮罩，edge-to-edge 下保持纯净透明。
+            // 保持导航栏透明，让 edge-to-edge 内容延伸到系统栏。
             window.isNavigationBarContrastEnforced = false
         }
         setContent {
@@ -96,15 +96,14 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun AppContent(vm: CoolerViewModel) {
-        // One collected snapshot owns both readiness and every visible setting. Do not
-        // split these into StateFlows: their independent scheduling can mix disk revisions.
+        // 同一快照同时提供设置和加载状态，避免不同 StateFlow 读到不同版本。
         val snapshot by vm.settings.collectAsState()
         val settings = snapshot
-        // Until the first read succeeds, only error messages use the system language.
+        // 首次读取完成前，只有错误提示使用系统语言。
         val strings = rememberStrings(override = settings?.appLanguage)
         val latestStrings by rememberUpdatedState(strings)
         val context = LocalContext.current
-        // Install before the loading gate, so a failed first read can actually be reported.
+        // 在加载门控前安装监听，这样首次读取失败也能显示错误。
         LaunchedEffect(vm) {
             vm.errors.collect {
                 Toast.makeText(context, latestStrings.storageOperationFailed, Toast.LENGTH_LONG).show()
@@ -156,8 +155,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun SystemBarAppearance(dark: Boolean) {
         DisposableEffect(dark) {
-            // WindowCompat returns WindowInsetsControllerCompat. Keep bars transparent for
-            // edge-to-edge content, changing only the icon contrast with the app theme.
+        // 保持 edge-to-edge 布局和透明系统栏，只按主题调整系统栏图标对比度。
             val controller = WindowCompat.getInsetsController(window, window.decorView)
             val previousStatus = controller.isAppearanceLightStatusBars
             val previousNavigation = controller.isAppearanceLightNavigationBars
@@ -192,7 +190,7 @@ class MainActivity : ComponentActivity() {
         DisposableEffect(context, vm) {
             val receiver = object : BroadcastReceiver() {
                 override fun onReceive(c: Context?, i: Intent?) {
-                    // Query the adapter, never trust state extras from an exported receiver.
+                    // 广播只触发刷新，适配器状态由系统 API 查询。
                     if (i?.action == BluetoothAdapter.ACTION_STATE_CHANGED) {
                         vm.refreshBluetoothState()
                     }
@@ -200,7 +198,7 @@ class MainActivity : ComponentActivity() {
             }
             val filter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                // Bluetooth broadcasts can originate in a privileged process outside the system UID.
+                // 广播可能来自系统 UID 之外的特权进程，因此使用 exported receiver。
                 context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
             } else {
                 @Suppress("UnspecifiedRegisterReceiverFlag")
@@ -285,14 +283,13 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
     val strings = LocalStrings.current
     val current = nav.backStack.lastOrNull()
 
-    // 连接成功后自动离开扫描页,回主页看状态(避免连上后停在列表里像「没反应」)
+    // 连接成功后离开扫描页，避免连接完成后仍停留在列表。
     val liveState by vm.liveState.collectAsStateWithLifecycle()
     val predictiveBack = settings.predictiveBack
-    // Include the session even if lifecycle collection skipped reconnect's intermediate states.
-    // Never key on route: an already-connected user must still be able to open scan.
+    // 即使生命周期跳过重连中间态，也要把会话纳入判断。
+    // 不按路由判断，否则已连接用户无法再次打开扫描页。
     val connectionKey = connectionNavigationKey(liveState)
-    // Compare against the restored observation, not an unconditional first-effect skip: a new
-    // connection may have succeeded during recreation, while the same session must keep Scan open.
+    // 与恢复后的观察值比较；同一会话保持扫描页，新连接才返回主页。
     var lastConnectionKey by rememberSaveable(stateSaver = ConnectionNavigationKeySaver) {
         mutableStateOf(connectionKey)
     }
@@ -341,7 +338,7 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                     )
                 },
             ) { strings.navRgb },
-            // 设置 tab 用 Rounded 齿轮：选中 Fill、未选中 outline，由 NavigationBar/Rail 的选中态驱动。
+            // 设置 tab 使用选中态填充图标，未选中时使用轮廓图标。
             TabItem(
                 TabRoutes.SETTINGS,
                 {
@@ -353,23 +350,19 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
             ) { strings.navSettings },
         )
     }
-    // The four tabs identify pages inside the pager, so they are not navigation destinations.
+    // 四个 tab 是 Main 内的页面，不是 NavDisplay 的 destination。
     val tabRoutes = remember(items) { items.map { it.route } }
-    // The four primary tabs are pages inside Main, not destinations of their own, so the selected
-    // tab is its own state. It survives a push of a secondary page, which is what keeps the tab
-    // strip showing the same page underneath after returning.
+    // selectedPage 独立保存，打开详情页后仍保留当前 tab。
     val selectedPage = rememberSaveable { mutableIntStateOf(0) }
 
-    // Switching tabs stays inside Main: no navigation, so no transition and no predictive back.
-    // The strip animates itself.
+    // 切换 tab 留在 Main 内；底部栏或 Rail 自己处理动画。
     val navigateToTab: (String) -> Unit = { route ->
         tabRoutes.indexOf(route)
             .takeIf { it >= 0 }
             ?.let { selectedPage.intValue = it }
     }
 
-    // Use existing foundation/Material3 APIs, without adding a window-size dependency.
-    // Keep one NavDisplay at the same composition location across window resizing.
+    // 使用现有布局 API，并让同一个 NavDisplay 在窗口调整时保持在原位置。
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val useRail = maxWidth >= 600.dp
         val topLevelIsCurrent = current == null || current == AppRoute.Main
@@ -389,7 +382,7 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                             NavigationBarItem(
                                 selected = itemSelected,
                                 onClick = { navigateToTab(item.route) },
-                                // Label + native selectable semantics announce the destination once.
+                                // Label 和可选择语义会一起播报一次目标名称。
                                 icon = { item.icon(itemSelected) },
                                 label = { Text(item.label()) },
                             )
@@ -402,11 +395,11 @@ private fun AppNav(vm: CoolerViewModel, settings: AppSettings) {
                         .semantics { isTraversalGroup = true },
                     containerColor = MaterialTheme.colorScheme.background,
                 ) {
-                    // Scroll only the rail contents: keep system insets and the sibling page fixed.
+                    // 只滚动 Rail 内容，系统栏和旁侧页面保持固定。
                     Column(
                         modifier = Modifier.verticalScroll(rememberScrollState()),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        // Match NavigationRail's native spacing inside the scroll container.
+                        // 与 NavigationRail 的默认内部间距保持一致。
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         items.forEach { item ->

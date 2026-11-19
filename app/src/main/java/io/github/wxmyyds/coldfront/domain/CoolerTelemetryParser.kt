@@ -1,7 +1,8 @@
 package io.github.wxmyyds.coldfront.domain
 
-/** Pure decoding shared by BLE reads/notifications. Temperature heuristics are deliberately
- * unchanged: documentation disagrees about calibration and tagged formats; hardware must decide.
+/** Pure decoding shared by BLE reads and notifications.
+ * The generic parser retains documented temperature formats. The 8 Pro calibration is hardware-verified,
+ * while 6 Pro uses its own parser path.
  */
 internal object CoolerTelemetryParser {
     fun unsignedByte(data: ByteArray): Int? = data.firstOrNull()?.let { it.toInt() and 0xFF }

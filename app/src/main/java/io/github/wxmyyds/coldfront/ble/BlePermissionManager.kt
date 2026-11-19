@@ -12,7 +12,7 @@ import androidx.core.content.ContextCompat
  */
 object BlePermissionManager {
 
-    /** 是否具备扫描 BLE 设备的权限 */
+    /** Check whether the app can scan for BLE devices. */
     fun hasScanPermission(context: Context): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             granted(context, Manifest.permission.BLUETOOTH_SCAN) &&
@@ -22,7 +22,7 @@ object BlePermissionManager {
         }
     }
 
-    /** 是否具备连接/操作 BLE 设备的权限 */
+    /** Check whether the app can connect to and operate BLE devices. */
     fun hasConnectPermission(context: Context): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             granted(context, Manifest.permission.BLUETOOTH_CONNECT)
@@ -32,15 +32,14 @@ object BlePermissionManager {
         }
     }
 
-    /** 是否具备通知权限（Android 13+） */
+    /** Check whether notifications are allowed on Android 13 and later. */
     fun hasNotificationPermission(context: Context): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             granted(context, Manifest.permission.POST_NOTIFICATIONS)
         } else true
     }
 
-    /** 扫描所需申请的权限数组（按系统版本）。12+ 也附带定位权限：部分 OEM ROM 即使有
-     *  neverForLocation 仍强制定位授权才能出扫描结果 */
+    /** 扫描 BLE 设备所需的权限按系统版本选择。Android 12+ 也请求定位权限，以兼容部分即使设置了 neverForLocation 仍要求定位授权的 OEM。 */
     fun scanPermissionsToRequest(): Array<String> =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             arrayOf(
@@ -53,7 +52,7 @@ object BlePermissionManager {
             arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
         }
 
-    /** 系统定位服务是否开启（旧系统扫描硬依赖；部分 OEM 12+ 仍要求） */
+    /** 系统定位服务是否开启（旧版 Android 扫描依赖定位；部分 OEM 的 Android 12+ 也要求开启）。 */
     fun isLocationServiceEnabled(context: Context): Boolean {
         val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
             ?: return true

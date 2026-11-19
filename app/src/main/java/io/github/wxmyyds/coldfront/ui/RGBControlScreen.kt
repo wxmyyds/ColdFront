@@ -78,25 +78,13 @@ import io.github.wxmyyds.coldfront.ui.i18n.LocalStrings
 import io.github.wxmyyds.coldfront.ui.theme.EmphasizedTypography
 import io.github.wxmyyds.coldfront.ui.theme.optionContainerColor
 
-/**
- * 预览和通道色标保留设备灯光的真实色；RGB 滑条的轨道/滑块同样取通道色，
- * 用颜色本身传达「这条轨道调的是哪个通道」——属数据可视化语义，不是主题角色色。
- *
- * 预览卡不再用写死的纯黑舞台：它与页面其他卡片共用 optionContainerColor，
- * 卡内文字/图标改用 onSurface。灯光本身由 [LightPreview] 自行绘制满色，
- * 不依赖容器色，所以数据可视化的观感不变。
- */
+/** LED 预览关闭时使用的背景色。 */
 private val PreviewLedOff = Color(0xFF101418)
 private val FullColorBreathPalette = listOf(
     Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta,
 )
 
-/**
- * RGB 灯效页(MD3E):
- * - 动态预览卡:呼吸/炫彩带动画,常亮带光晕
- * - 灯效选择即点即发;颜色 = 预设色板 + 彩色轨道 RGB 滑条,显式应用
- * - 初始值回读自设备当前灯效
- */
+/** RGB 灯效页：初始配置来自设备回读；选择灯效后立即下发。颜色通过预设或 RGB 滑条编辑为草稿，再显式应用。 */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun RGBControlScreen(vm: CoolerViewModel, isPageActive: Boolean, onConnect: () -> Unit = {}) {
@@ -109,8 +97,7 @@ fun RGBControlScreen(vm: CoolerViewModel, isPageActive: Boolean, onConnect: () -
         onPauseOrDispose { resumed = false }
     }
 
-    // Save the draft across rotation/tab restoration, but validate the connection identity
-    // before rendering so a restored draft can never leak to another device/session.
+    // 草稿独立于设备回读；渲染前校验设备地址和会话，避免恢复旧草稿。
     var savedEditor by rememberSaveable(stateSaver = RgbEditorSaver) {
         mutableStateOf(RgbEditorState.fromDevice(state))
     }
@@ -131,7 +118,7 @@ fun RGBControlScreen(vm: CoolerViewModel, isPageActive: Boolean, onConnect: () -
     val sendConfig: (RGBConfig, Boolean) -> Unit = { config, explicitApply ->
         savedEditor = editor.edit(config)
         vm.setRGB(config)
-        // setRGB publishes WRITING synchronously; success still requires its GATT completion.
+        // setRGB 会同步发布 WRITING；成功仍以 GATT 完成为准。
         vm.rgbWriteState.value?.takeIf { it.config == config }?.let {
             savedEditor = savedEditor.submit(it, explicitApply)
         }
@@ -141,8 +128,7 @@ fun RGBControlScreen(vm: CoolerViewModel, isPageActive: Boolean, onConnect: () -
 
     PageScaffold(title = strings.rgbTitle) { inner ->
         if (!state.isConnected) {
-            // 未连接空状态：与 Home 页一致——全屏居中（图标圆章 + 背景上的文字 + 按钮），
-            // 文字和按钮不放进任何卡片/容器。
+            // 未连接时保持与 Home 相同的空状态布局。
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -164,9 +150,7 @@ fun RGBControlScreen(vm: CoolerViewModel, isPageActive: Boolean, onConnect: () -
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
 
-                // The editor works from its own draft, so the page stays usable while the device
-                // light state is still unknown; report that as an additive notice (the same
-                // convention as HomeScreen's degraded banner) instead of replacing the page.
+                // 编辑器使用自己的草稿，设备灯效未知时页面仍可操作；这里只显示提示。
                 if (state.deviceType?.supportsRgb != false && state.rgb == null) {
                     SyncingNotice(strings)
                 }
@@ -227,7 +211,7 @@ fun RGBControlScreen(vm: CoolerViewModel, isPageActive: Boolean, onConnect: () -
                                 SegmentedDropdownRow(
                                     title = strings.rgbEffect,
                                     options = LightEffect.selectable,
-                                    // 下拉里呼吸只有一个入口（BREATH_FULLCOLOR），具体变体由下一行决定
+                                    // 呼吸灯共用一个入口，具体变体由下一行选择。
                                     selected = effect.uiEffect,
                                     onSelect = { e ->
                                         applyEffect(
@@ -238,7 +222,7 @@ fun RGBControlScreen(vm: CoolerViewModel, isPageActive: Boolean, onConnect: () -
                                     leadingContent = { AnimatedRowIcon(effectIcon(effect)) },
                                 )
                             }
-                            // 「呼吸」底下挂一个子选项：单色（0x03，带颜色字节） / 全彩（0x02，不带）
+                            // 单色呼吸带颜色字节；全彩呼吸不带颜色字节。
                             item(
                                 key = "breathMode",
                                 visible = effect.uiEffect == LightEffect.BREATH_FULLCOLOR,
@@ -258,7 +242,7 @@ fun RGBControlScreen(vm: CoolerViewModel, isPageActive: Boolean, onConnect: () -
                                 )
                             }
                         }
-                        // ── 颜色(单色呼吸与常亮才带颜色字节；全彩呼吸/炫彩/关闭按协议置零) ──
+                        // 只有单色呼吸和常亮使用颜色字节，其他灯效按协议置零。
                         if (effect == LightEffect.BREATH_SINGLE || effect == LightEffect.ALWAYS_BRIGHT) {
                             SegmentedGroup(title = strings.rgbPalette) {
                                 item(key = "palette") {
@@ -289,7 +273,7 @@ fun RGBControlScreen(vm: CoolerViewModel, isPageActive: Boolean, onConnect: () -
                             }
                         }
 
-                        // 即使当前灯效没有颜色面板，也保留写入失败的重试入口。
+                        // 仍保留写入失败后的重试入口。
                         Button(
                             onClick = { sendConfig(draftConfig, true) },
                             enabled = currentWriteStatus != RgbWriteStatus.WRITING,
@@ -329,7 +313,7 @@ private val RgbEditorSaver = listSaver<RgbEditorState, Any>(
             address = (it[0] as String).ifEmpty { null },
             sessionId = it[1] as Long,
             connected = it[2] as Boolean,
-            // 按已存名字安全解析:旧版本存过的未知/已移除值(如 SCENE)不能抛异常崩溃。
+            // 从已存名称解析枚举；未知值回退，避免旧草稿恢复时崩溃。
             config = RGBConfig(
                 LightEffect.entries.firstOrNull { e -> e.name == it[3] } ?: LightEffect.ALWAYS_BRIGHT,
                 it[4] as Int, it[5] as Int, it[6] as Int,
@@ -527,7 +511,7 @@ private fun ColorSlider(label: String, value: Int, trackColor: Color, onChange: 
                 onChange(it.toInt())
             },
             onValueChangeFinished = { dragging = false },
-            // 轨道与滑块取通道色：颜色即语义（红轨调红、绿轨调绿）
+            // 同一通道的颜色也用于轨道和滑块，让控件含义一眼可见。
             colors = SliderDefaults.colors(
                 thumbColor = trackColor,
                 activeTrackColor = trackColor,
@@ -540,7 +524,7 @@ private fun ColorSlider(label: String, value: Int, trackColor: Color, onChange: 
 
 @Composable
 private fun NotConnectedContent(strings: io.github.wxmyyds.coldfront.ui.i18n.AppStrings, onConnect: () -> Unit) {
-    // 与 Home 页空状态同一套结构：圆底图标章 + 背景上的标题/按钮，无卡片。
+    // 与 Home 共用圆形图标空状态，不使用卡片包裹内容。
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp),
