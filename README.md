@@ -30,7 +30,7 @@
 ./gradlew assembleDebug
 ```
 
-GitHub Actions 会在 Pull Request 上运行单元测试和 Android Lint，并构建 Debug/Release APK。Actions 存储用量延迟同步期间，可启用仓库变量 `CI_ARTIFACT_STORAGE_DELAY_WORKAROUND=true`：成功的 `main` 构建会更新[临时最新 CI 构建发行页](https://github.com/wxmyyds/ColdFront/releases/tag/ci-latest)，不上传大型 APK Actions artifacts。更新报告显示用量恢复后，删除该仓库变量；下一次 `main` 构建会移除临时发行页，并恢复 Actions artifacts 上传（保留 7 天）。此变量关闭时使用正常 Actions artifacts，PR 构建不会发布到发行页。正式版本发布不受影响。协议文档注明 8 Pro 的实机验证情况，以及 6 Pro 和 6 Pro+ 仍待确认的内容。
+GitHub Actions 会在 Pull Request 上运行单元测试和 Android Lint，并构建 Debug/Release APK。协议文档注明 8 Pro 的实机验证情况，以及 6 Pro 和 6 Pro+ 仍待确认的内容。
 
 ## 已知问题
 
